@@ -1,8 +1,8 @@
 // pulse pilot: your heart rate is your altitude. fly a pedal-powered plane through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
-import { setup_2d, sky, hills, clouds, round_rect, label } from '../draw2d.js?v=8';
-import { step_speed } from '../physics.js?v=8';
-import { clamp, rand } from '../util.js?v=8';
+import { setup_2d, sky, hills, clouds, round_rect, label } from '../draw2d.js?v=9';
+import { step_speed } from '../physics.js?v=9';
+import { clamp, rand } from '../util.js?v=9';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect
@@ -19,6 +19,7 @@ export default {
     'Pedal harder to climb (HR up), ease off to descend. Your heart reacts with a 10–30 s delay, so plan ahead!',
     'Your watts set your speed, so pushing hard also brings the next gate closer.',
     'Within ±2 bpm = PERFECT (100), within ±5 = GOOD (50). Hits in a row build a combo bonus.',
+    'The dotted line shows where your current HR trend will put you at the next gate: green = on target.',
     'Gate heights are based on your max HR setting.',
   ],
   options: [
@@ -60,7 +61,7 @@ function create(env) {
   const [lo, hi] = zone_range(env.opts.zone, env.profile.max_hr);
   const view_lo = lo - 15, view_hi = hi + 10;   // visible bpm range
   const gates = make_gates(env.opts.gates, lo, hi);
-  const st = { x: 0, v: 0, alt: null, score: 0, combo: 0, best_combo: 0, time: 0, prop: 0, trail: [], next: 0, energy: 0 };
+  const st = { x: 0, v: 0, alt: null, slope: 0, score: 0, combo: 0, best_combo: 0, time: 0, prop: 0, trail: [], next: 0, energy: 0 };
 
   env.hud.innerHTML = `
     <div class="gh-row">
@@ -79,7 +80,12 @@ function create(env) {
       st.v = step_speed(st.v, game.done ? 0 : input.watts, dt);
       st.x += st.v * dt;
       st.prop += (input.cadence / 60) * 2 * Math.PI * dt * 3;
-      if (input.hr !== null) st.alt = st.alt === null ? input.hr : st.alt + (input.hr - st.alt) * Math.min(1, dt / 1.2);
+      if (input.hr !== null) {
+        const prev = st.alt;
+        st.alt = st.alt === null ? input.hr : st.alt + (input.hr - st.alt) * Math.min(1, dt / 1.2);
+        // hr trend in bpm per second, smoothed over ~5 s (drives the "where will I be" projection)
+        if (prev !== null && dt > 0) st.slope += ((st.alt - prev) / dt - st.slope) * Math.min(1, dt / 5);
+      }
       if (game.done) return;
       st.time += dt;
       st.energy += input.watts * dt;
@@ -187,6 +193,26 @@ function create(env) {
       ctx.setLineDash([]);
     }
 
+    // projection: where your current hr trend puts you at the next gate (max 30 s ahead)
+    const ng = gates[st.next];
+    if (ng && st.alt !== null && st.v > 0.5) {
+      const eta = Math.min(30, (ng.x - st.x) / st.v);
+      const proj = clamp(st.alt + st.slope * eta, view_lo, view_hi);
+      const gx = sx(ng.x);
+      const hit = Math.abs(proj - ng.hr) <= good_bpm;
+      ctx.strokeStyle = hit ? 'rgba(126,224,138,0.9)' : 'rgba(255,138,128,0.9)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath();
+      ctx.moveTo(px, y_of(clamp(st.alt, view_lo, view_hi)));
+      ctx.lineTo(gx, y_of(proj));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(gx, y_of(proj), 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // plane (only when there's an hr)
     if (st.alt !== null) draw_plane(ctx, px, y_of(clamp(st.alt, view_lo, view_hi)), clamp(h * 0.035, 18, 30));
     else label(ctx, 'No heart rate', w / 2, h / 2, 24, '#ff8a80');
@@ -244,7 +270,8 @@ function create(env) {
     }
     const hr = st.alt === null ? null : Math.round(st.alt);
     const arrow = hr === null ? '' : hr < g.hr - perfect_bpm ? ' ▲ climb' : hr > g.hr + perfect_bpm ? ' ▼ descend' : ' ✓ hold';
-    $('pp-hr').textContent = `HR ${hr ?? '--'} → gate ${g.hr}${arrow}`;
+    const trend = Math.abs(st.slope) < 0.05 ? '→' : st.slope > 0 ? '↗' : '↘';
+    $('pp-hr').textContent = `HR ${hr ?? '--'} ${trend} gate ${g.hr}${arrow}`;
     const eta = st.v > 0.5 ? ` · ${Math.round((g.x - st.x) / st.v)} s` : '';
     $('pp-dist').textContent = `${Math.round(g.x - st.x)} m${eta}`;
   }

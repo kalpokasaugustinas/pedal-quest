@@ -37,6 +37,7 @@
 - Gates are 320 m apart. Each target is 6–18 bpm away from the previous one.
 - ±2 bpm = perfect (100 points), ±5 = good (50). Combos add +10% per hit in a row.
 - HR lags effort by 10–30 s, so planning ahead is the skill.
+- A dotted projection line shows where your current HR trend (smoothed bpm/s) puts you at the next gate, up to 30 s ahead: green = on target.
 
 ### 🎵 Spin Beat
 - Tracks come from a fixed seed, so a track is identical every time and leaderboards stay fair.
