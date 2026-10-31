@@ -1,7 +1,7 @@
 // pedal quest: app flow (setup -> countdown -> race -> results), sensors and hud
 import { ble_supported, connect_device } from './ble.js';
 import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts } from './race.js';
-import { draw_world } from './render.js';
+import { create_world } from './world.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -127,7 +127,7 @@ $('w-plus').onclick = () => change_watts(10);
 
 // ---- race ----
 const canvas = $('canvas');
-const ctx = canvas.getContext('2d');
+let world = null;            // 3d scene for the current race
 let race = null;
 let phase = 'idle';          // idle | countdown | racing | finishing
 let phase_end = 0;           // timestamp when countdown / finishing ends
@@ -135,15 +135,9 @@ let last_ts = 0;
 let demo_mode = false;
 let progress_dots = [];
 let wake_lock = null;
+let last_boost_count = 0;    // to flash "NITRO!" once per activation
 
-// match canvas pixels to the screen (sharp on high-dpi phones)
-function resize_canvas() {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.round(canvas.clientWidth * dpr);
-  canvas.height = Math.round(canvas.clientHeight * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-window.addEventListener('resize', () => { if (phase !== 'idle') resize_canvas(); });
+window.addEventListener('resize', () => { if (phase !== 'idle') world?.resize(); });
 
 // keep the phone screen on while racing
 async function request_wake_lock() {
@@ -169,7 +163,9 @@ function start_race() {
   race = create_race({ distance_m: settings.km * 1000, base_watts: settings.base_watts });
   demo_mode = !sensors.trainer;
   $('demo').classList.toggle('hidden', !demo_mode);
+  $('demo-hr-label').classList.toggle('hidden', sensors.hr_strap);   // real strap beats the slider
   $('demo-watts').value = 0;
+  last_boost_count = 0;
   show_banner('');
   // progress bar: one dot per rider
   $('progress').innerHTML = race.riders
@@ -179,7 +175,8 @@ function start_race() {
   show('screen-race');
   document.documentElement.requestFullscreen?.().catch(() => {});
   request_wake_lock();
-  resize_canvas();
+  world?.dispose();
+  world = create_world(canvas, race);
 
   phase = 'countdown';
   phase_end = performance.now() + 3000;
@@ -197,11 +194,18 @@ function player_input(ts) {
   return { watts: stale ? 0 : sensors.watts, cadence: stale ? 0 : sensors.cadence };
 }
 
+// heart rate for nitro: strap (or trainer-relayed hr), else the demo slider, else none
+function current_hr() {
+  if (sensors.hr !== null) return sensors.hr;
+  return demo_mode ? +$('demo-hr').value : null;
+}
+
 function loop(ts) {
   if (phase === 'idle') return;
   const dt = Math.min(0.1, Math.max(0, (ts - last_ts) / 1000));   // clamp: app in background = pause
   last_ts = ts;
   const input = player_input(ts);
+  input.hr = current_hr();
 
   if (phase === 'countdown') {
     const left = phase_end - ts;
@@ -212,7 +216,12 @@ function loop(ts) {
       show_big_text('GO!', 800);
     }
   } else if (phase === 'racing') {
-    update_race(race, dt, input.watts, input.cadence);
+    update_race(race, dt, input.watts, input.cadence, input.hr);
+    const n = race.player.nitro;
+    if (n.count > last_boost_count) {
+      last_boost_count = n.count;
+      show_big_text('NITRO!', 1200);
+    }
     if (race.player.finish_time !== null) {
       phase = 'finishing';
       phase_end = ts + 2500;
@@ -226,7 +235,7 @@ function loop(ts) {
     }
   }
 
-  draw_world(ctx, race, canvas.clientWidth, canvas.clientHeight);
+  world.render(dt);
   update_hud(input);
   requestAnimationFrame(loop);
 }
@@ -240,7 +249,8 @@ function update_hud(input) {
   $('h-watts').textContent = Math.round(input.watts);
   $('h-speed').textContent = (p.v * 3.6).toFixed(1);
   $('h-cad').textContent = Math.round(input.cadence);
-  $('h-hr').textContent = sensors.hr ?? '--';
+  $('h-hr').textContent = input.hr ?? '--';
+  update_nitro_hud(input.hr);
   race.riders.forEach((r, i) => {
     progress_dots[i].style.left = `${Math.min(100, (r.x / race.distance_m) * 100)}%`;
   });
@@ -248,13 +258,28 @@ function update_hud(input) {
   $('leaderboard').innerHTML = order.map((r, i) => {
     const gap = Math.round(r.x - p.x);
     const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
-    return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}<span class="gap">${gap_text}</span></li>`;
+    const fire = r.nitro.boost_left > 0 ? ' 🔥' : '';
+    return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}${fire}<span class="gap">${gap_text}</span></li>`;
   }).join('');
+}
+
+// nitro bar: charge level (or remaining boost), target hr window, colour by state
+function update_nitro_hud(hr) {
+  const n = race.player.nitro;
+  const boosting = n.boost_left > 0;
+  const el = $('nitro');
+  el.classList.toggle('boost', boosting);
+  el.classList.toggle('in-range', !boosting && n.in_range && hr !== null);
+  el.classList.toggle('off', hr === null);
+  $('nitro-fill').style.width = `${(boosting ? n.boost_left / 3 : n.charge) * 100}%`;
+  $('nitro-range').textContent = hr === null ? 'needs HR strap' : `HR ${n.range[0]}–${n.range[1]}`;
+  $('boost-fx').classList.toggle('hidden', !boosting);
 }
 
 function leave_race_screen() {
   phase = 'idle';
   $('countdown').classList.add('hidden');
+  $('boost-fx').classList.add('hidden');
   wake_lock?.release().catch(() => {});
   wake_lock = null;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -273,7 +298,7 @@ function show_results() {
   if (is_best) set_best(settings.km, p.finish_time);
 
   $('r-title').textContent = pos === 1 ? 'You won! 🏆' : `You finished ${ordinal(pos)}`;
-  $('r-sub').textContent = `${settings.km} km in ${fmt_time(p.finish_time)} · avg ${avg_watts(p)} W · `
+  $('r-sub').textContent = `${settings.km} km in ${fmt_time(p.finish_time)} · avg ${avg_watts(p)} W · nitro ×${p.nitro.count} · `
     + (is_best ? 'new personal best!' : `best ${fmt_time(best)}`);
   $('r-table').innerHTML = order.map((r, i) => `
     <tr class="${r.is_player ? 'me' : ''}">

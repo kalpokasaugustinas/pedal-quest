@@ -13,6 +13,22 @@ const roster = [
 const bot_lanes = [0, 1, 3, 4, 5];   // player rides in lane 2
 const rand = (min, max) => min + Math.random() * (max - min);
 
+// nitro: player charges it by holding hr inside a random 5 bpm window (full after 30 s in range,
+// drains at half that speed outside). bots charge on a timer at 50% of a perfect player race.
+// a full bar fires automatically: +80 w for 3 s
+export const nitro_cfg = { charge_s: 30, drain_ratio: 0.5, boost_s: 3, boost_watts: 80, bot_share: 0.5 };
+const bot_charge_s = (nitro_cfg.charge_s + nitro_cfg.boost_s) / nitro_cfg.bot_share - nitro_cfg.boost_s;   // 63 s
+
+// random hr window, e.g. 110-115 or 122-127
+function new_hr_range() {
+  const low = 110 + Math.floor(Math.random() * 21);
+  return [low, low + 5];
+}
+
+function new_nitro(charge = 0) {
+  return { charge, boost_left: 0, count: 0, in_range: false, range: new_hr_range() };
+}
+
 // bots with their average watts for a given base strength (shown on the setup screen)
 export function bot_lineup(base_watts) {
   return roster.map((b) => ({ ...b, avg_watts: Math.round(base_watts * b.factor) }));
@@ -20,7 +36,7 @@ export function bot_lineup(base_watts) {
 
 // common rider fields: position x (m), speed v (m/s), crank angle, energy (joules) for avg watts
 function new_rider(fields) {
-  return { x: 0, v: 0, watts: 0, crank: rand(0, 6.28), energy: 0, finish_time: null, ...fields };
+  return { x: 0, v: 0, watts: 0, crank: rand(0, 6.28), energy: 0, finish_time: null, nitro: new_nitro(), ...fields };
 }
 
 export function create_race({ distance_m, base_watts }) {
@@ -34,6 +50,7 @@ export function create_race({ distance_m, base_watts }) {
     start_delay: rand(0.2, 0.8), // reaction time at the start
     next_surge: rand(15, 45),    // time of first attack
     surge_until: 0,
+    nitro: new_nitro(rand(0, 0.6)),   // random head start so bots don't all fire together
   }));
   return { distance_m, time: 0, player, riders: [player, ...bots] };
 }
@@ -53,13 +70,38 @@ function bot_watts(b, race) {
   return w;
 }
 
-// advance the race by dt seconds
-export function update_race(race, dt, player_watts, player_cadence) {
+// charge / fire nitro for one rider. hr is only used for the player (null = no hr, no charging)
+function update_nitro(r, dt, hr) {
+  const n = r.nitro;
+  if (n.boost_left > 0) {
+    n.boost_left = Math.max(0, n.boost_left - dt);   // no charging while boosting
+    return;
+  }
+  if (r.is_player) {
+    if (hr === null || hr === undefined) return;
+    n.in_range = hr >= n.range[0] && hr <= n.range[1];
+    const rate = dt / nitro_cfg.charge_s;
+    n.charge = Math.max(0, n.charge + (n.in_range ? rate : -rate * nitro_cfg.drain_ratio));
+  } else {
+    n.charge += dt / bot_charge_s;
+  }
+  if (n.charge >= 1) {
+    n.charge = 0;
+    n.boost_left = nitro_cfg.boost_s;
+    n.count += 1;
+    n.range = new_hr_range();
+  }
+}
+
+// advance the race by dt seconds. player_hr drives the player's nitro (null = no hr source)
+export function update_race(race, dt, player_watts, player_cadence, player_hr = null) {
   race.time += dt;
   for (const r of race.riders) {
     const done = r.finish_time !== null;
+    if (!done && race.time > 0) update_nitro(r, dt, player_hr);
     // finished riders coast (0 watts)
-    const watts = done ? 0 : (r.is_player ? player_watts : bot_watts(r, race));
+    const base = done ? 0 : (r.is_player ? player_watts : bot_watts(r, race));
+    const watts = base + (!done && r.nitro.boost_left > 0 ? nitro_cfg.boost_watts : 0);
     const prev_x = r.x;
     r.v = step_speed(r.v, watts, dt);
     r.x += r.v * dt;
@@ -68,7 +110,7 @@ export function update_race(race, dt, player_watts, player_cadence) {
     const cadence = done ? 0 : (r.is_player ? player_cadence : (watts > 0 ? 87 + 4 * Math.sin(race.time / 7 + r.phase) : 0));
     r.crank += (cadence / 60) * 2 * Math.PI * dt;
     if (!done) {
-      r.energy += watts * dt;
+      r.energy += base * dt;   // own effort only, nitro excluded from avg watts
       if (r.x >= race.distance_m) {
         // interpolate the exact crossing moment inside this step
         const frac = (race.distance_m - prev_x) / Math.max(r.x - prev_x, 1e-6);

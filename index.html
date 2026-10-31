@@ -48,9 +48,19 @@
     </div>
     <button id="btn-quit" class="quit" aria-label="quit race">✕</button>
   </div>
+  <div id="boost-fx" class="boost-fx hidden"></div>
   <ol id="leaderboard" class="leaderboard"></ol>
   <div class="hud-bottom">
-    <label id="demo" class="demo hidden">Demo watts <input type="range" id="demo-watts" min="0" max="500" step="5" value="0"></label>
+    <div id="demo" class="demo hidden">
+      <label>W <input type="range" id="demo-watts" min="0" max="500" step="5" value="0"></label>
+      <label id="demo-hr-label">HR <input type="range" id="demo-hr" min="60" max="190" step="1" value="100"></label>
+    </div>
+    <!-- nitro: hold hr in the target window to charge -->
+    <div id="nitro" class="nitro">
+      <span class="nitro-label">NITRO</span>
+      <div class="nitro-bar"><div id="nitro-fill" class="nitro-fill"></div></div>
+      <span id="nitro-range" class="nitro-range"></span>
+    </div>
     <div class="metrics">
       <div class="m main"><span id="h-watts">0</span><small>W</small></div>
       <div class="m"><span id="h-speed">0.0</span><small>km/h</small></div>
@@ -71,6 +81,10 @@
   <button id="btn-setup" class="secondary wide">Change settings</button>
 </section>
 
+<!-- three.js for the 3d world (same version as other projects) -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
