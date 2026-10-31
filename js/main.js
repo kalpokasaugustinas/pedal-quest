@@ -1,7 +1,7 @@
 // pedal quest: app flow (setup -> countdown -> race -> results), sensors and hud
-import { ble_supported, connect_device } from './ble.js';
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts } from './race.js';
-import { create_world } from './world.js';
+import { ble_supported, connect_device } from './ble.js?v=4';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts } from './race.js?v=4';
+import { create_world } from './world.js?v=4';
 
 const $ = (id) => document.getElementById(id);
 
