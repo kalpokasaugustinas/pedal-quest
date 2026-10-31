@@ -1,7 +1,7 @@
 // shared sensor state for every game: trainer + hr strap connections and the rider profile (ftp, max hr).
 // lives for the whole page session, so switching games keeps bluetooth connected
-import { ble_supported, connect_device, control } from './ble.js?v=11';
-import { load, store } from './util.js?v=11';
+import { ble_supported, connect_device, control } from './ble.js?v=12';
+import { load, store } from './util.js?v=12';
 
 export { ble_supported, control };
 

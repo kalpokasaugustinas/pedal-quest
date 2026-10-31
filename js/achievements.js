@@ -1,5 +1,5 @@
 // badges: long-term goals across all games. checked after every finished game, saved in localStorage
-import { load, store } from './util.js?v=11';
+import { load, store } from './util.js?v=12';
 
 // each check gets: { game, opts, flags, ride (ride_log summary), life (lifetime totals), state, ftp }
 const list = [
@@ -22,6 +22,8 @@ const list = [
   { id: 'workout', icon: '📈', name: 'Disciplined', desc: 'Workout: 80% on target without ERG', check: (c) => c.game === 'workout' && c.flags.pct >= 80 && !c.flags.erg },
   { id: 'ramp', icon: '✨', name: 'Know Your Numbers', desc: 'Complete an FTP ramp test', check: (c) => c.game === 'workout' && c.flags.ramp },
   { id: 'threshold', icon: '💪', name: 'Threshold', desc: 'Normalized power at or above FTP for 10+ min', check: (c) => c.ride.secs >= 600 && c.ride.np >= c.ftp },
+  { id: 'streak3', icon: '📅', name: 'Habit', desc: 'Daily challenge 3 days in a row', check: () => load('pq_daily', {}).best >= 3 },
+  { id: 'streak7', icon: '🗓️', name: 'Full Week', desc: 'Daily challenge 7 days in a row', check: () => load('pq_daily', {}).best >= 7 },
   { id: 'hour', icon: '🕐', name: 'Hour of Power', desc: '1 hour of riding in total', check: (c) => c.life.secs >= 3600 },
   { id: 'century', icon: '🛣️', name: 'Century', desc: '100 km in total', check: (c) => c.life.km >= 100 },
   { id: 'mega', icon: '🔋', name: 'Megajoule', desc: '1000 kJ of work in total', check: (c) => c.life.kj >= 1000 },

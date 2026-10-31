@@ -16,7 +16,7 @@ Pick a game from the tabs at the top. Bluetooth stays connected while you switch
 - ⚡ **Sprint Cup**: knockout tournament of standing-start sprints against rivals who fade.
 - 📈 **Workout**: structured interval sessions scaled to your FTP, with optional ERG mode and an FTP ramp test.
 
-Every game has local top-10 leaderboards and a ride chart (power + heart rate) on the results screen. 22 badges to unlock across all games. Set your FTP, max HR and weight once, and the games scale to you.
+Every game has local top-10 leaderboards and a ride chart (power + heart rate) on the results screen. 24 badges to unlock, and a daily challenge with a streak. Set your FTP, max HR and weight once, and the games scale to you.
 No trainer? Demo mode gives you sliders for watts, cadence and heart rate.
 
 Details, rules and the architecture for developers: [docs/GAMES.md](docs/GAMES.md).

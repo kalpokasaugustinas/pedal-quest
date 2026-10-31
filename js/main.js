@@ -1,20 +1,21 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=11';
-import { control } from './ble.js?v=11';
-import { load, store, clamp } from './util.js?v=11';
-import { set_rider_mass } from './physics.js?v=11';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=11';
-import * as ride_log from './ride_log.js?v=11';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=11';
-import race from './games/race.js?v=11';
-import crossroads from './games/crossroads.js?v=11';
-import summit from './games/summit.js?v=11';
-import pulse from './games/pulse.js?v=11';
-import spinbeat from './games/spinbeat.js?v=11';
-import escape from './games/escape.js?v=11';
-import sprint from './games/sprint.js?v=11';
-import workout from './games/workout.js?v=11';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=12';
+import { control } from './ble.js?v=12';
+import { load, store, clamp } from './util.js?v=12';
+import { set_rider_mass } from './physics.js?v=12';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=12';
+import * as ride_log from './ride_log.js?v=12';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=12';
+import * as daily from './daily.js?v=12';
+import race from './games/race.js?v=12';
+import crossroads from './games/crossroads.js?v=12';
+import summit from './games/summit.js?v=12';
+import pulse from './games/pulse.js?v=12';
+import spinbeat from './games/spinbeat.js?v=12';
+import escape from './games/escape.js?v=12';
+import sprint from './games/sprint.js?v=12';
+import workout from './games/workout.js?v=12';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);
@@ -183,10 +184,35 @@ function render_setup() {
   $('g-board-label').textContent = b.label;
   $('g-board').innerHTML = board_html(b, load(`pq_board_${b.key}`, []), -1);
   $('btn-start').textContent = `Start ${g.name}`;
+  render_daily();
   const open = $('badges').open;
   $('badges').innerHTML = collection_html();
   $('badges').open = open;
   render_sensors();
+}
+
+// daily challenge card: today's game, settings, goal and streak
+let daily_run = null;   // today's challenge while a daily attempt is running
+function render_daily() {
+  const ch = daily.today(profile.ftp);
+  const st = daily.state();
+  const g = games.find((x) => x.id === ch.game);
+  if (!g) { $('daily').classList.add('hidden'); return; }
+  $('daily').innerHTML = `
+    <div class="daily-row">
+      <div><div class="label">📅 Daily challenge${st.streak ? ` · 🔥 ${st.streak} day${st.streak > 1 ? 's' : ''}` : ''}</div>
+        <b>${g.icon} ${g.name}</b> · ${ch.text}<div class="small">Goal: ${ch.goal}${st.done_today ? ' · ✓ done today' : ''}</div></div>
+      <button id="btn-daily" class="${st.done_today ? 'secondary' : ''}">${st.done_today ? 'Again' : 'Play'}</button>
+    </div>`;
+  $('btn-daily').onclick = () => {
+    // switch to the game, apply the day's settings (other options stay as the rider set them), start
+    location.hash = g.id;
+    select_game(g.id);
+    save_opts(g, { ...game_opts(g), ...ch.opts });
+    render_setup();
+    daily_run = ch;
+    start_game();
+  };
 }
 
 // which sensors this game uses, shown as small chips
@@ -413,6 +439,13 @@ function finish_game() {
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
   $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
+  // daily challenge result (before badges, so streak badges see the new streak)
+  $('r-daily').innerHTML = '';
+  if (daily_run && daily_run.game === current.id) {
+    const d = daily.complete(daily_run, res.flags);
+    $('r-daily').innerHTML = `<div class="panel daily ${d.ok ? 'ok' : ''}"><div class="label">📅 Daily challenge</div>
+      <b>${d.ok ? (d.new_day ? `Done! 🔥 Streak: ${d.streak} day${d.streak > 1 ? 's' : ''}` : 'Done again ✓') : `Not this time. Goal: ${daily_run.goal}`}</b></div>`;
+  }
   const fresh = check_badges({ game: current.id, opts: active_opts, flags: res.flags, ride: ride_log.summary(profile.ftp), ftp: profile.ftp, game_count: games.length });
   $('r-badges').innerHTML = fresh_html(fresh);
   if (fresh.length) setTimeout(() => sfx('perfect'), 400);
@@ -467,9 +500,9 @@ $('btn-share').onclick = async () => {
   } catch { /* share cancelled */ }
 };
 
-$('btn-start').onclick = start_game;
+$('btn-start').onclick = () => { daily_run = null; start_game(); };
 $('btn-again').onclick = start_game;
-$('btn-setup').onclick = () => { render_setup(); show('screen-setup'); };
+$('btn-setup').onclick = () => { daily_run = null; render_setup(); show('screen-setup'); };
 $('btn-quit').onclick = () => {
   if (phase === 'play' && run && run.secs > 20 && !confirm('Quit this game? Progress will be lost.')) return;
   leave_play();

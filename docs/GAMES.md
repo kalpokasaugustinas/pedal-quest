@@ -13,7 +13,9 @@
 | ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
-Badges (`js/achievements.js`): 22 long-term goals across all games, checked after every finished game. Games pass `flags` in `result()` (e.g. `{ win: true }`) for game-specific badges. New badges show on the results screen; the collection is on the setup screen.
+Daily challenge (`js/daily.js`): one game + settings + goal per local calendar day, seeded by the date (same for everyone). Completing it on consecutive days builds a streak. The card is on the setup screen.
+
+Badges (`js/achievements.js`): 24 long-term goals across all games, checked after every finished game. Games pass `flags` in `result()` (e.g. `{ win: true }`) for game-specific badges. New badges show on the results screen; the collection is on the setup screen.
 
 Every game's results screen also shows **Your ride**: a power + heart rate chart and stats (avg / normalized / max power, best 1 min, intensity factor, kJ, HR, cadence). Recorded by the shell (`js/ride_log.js`), so games don't need to do anything.
 
@@ -129,4 +131,5 @@ export default {
 - `pq_board_<key>`: top 10 results per board
 - `pq_ghost_summit_<climb>`: best-run trace for the ghost
 - `pq_stats`: lifetime totals
+- `pq_daily`: daily challenge streak (last day done, streak, best, total)
 - `pq_badges`: unlocked badges with dates, games played, climbs finished

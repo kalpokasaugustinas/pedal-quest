@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 11 · 2026-10-31 19:56</span>
+    <span id="version">build 12 · 2026-10-31 19:57</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -36,6 +36,8 @@
     </div>
     <p id="lifetime" class="small lifetime"></p>
   </div>
+
+  <div class="panel daily" id="daily"></div>
 
   <div class="game-head">
     <h1 id="g-title"></h1>
@@ -85,6 +87,7 @@
   <h1 id="r-title"></h1>
   <p id="r-sub" class="tag"></p>
   <div id="r-body"></div>
+  <div id="r-daily"></div>
   <div id="r-badges"></div>
   <div id="r-ride"></div>
   <div class="panel"><div class="label" id="r-board-label"></div><ol id="r-board" class="board"></ol></div>
@@ -97,6 +100,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=11"></script>
+<script type="module" src="js/main.js?v=12"></script>
 </body>
 </html>

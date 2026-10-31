@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { setup_2d, sky, hills, clouds, draw_rider, round_rect, label } from '../draw2d.js?v=11';
-import { step_speed } from '../physics.js?v=11';
-import { rand, clamp, fmt_clock } from '../util.js?v=11';
+import { setup_2d, sky, hills, clouds, draw_rider, round_rect, label } from '../draw2d.js?v=12';
+import { step_speed } from '../physics.js?v=12';
+import { rand, clamp, fmt_clock } from '../util.js?v=12';
 
 const themes = [
   { name: 'Valley Road', sky: ['#6fb8ec', '#d4eefa'], far: '#8fbf86', near: '#6aa25a', ground: '#5f9a4a', road: '#3a3d42', dash: '#ffffff' },

@@ -253,3 +253,10 @@ tr.sub-row td { padding-top: 0; font-size: 12px; color: var(--muted); font-weigh
 .badge-row .badge-icon { font-size: 32px; }
 .badge-row b, .badge-row small { display: block; }
 .badge-row small { color: var(--muted); }
+
+/* daily challenge card */
+.daily { border: 1px solid #3a4a5a; }
+.daily.ok { border-color: var(--ok); }
+.daily .label { margin: 0 0 4px; }
+.daily-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.daily-row button { flex: none; padding: 10px 18px; }
