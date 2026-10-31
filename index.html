@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 7 · 2026-10-31 17:41</span>
+    <span id="version">build 8 · 2026-10-31 17:43</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -58,6 +58,7 @@
   <div id="overlay" class="overlay"></div>
   <div id="play-top" class="play-top">
     <div id="game-hud" class="game-hud"></div>
+    <button id="btn-pause" class="quit" aria-label="pause">⏸</button>
     <button id="btn-quit" class="quit" aria-label="quit">✕</button>
   </div>
   <div id="hud-bottom" class="hud-bottom">
@@ -85,6 +86,7 @@
   <div id="r-body"></div>
   <div class="panel"><div class="label" id="r-board-label"></div><ol id="r-board" class="board"></ol></div>
   <button id="btn-again" class="big">Play again</button>
+  <button id="btn-share" class="secondary wide">Share result</button>
   <button id="btn-setup" class="secondary wide">Back to setup</button>
 </section>
 
@@ -92,6 +94,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=7"></script>
+<script type="module" src="js/main.js?v=8"></script>
 </body>
 </html>

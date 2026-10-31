@@ -1,17 +1,17 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=7';
-import { control } from './ble.js?v=7';
-import { load, store, clamp } from './util.js?v=7';
-import { set_rider_mass } from './physics.js?v=7';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=7';
-import race from './games/race.js?v=7';
-import crossroads from './games/crossroads.js?v=7';
-import summit from './games/summit.js?v=7';
-import pulse from './games/pulse.js?v=7';
-import spinbeat from './games/spinbeat.js?v=7';
-import escape from './games/escape.js?v=7';
-import sprint from './games/sprint.js?v=7';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=8';
+import { control } from './ble.js?v=8';
+import { load, store, clamp } from './util.js?v=8';
+import { set_rider_mass } from './physics.js?v=8';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=8';
+import race from './games/race.js?v=8';
+import crossroads from './games/crossroads.js?v=8';
+import summit from './games/summit.js?v=8';
+import pulse from './games/pulse.js?v=8';
+import spinbeat from './games/spinbeat.js?v=8';
+import escape from './games/escape.js?v=8';
+import sprint from './games/sprint.js?v=8';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint];
 const $ = (id) => document.getElementById(id);
@@ -199,6 +199,8 @@ let demo = false;
 let wake_lock = null;
 let run = null;               // this game's totals for lifetime stats
 let last_count = 0;           // countdown number already beeped
+let paused = false;
+let last_result = null;       // for the share button
 
 async function request_wake_lock() {
   try { wake_lock = await navigator.wakeLock?.request('screen'); } catch { /* not supported */ }
@@ -232,6 +234,7 @@ function start_game() {
   set_rider_mass(profile.weight + 9);   // rider + bike
   run = { secs: 0, kj: 0, km: 0 };
   last_count = 0;
+  set_paused(false);
   demo = !sensors.trainer;
   const hr_slider = sensors.hr === null && !sensors.hr_strap;
   $('demo-w').classList.toggle('hidden', !demo);
@@ -291,6 +294,13 @@ function loop(ts) {
   const real_dt = Math.min(0.1, Math.max(0, (ts - last_ts) / 1000));   // app in background = pause
   last_ts = ts;
   const input = read_input(ts);
+
+  if (paused) {
+    instance.render(0, input);
+    update_metrics(input);
+    requestAnimationFrame(loop);
+    return;
+  }
 
   if (phase === 'countdown') {
     const left = phase_end - ts;
@@ -390,6 +400,7 @@ function finish_game() {
   if (res.score !== null && res.score !== undefined) {
     ({ list, rank } = board_add(b, { score: res.score, note: res.note || '', date: new Date().toISOString().slice(0, 10) }));
   }
+  last_result = res;
   $('r-title').textContent = res.title;
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
@@ -398,6 +409,37 @@ function finish_game() {
   render_nav();
   show('screen-results');
 }
+
+// pause: the game clock stops, the screen keeps showing your live numbers
+let paused_at = 0;
+function set_paused(on) {
+  // the countdown runs on wall-clock time, so shift its end by the pause length
+  if (on && !paused) paused_at = performance.now();
+  if (!on && paused) phase_end += performance.now() - paused_at;
+  paused = on;
+  $('btn-pause').textContent = on ? '▶' : '⏸';
+  $('btn-pause').setAttribute('aria-label', on ? 'resume' : 'pause');
+  if (on) show_big_text('PAUSED');
+  else if (phase !== 'idle') $('countdown').classList.add('hidden');
+}
+$('btn-pause').onclick = () => {
+  if (phase === 'play' || phase === 'countdown') set_paused(!paused);
+};
+
+// share: phone share sheet, or copy to clipboard on a pc
+$('btn-share').onclick = async () => {
+  if (!last_result) return;
+  const text = `${current.icon} ${current.name}: ${last_result.title}. ${last_result.sub}`;
+  const url = location.origin + location.pathname + '#' + current.id;
+  try {
+    if (navigator.share) await navigator.share({ title: 'Pedal Quest', text, url });
+    else {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      $('btn-share').textContent = 'Copied!';
+      setTimeout(() => { $('btn-share').textContent = 'Share result'; }, 1500);
+    }
+  } catch { /* share cancelled */ }
+};
 
 $('btn-start').onclick = start_game;
 $('btn-again').onclick = start_game;
@@ -413,6 +455,7 @@ $('btn-quit').onclick = () => {
 window.addEventListener('keydown', (e) => {
   if (phase === 'idle') return;
   const nudge = (id, d) => { $(id).value = +$(id).value + d; };
+  if (e.key === ' ' || e.key === 'p') $('btn-pause').click();
   if (e.key === 'ArrowUp') nudge('in-watts', 10);
   if (e.key === 'ArrowDown') nudge('in-watts', -10);
   if (e.key === ']') nudge('in-rpm', 5);
