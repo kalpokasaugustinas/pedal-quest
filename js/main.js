@@ -1,21 +1,21 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=13';
-import { control } from './ble.js?v=13';
-import { load, store, clamp } from './util.js?v=13';
-import { set_rider_mass, steady_speed } from './physics.js?v=13';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=13';
-import * as ride_log from './ride_log.js?v=13';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=13';
-import * as daily from './daily.js?v=13';
-import race from './games/race.js?v=13';
-import crossroads from './games/crossroads.js?v=13';
-import summit from './games/summit.js?v=13';
-import pulse from './games/pulse.js?v=13';
-import spinbeat from './games/spinbeat.js?v=13';
-import escape from './games/escape.js?v=13';
-import sprint from './games/sprint.js?v=13';
-import workout from './games/workout.js?v=13';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=14';
+import { control } from './ble.js?v=14';
+import { load, store, clamp } from './util.js?v=14';
+import { set_rider_mass, steady_speed } from './physics.js?v=14';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=14';
+import * as ride_log from './ride_log.js?v=14';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=14';
+import * as daily from './daily.js?v=14';
+import race from './games/race.js?v=14';
+import crossroads from './games/crossroads.js?v=14';
+import summit from './games/summit.js?v=14';
+import pulse from './games/pulse.js?v=14';
+import spinbeat from './games/spinbeat.js?v=14';
+import escape from './games/escape.js?v=14';
+import sprint from './games/sprint.js?v=14';
+import workout from './games/workout.js?v=14';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);
@@ -185,9 +185,11 @@ function render_setup() {
   $('g-board').innerHTML = board_html(b, load(`pq_board_${b.key}`, []), -1);
   $('btn-start').textContent = `Start ${g.name}`;
   render_daily();
-  const open = $('badges').open;
+  const open = $('badges').open, h_open = $('history').open;
   $('badges').innerHTML = collection_html();
   $('badges').open = open;
+  $('history').innerHTML = ride_log.history_html(Object.fromEntries(games.map((x) => [x.id, x.icon])));
+  $('history').open = h_open;
   render_sensors();
 }
 
@@ -439,6 +441,7 @@ function finish_game() {
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
   $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
+  ride_log.save_history(current.id, res.title);
   $('btn-export').classList.toggle('hidden', ride_log.summary(profile.ftp).secs < 60);
   // daily challenge result (before badges, so streak badges see the new streak)
   $('r-daily').innerHTML = '';

@@ -1,8 +1,8 @@
 // pulse pilot: your heart rate is your altitude. fly a pedal-powered plane through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
-import { setup_2d, sky, hills, clouds, round_rect, label } from '../draw2d.js?v=13';
-import { step_speed } from '../physics.js?v=13';
-import { clamp, rand } from '../util.js?v=13';
+import { setup_2d, sky, hills, clouds, round_rect, label } from '../draw2d.js?v=14';
+import { step_speed } from '../physics.js?v=14';
+import { clamp, rand } from '../util.js?v=14';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect

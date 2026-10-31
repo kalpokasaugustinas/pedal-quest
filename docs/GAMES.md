@@ -13,6 +13,8 @@
 | ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
+Ride history: the setup screen lists recent rides and this week's totals (Monday to Sunday).
+
 Ride export: results have a **Download ride (.tcx)** button (rides over 1 min). The TCX has 1-s trackpoints with power, HR, cadence and distance, so Strava / Garmin Connect / intervals.icu can import it. Games without a speed (Spin Beat, Workout, Pulse) get a virtual distance from the flat-road physics.
 
 Daily challenge (`js/daily.js`): one game + settings + goal per local calendar day, seeded by the date (same for everyone). Completing it on consecutive days builds a streak. The card is on the setup screen.
@@ -133,5 +135,6 @@ export default {
 - `pq_board_<key>`: top 10 results per board
 - `pq_ghost_summit_<climb>`: best-run trace for the ghost
 - `pq_stats`: lifetime totals
+- `pq_history`: last 50 finished rides (summary: date, game, duration, avg W, NP, kJ, avg HR)
 - `pq_daily`: daily challenge streak (last day done, streak, best, total)
 - `pq_badges`: unlocked badges with dates, games played, climbs finished

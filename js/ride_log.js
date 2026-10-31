@@ -1,5 +1,6 @@
 // ride log: one sample per second of game time (watts, hr, cadence) for the results chart + ride stats
 // shared by every game through the shell, so the games don't need to record anything themselves
+import { load, store } from './util.js?v=14';
 
 let samples = [];     // [{ w, hr, rpm }] one per second
 let acc = null;       // running sums for the current second
@@ -184,4 +185,39 @@ export function tcx(sport_name, speed_of_watts) {
 <Creator xsi:type="Device_t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Name>Pedal Quest</Name></Creator>
 </Activity></Activities></TrainingCenterDatabase>
 `;
+}
+
+// ---- ride history: last 50 finished rides (summary only), newest first ----
+export function save_history(game, title) {
+  const s = summary(0);
+  if (s.secs < 60) return;
+  let list = load('pq_history', []);
+  list.unshift({
+    date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),   // local time
+    game, title,
+    secs: s.secs, avg_w: Math.round(s.avg_w), np: s.np ? Math.round(s.np) : null,
+    kj: Math.round(s.kj), avg_hr: s.avg_hr ? Math.round(s.avg_hr) : null,
+  });
+  store('pq_history', list.slice(0, 50));
+}
+
+// monday 00:00 local of the current week
+function week_start() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+// setup panel: this week's totals + recent rides. icons maps game id -> emoji
+export function history_html(icons) {
+  const list = load('pq_history', []);
+  const ws = week_start();
+  const week = list.filter((r) => new Date(r.date) >= ws);
+  const mins = Math.round(week.reduce((a, r) => a + r.secs, 0) / 60);
+  const kj = week.reduce((a, r) => a + r.kj, 0);
+  const rows = list.slice(0, 15).map((r) => `<li><span class="h-date">${r.date.slice(5, 10)}</span><span>${icons[r.game] || ''} ${r.title}</span>`
+    + `<span class="h-num">${Math.round(r.secs / 60)} min · ${r.avg_w} W${r.avg_hr ? ` · ${r.avg_hr} bpm` : ''}</span></li>`).join('');
+  return `<summary>Ride history · this week ${week.length} ride${week.length === 1 ? '' : 's'}, ${Math.floor(mins / 60)} h ${mins % 60} min, ${kj} kJ</summary>
+    ${list.length ? `<ol class="history">${rows}</ol>` : '<p class="small">Finished rides longer than 1 min show up here.</p>'}`;
 }
