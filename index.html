@@ -4,69 +4,68 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1720">
-<meta name="description" content="Race computer riders with your smart trainer. Your watts move your cyclist.">
+<meta name="description" content="Cycling minigames for your smart trainer and heart rate strap.">
 <title>Pedal Quest</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
-<!-- setup screen: connect sensors, pick race -->
-<section id="screen-setup" class="screen active">
-  <span id="version">build 4 · 2026-10-31 17:05</span>
-  <h1>Pedal Quest</h1>
-  <p class="tag">Ride your trainer. Beat the bots to the finish.</p>
+<!-- top bar: game picker (hidden while playing) -->
+<header class="topbar">
+  <div class="topbar-row">
+    <span class="brand">🚴 Pedal Quest</span>
+    <span id="version">build 5 · 2026-10-31 17:30</span>
+  </div>
+  <nav id="game-nav" aria-label="games"></nav>
+</header>
 
+<!-- setup screen: sensors, profile, selected game's rules and options -->
+<section id="screen-setup" class="screen active">
   <div class="panel">
     <div class="row"><button id="btn-trainer">Connect trainer</button><span id="st-trainer" class="st">not connected</span></div>
     <div class="row"><button id="btn-hr" class="secondary">Connect HR strap</button><span id="st-hr" class="st">optional</span></div>
     <p id="ble-warning" class="warn hidden">This browser has no Web Bluetooth. Use Chrome on Android or PC. Demo mode still works.</p>
-  </div>
-
-  <div class="panel">
-    <div class="label">Race distance</div>
-    <div class="seg" id="seg-distance">
-      <button data-km="1">1 km</button><button data-km="2">2 km</button><button data-km="5">5 km</button><button data-km="10">10 km</button>
+    <div class="profile">
+      <label>FTP <input type="number" id="p-ftp" inputmode="numeric" min="60" max="600"> W</label>
+      <label>Max HR <input type="number" id="p-maxhr" inputmode="numeric" min="120" max="220"> bpm</label>
     </div>
-    <div class="label">Rival strength</div>
-    <div class="stepper"><button id="w-minus" aria-label="weaker rivals">−</button><span id="w-value">150 W</span><button id="w-plus" aria-label="stronger rivals">+</button></div>
-    <ul id="rivals"></ul>
-    <div class="best" id="best"></div>
   </div>
 
-  <button id="btn-start" class="big">Start race</button>
+  <div class="game-head">
+    <h1 id="g-title"></h1>
+    <p id="g-tagline" class="tag"></p>
+    <div id="g-needs" class="chips"></div>
+  </div>
+  <div class="panel"><div class="label">How to play</div><ul id="g-how" class="how"></ul></div>
+  <div class="panel" id="g-options"></div>
+
+  <button id="btn-start" class="big">Start</button>
   <p class="small" id="mode-note"></p>
+
+  <div class="panel"><div class="label" id="g-board-label">Top scores</div><ol id="g-board" class="board"></ol></div>
   <p class="small"><a href="test.html">Connection test page</a></p>
 </section>
 
-<!-- race screen: canvas world + html hud -->
-<section id="screen-race" class="screen">
-  <canvas id="canvas"></canvas>
-  <div class="hud-top">
-    <div id="h-pos" class="pos">1/6</div>
-    <div class="hud-mid">
-      <div id="progress" class="progress"></div>
-      <div class="hud-sub"><span id="h-time">0:00.0</span> · <span id="h-left"></span></div>
-    </div>
-    <button id="btn-quit" class="quit" aria-label="quit race">✕</button>
+<!-- play screen shared by all games: canvas + game hud + shared metrics -->
+<section id="screen-play" class="screen">
+  <div id="canvas-slot"></div>
+  <div id="overlay" class="overlay"></div>
+  <div id="play-top" class="play-top">
+    <div id="game-hud" class="game-hud"></div>
+    <button id="btn-quit" class="quit" aria-label="quit">✕</button>
   </div>
-  <div id="boost-fx" class="boost-fx hidden"></div>
-  <ol id="leaderboard" class="leaderboard"></ol>
-  <div class="hud-bottom">
+  <div id="hud-bottom" class="hud-bottom">
     <div id="demo" class="demo hidden">
-      <label>W <input type="range" id="demo-watts" min="0" max="500" step="5" value="0"></label>
-      <label id="demo-hr-label">HR <input type="range" id="demo-hr" min="60" max="190" step="1" value="100"></label>
+      <label id="demo-w">W <input type="range" id="in-watts" min="0" max="500" step="5" value="0"></label>
+      <label id="demo-rpm">rpm <input type="range" id="in-rpm" min="0" max="140" step="1" value="85"></label>
+      <label id="demo-hr">HR <input type="range" id="in-hr" min="60" max="200" step="1" value="100"></label>
     </div>
-    <!-- nitro: hold hr in the target window to charge -->
-    <div id="nitro" class="nitro">
-      <span class="nitro-label">NITRO</span>
-      <div class="nitro-bar"><div id="nitro-fill" class="nitro-fill"></div></div>
-      <span id="nitro-range" class="nitro-range"></span>
-    </div>
+    <div id="game-bottom"></div>
     <div class="metrics">
-      <div class="m main"><span id="h-watts">0</span><small>W</small></div>
-      <div class="m"><span id="h-speed">0.0</span><small>km/h</small></div>
-      <div class="m"><span id="h-cad">0</span><small>rpm</small></div>
-      <div class="m"><span id="h-hr">--</span><small>bpm</small></div>
+      <div class="m main"><span id="m-watts">0</span><small>W</small></div>
+      <div class="m"><span id="m-speed">--</span><small>km/h</small></div>
+      <div class="m"><span id="m-cad">0</span><small>rpm</small></div>
+      <div class="m"><span id="m-hr">--</span><small>bpm</small></div>
     </div>
   </div>
   <div id="banner" class="banner hidden"></div>
@@ -75,17 +74,18 @@
 
 <!-- results screen -->
 <section id="screen-results" class="screen">
-  <h1 id="r-title">Finished</h1>
+  <h1 id="r-title"></h1>
   <p id="r-sub" class="tag"></p>
-  <table id="r-table"></table>
-  <button id="btn-again" class="big">Race again</button>
-  <button id="btn-setup" class="secondary wide">Change settings</button>
+  <div id="r-body"></div>
+  <div class="panel"><div class="label" id="r-board-label"></div><ol id="r-board" class="board"></ol></div>
+  <button id="btn-again" class="big">Play again</button>
+  <button id="btn-setup" class="secondary wide">Back to setup</button>
 </section>
 
-<!-- three.js for the 3d world (same version as other projects) -->
+<!-- three.js for the 3d race (same version as other projects) -->
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=4"></script>
+<script type="module" src="js/main.js?v=5"></script>
 </body>
 </html>

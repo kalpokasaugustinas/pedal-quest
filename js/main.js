@@ -1,145 +1,183 @@
-// pedal quest: app flow (setup -> countdown -> race -> results), sensors and hud
-import { ble_supported, connect_device } from './ble.js?v=4';
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts } from './race.js?v=4';
-import { create_world } from './world.js?v=4';
+// pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
+// every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=5';
+import { control } from './ble.js?v=5';
+import { load, store, clamp } from './util.js?v=5';
+import race from './games/race.js?v=5';
+import crossroads from './games/crossroads.js?v=5';
+import summit from './games/summit.js?v=5';
+import pulse from './games/pulse.js?v=5';
+import spinbeat from './games/spinbeat.js?v=5';
+import escape from './games/escape.js?v=5';
 
+const games = [race, crossroads, summit, pulse, spinbeat, escape];
 const $ = (id) => document.getElementById(id);
 
-// ---- saved settings and best times (per browser; the game works without storage) ----
-function load_settings() {
-  const defaults = { km: 2, base_watts: 150 };
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem('pq_settings') || '{}') }; }
-  catch { return defaults; }
-}
-function save_settings() {
-  try { localStorage.setItem('pq_settings', JSON.stringify(settings)); } catch { /* storage blocked */ }
-}
-function get_best(km) {
-  try { const v = parseFloat(localStorage.getItem(`pq_best_${km}`)); return isNaN(v) ? null : v; }
-  catch { return null; }
-}
-function set_best(km, t) {
-  try { localStorage.setItem(`pq_best_${km}`, String(t)); } catch { /* storage blocked */ }
-}
-const settings = load_settings();
-
-// ---- formatting ----
-function fmt_time(t) {
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
-  return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
-}
-function ordinal(n) {
-  return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n] || 'th');
-}
+// test helper: ?warp=20 runs game time 20x faster (physics stays stable via sub-steps)
+const warp = clamp(+new URLSearchParams(location.search).get('warp') || 1, 1, 100);
 
 // ---- screens ----
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+  document.body.classList.toggle('playing', id === 'screen-play');
+  window.scrollTo(0, 0);
 }
 
-// ---- live sensor values ----
-const sensors = { watts: 0, cadence: 0, hr: null, trainer: false, hr_strap: false, last_trainer_ms: 0 };
-
-function set_status(id, text, cls = '') {
-  $(id).textContent = text;
-  $(id).className = `st ${cls}`;
-}
-
-function on_trainer_data(d) {
-  if (d.power !== undefined) sensors.watts = Math.max(0, d.power);
-  if (d.cadence !== undefined) sensors.cadence = d.cadence;
-  if (d.hr && !sensors.hr_strap) sensors.hr = d.hr;   // some trainers relay hr
-  sensors.last_trainer_ms = performance.now();
-}
-
-function on_trainer_status(state, device) {
-  sensors.trainer = state === 'connected';
-  if (state === 'connected') set_status('st-trainer', `connected: ${device.name}`, 'ok');
-  if (state === 'reconnecting') set_status('st-trainer', 'reconnecting…', 'err');
-  if (state === 'disconnected') set_status('st-trainer', 'disconnected', 'err');
-  show_banner({ connected: '', reconnecting: 'Trainer reconnecting…', disconnected: 'Trainer disconnected' }[state]);
-  update_mode_note();
-}
-
-function on_hr_data(bpm) {
-  sensors.hr = bpm;
-}
-
-function on_hr_status(state, device) {
-  sensors.hr_strap = state === 'connected';
-  if (state === 'connected') set_status('st-hr', `connected: ${device.name}`, 'ok');
-  if (state === 'reconnecting') set_status('st-hr', 'reconnecting…', 'err');
-  if (state === 'disconnected') {
-    set_status('st-hr', 'disconnected', 'err');
-    sensors.hr = null;
+// ---- game options (saved per game) ----
+function game_opts(g) {
+  const saved = load(`pq_opts_${g.id}`, {});
+  const o = {};
+  for (const opt of g.options) {
+    const v = saved[opt.key];
+    const valid = opt.type === 'stepper'
+      ? typeof v === 'number' && v >= opt.min && v <= opt.max
+      : opt.choices.some(([cv]) => cv === v);
+    o[opt.key] = valid ? v : opt.def;
   }
+  return o;
+}
+function save_opts(g, o) { store(`pq_opts_${g.id}`, o); }
+
+// ---- leaderboards: top 10 per board key ----
+function board_html(b, list, rank) {
+  if (!list.length) return '<li class="empty">No results yet. Be the first!</li>';
+  return list.map((e, i) => `<li class="${i === rank ? 'new' : ''}"><span class="b-pos">${i + 1}</span><span class="b-score">${b.fmt(e.score)}</span><span class="b-note">${e.note || ''}</span><span class="b-date">${e.date}</span></li>`).join('');
 }
 
-// connect button handler; a cancelled device picker is not an error
-async function connect(kind, status_id, on_data, on_status) {
-  try {
-    set_status(status_id, 'pick your device…');
-    await connect_device(kind, on_data, on_status);
-  } catch (err) {
-    set_status(status_id, err.name === 'NotFoundError' ? 'cancelled' : `failed: ${err.message}`, 'err');
+function board_add(b, entry) {
+  let list = load(`pq_board_${b.key}`, []);
+  list.push(entry);
+  list.sort((x, y) => (b.lower ? x.score - y.score : y.score - x.score));
+  list = list.slice(0, 10);
+  store(`pq_board_${b.key}`, list);
+  return { list, rank: list.indexOf(entry) };
+}
+
+// ---- top navigation ----
+let current = games[0];
+
+function render_nav() {
+  $('game-nav').innerHTML = games
+    .map((g) => `<button data-id="${g.id}" class="${g === current ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
+    .join('');
+  $('game-nav').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { location.hash = b.dataset.id; };
+  });
+  $('game-nav').querySelector('.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+function select_game(id) {
+  current = games.find((g) => g.id === id) || games[0];
+  render_nav();
+  render_setup();
+}
+
+window.addEventListener('hashchange', () => {
+  if (phase !== 'idle') return;
+  select_game(location.hash.slice(1));
+  show('screen-setup');
+});
+
+// ---- sensors panel + profile ----
+function status_class(text) {
+  if (text.startsWith('connected')) return 'ok';
+  if (/^(reconnecting|disconnected|cancelled|failed)/.test(text)) return 'err';
+  return '';
+}
+
+function render_sensors() {
+  for (const kind of ['trainer', 'hr']) {
+    const el = $(`st-${kind}`);
+    el.textContent = sensors.status[kind];
+    el.className = `st ${status_class(sensors.status[kind])}`;
   }
+  $('mode-note').textContent = sensors.trainer
+    ? 'Trainer connected: your watts drive the game.'
+    : 'No trainer connected: games run in demo mode with sliders for watts, cadence and heart rate.';
 }
 
-$('btn-trainer').onclick = () => connect('trainer', 'st-trainer', on_trainer_data, on_trainer_status);
-$('btn-hr').onclick = () => connect('hr', 'st-hr', on_hr_data, on_hr_status);
-
+$('btn-trainer').onclick = () => connect('trainer');
+$('btn-hr').onclick = () => connect('hr');
 if (!ble_supported) {
   $('ble-warning').classList.remove('hidden');
   $('btn-trainer').disabled = true;
   $('btn-hr').disabled = true;
 }
 
-// ---- setup screen ----
-function update_mode_note() {
-  $('mode-note').textContent = sensors.trainer
-    ? 'Trainer connected: your watts drive your rider.'
-    : 'No trainer connected: the race runs in demo mode with a watts slider.';
-}
-
-function render_setup() {
-  document.querySelectorAll('#seg-distance button').forEach((b) => b.classList.toggle('on', +b.dataset.km === settings.km));
-  $('w-value').textContent = `${settings.base_watts} W`;
-  // strongest rival first
-  $('rivals').innerHTML = bot_lineup(settings.base_watts).reverse()
-    .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name}<span class="w">~${b.avg_watts} W avg</span></li>`)
-    .join('');
-  const best = get_best(settings.km);
-  $('best').textContent = best ? `Your best ${settings.km} km: ${fmt_time(best)}` : `No ${settings.km} km race finished yet`;
-  update_mode_note();
-}
-
-document.querySelectorAll('#seg-distance button').forEach((b) => {
-  b.onclick = () => { settings.km = +b.dataset.km; save_settings(); render_setup(); };
-});
-function change_watts(delta) {
-  settings.base_watts = Math.min(500, Math.max(50, settings.base_watts + delta));
-  save_settings();
+$('p-ftp').value = profile.ftp;
+$('p-maxhr').value = profile.max_hr;
+$('p-ftp').onchange = () => {
+  profile.ftp = clamp(Math.round(+$('p-ftp').value || 200), 60, 600);
+  $('p-ftp').value = profile.ftp;
+  save_profile();
   render_setup();
+};
+$('p-maxhr').onchange = () => {
+  profile.max_hr = clamp(Math.round(+$('p-maxhr').value || 185), 120, 220);
+  $('p-maxhr').value = profile.max_hr;
+  save_profile();
+  render_setup();
+};
+
+on_change((e) => {
+  render_sensors();
+  if (phase === 'idle' || e.kind !== 'trainer') return;
+  show_banner({ connected: '', reconnecting: 'Trainer reconnecting…', disconnected: 'Trainer disconnected' }[e.state] || '');
+});
+
+// ---- setup screen for the selected game ----
+function render_setup() {
+  const g = current;
+  const o = game_opts(g);
+  $('g-title').textContent = `${g.icon} ${g.name}`;
+  $('g-tagline').textContent = g.tagline;
+  $('g-how').innerHTML = g.how.map((t) => `<li>${t}</li>`).join('');
+  $('g-needs').innerHTML = needs_html(g);
+
+  $('g-options').innerHTML = g.options.map((opt) => {
+    if (opt.type === 'stepper') {
+      return `<div class="label">${opt.label}</div>
+        <div class="stepper" data-key="${opt.key}"><button data-d="-1" aria-label="less">−</button><span>${o[opt.key]} ${opt.unit}</span><button data-d="1" aria-label="more">+</button></div>`;
+    }
+    return `<div class="label">${opt.label}</div>
+      <div class="seg${opt.wide ? ' wide' : ''}" data-key="${opt.key}">${opt.choices.map(([v, text], i) => `<button data-i="${i}" class="${v === o[opt.key] ? 'on' : ''}">${text}</button>`).join('')}</div>`;
+  }).join('') + (g.setup_html ? g.setup_html(o, profile) : '');
+
+  $('g-options').querySelectorAll('.seg').forEach((seg) => {
+    const opt = g.options.find((x) => x.key === seg.dataset.key);
+    seg.querySelectorAll('button').forEach((b) => {
+      b.onclick = () => { o[opt.key] = opt.choices[+b.dataset.i][0]; save_opts(g, o); render_setup(); };
+    });
+  });
+  $('g-options').querySelectorAll('.stepper').forEach((st) => {
+    const opt = g.options.find((x) => x.key === st.dataset.key);
+    st.querySelectorAll('button').forEach((b) => {
+      b.onclick = () => { o[opt.key] = clamp(o[opt.key] + +b.dataset.d * opt.step, opt.min, opt.max); save_opts(g, o); render_setup(); };
+    });
+  });
+
+  const b = g.board(o);
+  $('g-board-label').textContent = b.label;
+  $('g-board').innerHTML = board_html(b, load(`pq_board_${b.key}`, []), -1);
+  $('btn-start').textContent = `Start ${g.name}`;
+  render_sensors();
 }
-$('w-minus').onclick = () => change_watts(-10);
-$('w-plus').onclick = () => change_watts(10);
 
-// ---- race ----
-const canvas = $('canvas');
-let world = null;            // 3d scene for the current race
-let race = null;
-let phase = 'idle';          // idle | countdown | racing | finishing
-let phase_end = 0;           // timestamp when countdown / finishing ends
+// which sensors this game uses, shown as small chips
+function needs_html(g) {
+  const chips = [['power', '⚡ Power'], ['cadence', '🔄 Cadence'], ['hr', '❤️ Heart rate'], ['resistance', '⛰️ Trainer resistance']];
+  return chips.filter(([k]) => g.uses.includes(k)).map(([, t]) => `<span class="chip">${t}</span>`).join('');
+}
+
+// ---- play loop ----
+let instance = null;          // running game
+let active_opts = null;
+let phase = 'idle';           // idle | countdown | play | ending
+let phase_end = 0;
 let last_ts = 0;
-let demo_mode = false;
-let progress_dots = [];
+let demo = false;
 let wake_lock = null;
-let last_boost_count = 0;    // to flash "NITRO!" once per activation
 
-window.addEventListener('resize', () => { if (phase !== 'idle') world?.resize(); });
-
-// keep the phone screen on while racing
 async function request_wake_lock() {
   try { wake_lock = await navigator.wakeLock?.request('screen'); } catch { /* not supported */ }
 }
@@ -152,176 +190,171 @@ function show_banner(text) {
   $('banner').classList.toggle('hidden', !text);
 }
 
-function show_big_text(text, hide_after_ms) {
+let big_timer = null;
+function show_big_text(text, hide_after_ms, cls = '') {
   const el = $('countdown');
   el.textContent = text;
-  el.classList.remove('hidden');
-  if (hide_after_ms) setTimeout(() => { if (el.textContent === text) el.classList.add('hidden'); }, hide_after_ms);
+  el.className = `countdown ${cls}`;
+  clearTimeout(big_timer);
+  if (hide_after_ms) big_timer = setTimeout(() => el.classList.add('hidden'), hide_after_ms);
 }
 
-function start_race() {
-  race = create_race({ distance_m: settings.km * 1000, base_watts: settings.base_watts });
-  demo_mode = !sensors.trainer;
-  $('demo').classList.toggle('hidden', !demo_mode);
-  $('demo-hr-label').classList.toggle('hidden', sensors.hr_strap);   // real strap beats the slider
-  $('demo-watts').value = 0;
-  last_boost_count = 0;
-  show_banner('');
-  // progress bar: one dot per rider
-  $('progress').innerHTML = race.riders
-    .map((r) => `<span class="dot${r.is_player ? ' me' : ''}" style="background:${r.color}"></span>`).join('');
-  progress_dots = [...$('progress').children];
+// distances of the play screen covered by the hud (games keep important drawing out of these)
+function insets() {
+  return { top: $('play-top').offsetHeight, bottom: $('hud-bottom').offsetHeight };
+}
 
-  show('screen-race');
+function start_game() {
+  active_opts = game_opts(current);
+  demo = !sensors.trainer;
+  const hr_slider = sensors.hr === null && !sensors.hr_strap;
+  $('demo-w').classList.toggle('hidden', !demo);
+  $('demo-rpm').classList.toggle('hidden', !demo);
+  $('demo-hr').classList.toggle('hidden', !hr_slider);
+  $('demo').classList.toggle('hidden', !demo && !hr_slider);
+  $('in-watts').value = 0;
+
+  // a fresh canvas per game: a canvas can't switch between webgl (3d) and 2d
+  $('canvas-slot').innerHTML = '<canvas class="game-canvas"></canvas>';
+  const canvas = $('canvas-slot').firstChild;
+  $('game-hud').innerHTML = '';
+  $('overlay').innerHTML = '';
+  $('game-bottom').innerHTML = '';
+  show_banner('');
+
+  show('screen-play');
   document.documentElement.requestFullscreen?.().catch(() => {});
   request_wake_lock();
-  world?.dispose();
-  world = create_world(canvas, race);
 
+  instance = current.create({
+    canvas,
+    hud: $('game-hud'),
+    overlay: $('overlay'),
+    bottom: $('game-bottom'),
+    opts: active_opts,
+    profile,
+    trainer: control,
+    big_text: show_big_text,
+    insets,
+  });
   phase = 'countdown';
   phase_end = performance.now() + 3000;
   last_ts = performance.now();
   requestAnimationFrame(loop);
 }
 
-// player power: trainer watts, or the demo slider. trainer data older than 3 s counts as 0 w
-function player_input(ts) {
-  if (demo_mode) {
-    const w = +$('demo-watts').value;
-    return { watts: w, cadence: w > 0 ? Math.min(110, 70 + w / 10) : 0 };
+// current inputs: trainer (or demo sliders) + hr (strap, trainer-relayed, or demo slider)
+function read_input(ts) {
+  let watts, cadence;
+  if (demo) {
+    watts = +$('in-watts').value;
+    cadence = +$('in-rpm').value;
+  } else {
+    const stale = ts - sensors.last_trainer_ms > 3000;   // no data for 3 s = not pedalling
+    watts = stale ? 0 : sensors.watts;
+    cadence = stale ? 0 : sensors.cadence;
   }
-  const stale = ts - sensors.last_trainer_ms > 3000;
-  return { watts: stale ? 0 : sensors.watts, cadence: stale ? 0 : sensors.cadence };
-}
-
-// heart rate for nitro: strap (or trainer-relayed hr), else the demo slider, else none
-function current_hr() {
-  if (sensors.hr !== null) return sensors.hr;
-  return demo_mode ? +$('demo-hr').value : null;
+  let hr = sensors.hr;
+  if (hr === null && !$('demo-hr').classList.contains('hidden')) hr = +$('in-hr').value;
+  return { watts, cadence, hr };
 }
 
 function loop(ts) {
-  if (phase === 'idle') return;
-  const dt = Math.min(0.1, Math.max(0, (ts - last_ts) / 1000));   // clamp: app in background = pause
+  if (phase === 'idle' || !instance) return;
+  const real_dt = Math.min(0.1, Math.max(0, (ts - last_ts) / 1000));   // app in background = pause
   last_ts = ts;
-  const input = player_input(ts);
-  input.hr = current_hr();
+  const input = read_input(ts);
 
   if (phase === 'countdown') {
     const left = phase_end - ts;
     if (left > 0) {
       show_big_text(String(Math.ceil(left / 1000)));
     } else {
-      phase = 'racing';
+      phase = 'play';
       show_big_text('GO!', 800);
     }
-  } else if (phase === 'racing') {
-    update_race(race, dt, input.watts, input.cadence, input.hr);
-    const n = race.player.nitro;
-    if (n.count > last_boost_count) {
-      last_boost_count = n.count;
-      show_big_text('NITRO!', 1200);
+  } else {
+    // fixed sub-steps keep physics stable when warp is on
+    let remaining = real_dt * warp;
+    while (remaining > 1e-6) {
+      const step = Math.min(0.1, remaining);
+      remaining -= step;
+      if (phase === 'play') {
+        instance.update(step, input);
+        if (instance.done) {
+          phase = 'ending';
+          phase_end = ts + 2500;
+          show_big_text(instance.done_text || 'FINISH', 2500, instance.done_class || '');
+        }
+      } else {
+        instance.update(step, { watts: 0, cadence: 0, hr: input.hr });
+      }
     }
-    if (race.player.finish_time !== null) {
-      phase = 'finishing';
-      phase_end = ts + 2500;
-      show_big_text('FINISH', 2500);
-    }
-  } else if (phase === 'finishing') {
-    update_race(race, dt, 0, 0);
-    if (ts > phase_end) {
-      show_results();
+    if (phase === 'ending' && ts > phase_end) {
+      finish_game();
       return;
     }
   }
 
-  world.render(dt);
-  update_hud(input);
+  instance.render(real_dt * warp, input);
+  update_metrics(input);
   requestAnimationFrame(loop);
 }
 
-function update_hud(input) {
-  const order = standings(race);
-  const p = race.player;
-  $('h-pos').textContent = `${order.indexOf(p) + 1}/${race.riders.length}`;
-  $('h-time').textContent = fmt_time(p.finish_time ?? race.time);
-  $('h-left').textContent = `${(Math.max(0, race.distance_m - p.x) / 1000).toFixed(2)} km left`;
-  $('h-watts').textContent = Math.round(input.watts);
-  $('h-speed').textContent = (p.v * 3.6).toFixed(1);
-  $('h-cad').textContent = Math.round(input.cadence);
-  $('h-hr').textContent = input.hr ?? '--';
-  update_nitro_hud(input.hr);
-  race.riders.forEach((r, i) => {
-    progress_dots[i].style.left = `${Math.min(100, (r.x / race.distance_m) * 100)}%`;
-  });
-  // leaderboard: rider names are fixed constants, so innerHTML is safe
-  $('leaderboard').innerHTML = order.map((r, i) => {
-    const gap = Math.round(r.x - p.x);
-    const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
-    const fire = r.nitro.boost_left > 0 ? ' 🔥' : '';
-    return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}${fire}<span class="gap">${gap_text}</span></li>`;
-  }).join('');
+function update_metrics(input) {
+  $('m-watts').textContent = Math.round(input.watts);
+  const v = instance.speed ? instance.speed() : null;
+  $('m-speed').textContent = v === null ? '--' : (v * 3.6).toFixed(1);
+  $('m-cad').textContent = Math.round(input.cadence);
+  $('m-hr').textContent = input.hr ?? '--';
 }
 
-// nitro bar: charge level (or remaining boost), target hr window, colour by state
-function update_nitro_hud(hr) {
-  const n = race.player.nitro;
-  const boosting = n.boost_left > 0;
-  const el = $('nitro');
-  el.classList.toggle('boost', boosting);
-  el.classList.toggle('in-range', !boosting && n.in_range && hr !== null);
-  el.classList.toggle('off', hr === null);
-  $('nitro-fill').style.width = `${(boosting ? n.boost_left / 3 : n.charge) * 100}%`;
-  $('nitro-range').textContent = hr === null ? 'needs HR strap' : `HR ${n.range[0]}–${n.range[1]}`;
-  $('boost-fx').classList.toggle('hidden', !boosting);
-}
+window.addEventListener('resize', () => { if (phase !== 'idle') instance?.resize?.(); });
 
-function leave_race_screen() {
+function leave_play() {
   phase = 'idle';
+  instance?.dispose?.();
+  instance = null;
+  clearTimeout(big_timer);
   $('countdown').classList.add('hidden');
-  $('boost-fx').classList.add('hidden');
   wake_lock?.release().catch(() => {});
   wake_lock = null;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
-function show_results() {
-  leave_race_screen();
-  finish_remaining(race);
-  const order = standings(race);
-  const p = race.player;
-  const pos = order.indexOf(p) + 1;
-  const winner_time = order[0].finish_time;
-
-  const best = get_best(settings.km);
-  const is_best = best === null || p.finish_time < best;
-  if (is_best) set_best(settings.km, p.finish_time);
-
-  $('r-title').textContent = pos === 1 ? 'You won! 🏆' : `You finished ${ordinal(pos)}`;
-  $('r-sub').textContent = `${settings.km} km in ${fmt_time(p.finish_time)} · avg ${avg_watts(p)} W · nitro ×${p.nitro.count} · `
-    + (is_best ? 'new personal best!' : `best ${fmt_time(best)}`);
-  $('r-table').innerHTML = order.map((r, i) => `
-    <tr class="${r.is_player ? 'me' : ''}">
-      <td>${i + 1}</td>
-      <td><span class="dot" style="background:${r.color}"></span> ${r.name}</td>
-      <td class="num">${fmt_time(r.finish_time)}</td>
-      <td class="num">${i === 0 ? '' : `+${(r.finish_time - winner_time).toFixed(1)}s`}</td>
-      <td class="num">${avg_watts(r)} W</td>
-    </tr>`).join('');
+function finish_game() {
+  const res = instance.result();
+  leave_play();
+  const b = current.board(active_opts);
+  let list = load(`pq_board_${b.key}`, []);
+  let rank = -1;
+  if (res.score !== null && res.score !== undefined) {
+    ({ list, rank } = board_add(b, { score: res.score, note: res.note || '', date: new Date().toISOString().slice(0, 10) }));
+  }
+  $('r-title').textContent = res.title;
+  $('r-sub').textContent = res.sub || '';
+  $('r-body').innerHTML = res.body || '';
+  $('r-board-label').textContent = b.label + (rank === 0 ? ' · new record! 🎉' : rank > 0 ? ` · you placed #${rank + 1}` : '');
+  $('r-board').innerHTML = board_html(b, list, rank);
+  render_nav();
   show('screen-results');
 }
 
-$('btn-start').onclick = start_race;
-$('btn-again').onclick = start_race;
+$('btn-start').onclick = start_game;
+$('btn-again').onclick = start_game;
 $('btn-setup').onclick = () => { render_setup(); show('screen-setup'); };
-$('btn-quit').onclick = () => { leave_race_screen(); render_setup(); show('screen-setup'); };
+$('btn-quit').onclick = () => { leave_play(); render_setup(); show('screen-setup'); };
 
-// demo mode: arrow keys change watts (for testing on a pc)
+// keyboard controls for demo mode on a pc: arrows = watts, [ ] = cadence, - + = heart rate
 window.addEventListener('keydown', (e) => {
-  if (!demo_mode || phase === 'idle') return;
-  const slider = $('demo-watts');
-  if (e.key === 'ArrowUp') slider.value = +slider.value + 10;
-  if (e.key === 'ArrowDown') slider.value = +slider.value - 10;
+  if (phase === 'idle') return;
+  const nudge = (id, d) => { $(id).value = +$(id).value + d; };
+  if (e.key === 'ArrowUp') nudge('in-watts', 10);
+  if (e.key === 'ArrowDown') nudge('in-watts', -10);
+  if (e.key === ']') nudge('in-rpm', 5);
+  if (e.key === '[') nudge('in-rpm', -5);
+  if (e.key === '=' || e.key === '+') nudge('in-hr', 1);
+  if (e.key === '-') nudge('in-hr', -1);
 });
 
-render_setup();
+select_game(location.hash.slice(1));

@@ -20,10 +20,10 @@ html = re.sub(r'<span id="version">.*?</span>', f'<span id="version">build {buil
 html = re.sub(r'(href="style\.css|src="js/main\.js)(\?v=\d+)?"', rf'\g<1>?v={build}"', html)
 index.write_text(html, encoding="utf-8")
 
-# js modules: relative imports get the same query, e.g. from './race.js?v=12'
-for js in (root / "js").glob("*.js"):
+# js modules (incl. js/games/): relative imports get the same query, e.g. from '../race_model.js?v=12'
+for js in (root / "js").rglob("*.js"):
     src = js.read_text(encoding="utf-8")
-    new = re.sub(r"(from\s+'\./[\w-]+\.js)(\?v=\d+)?'", rf"\g<1>?v={build}'", src)
+    new = re.sub(r"(from\s+'\.{1,2}/[\w/-]+\.js)(\?v=\d+)?'", rf"\g<1>?v={build}'", src)
     if new != src:
         js.write_text(new, encoding="utf-8")
 

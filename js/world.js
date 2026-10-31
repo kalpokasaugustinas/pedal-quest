@@ -305,7 +305,11 @@ function pose_leg(leg, angle) {
 
 // build a fresh 3d world for this race; returns { render(dt), resize(), dispose() }
 export function create_world(canvas, race) {
-  renderer ??= new THREE.WebGLRenderer({ canvas, antialias: true });
+  // each game start gets a fresh canvas, so the renderer follows it
+  if (!renderer || renderer.domElement !== canvas) {
+    renderer?.dispose();
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   const scene = new THREE.Scene();
