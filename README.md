@@ -4,18 +4,25 @@ A browser game controlled by your indoor bike trainer and heart rate strap. Your
 
 **Play:** https://kalpokasaugustinas.github.io/pedal-quest/
 
-## How it works
-- Race 5 computer riders over 1, 2, 5 or 10 km. Each bot has its own average power.
-- Set the rival strength on the setup screen.
-- 3D third-person view (Three.js).
-- Your trainer's watts drive your rider through a simple physics model of a cyclist on flat road. The bots use the same model.
-- **Nitro:** keep your heart rate inside the target window (e.g. 122–127 bpm). 30 s in the window fills the bar. Outside the window it drains at half that speed. A full bar fires automatically: +80 W for 3 s, then a new window is picked. Bots get nitro too, at half the rate of a perfect player.
-- No trainer? Demo mode gives you watts and HR sliders (arrow keys change watts on PC).
-- Your best time per distance is saved in the browser.
-- [Connection test page](https://kalpokasaugustinas.github.io/pedal-quest/test.html) shows the raw sensor data.
+## Games
+Pick a game from the tabs at the top. Bluetooth stays connected while you switch.
+
+- 🏁 **Race**: 3D race against 5 bots. Nitro charges when you keep your heart rate in a target window.
+- 🔀 **Crossroads**: pick 1 of 3 paths each stage. Each shows the watts to hold and the points it pays. Do the math.
+- ⛰️ **Summit**: climb time-trial. Trainer resistance follows the gradient, and you race a ghost of your best run.
+- ❤️ **Pulse Pilot**: your heart rate is your altitude. Fly through gates set at target bpm.
+- 🎵 **Spin Beat**: rhythm game for your legs. Match scrolling cadence blocks to a metronome.
+- 🌩️ **Escape**: an endless chase. A storm with growing power hunts you down.
+- ⚡ **Sprint Cup**: knockout tournament of standing-start sprints against rivals who fade.
+
+Every game has local top-10 leaderboards. Set your FTP, max HR and weight once, and the games scale to you.
+No trainer? Demo mode gives you sliders for watts, cadence and heart rate.
+
+Details, rules and the architecture for developers: [docs/GAMES.md](docs/GAMES.md).
+[Connection test page](https://kalpokasaugustinas.github.io/pedal-quest/test.html) shows the raw sensor data.
 
 ## Requirements
-- A smart trainer with Bluetooth FTMS (e.g. Wahoo KICKR Core, Tacx, Elite, Saris)
+- A smart trainer with Bluetooth FTMS (e.g. Wahoo KICKR Core, Tacx, Elite, Saris). Summit's resistance control needs FTMS control support.
 - Optional: a Bluetooth heart rate strap
 - Browser with Web Bluetooth: Chrome or Edge on Android, Windows, macOS or ChromeOS. On iPhone, use the Bluefy app.
 - Close other trainer apps (Zwift, Wahoo) first. Trainers only allow one Bluetooth connection at a time.

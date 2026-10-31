@@ -10,6 +10,7 @@
 | ❤️ Pulse Pilot | Your heart rate is your altitude, fly through bpm gates | HR (power = speed) | points |
 | 🎵 Spin Beat | Rhythm game: keep cadence inside scrolling blocks, metronome | cadence | points |
 | 🌩️ Escape | Endless chase: a storm with growing power hunts you | power | time survived |
+| ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
 
 ### 🏁 Race
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
@@ -47,6 +48,13 @@
 - Storm power = FTP × (start level + 5% per minute). It uses the same physics as you.
 - Starts 60 m behind you and never drops more than 150 m behind.
 - Every km, a shelter pushes the storm back 25 m.
+
+### ⚡ Sprint Cup
+- Quarterfinal, semifinal and final, each 200 / 250 / 400 m from a standstill against one rival.
+- Rival peak power = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × round strength (0.9 / 1.0 / 1.1).
+- Rivals ramp to their peak in 2 s, then fade towards 75%.
+- 10 s to get ready before round 1, 45 s of recovery between rounds. Lose a round and you're out.
+- Score: 100 per round won + 20 per second of winning margin. Live power-duel bars show your watts vs the rival's.
 
 ## Architecture
 
