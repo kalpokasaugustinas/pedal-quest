@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedal Quest Connection Test</title>
+<style>
+  /* simple dark layout, big numbers readable from the bike */
+  :root { --bg:#111; --fg:#eee; --muted:#888; --card:#1c1c1c; --accent:#3fa9f5; --ok:#4caf50; --err:#e57373; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font-family:system-ui, sans-serif; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  .buttons { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  button { background:var(--accent); color:#000; border:0; border-radius:8px; padding:12px 16px; font-size:16px; font-weight:600; }
+  button:disabled { opacity:.4; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; }
+  .card { background:var(--card); border-radius:10px; padding:12px; }
+  .label { color:var(--muted); font-size:13px; }
+  .value { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .unit { font-size:14px; color:var(--muted); }
+  .status { margin:12px 0; font-size:14px; }
+  .status span { display:block; }
+  .ok { color:var(--ok); } .err { color:var(--err); }
+  pre { background:var(--card); border-radius:10px; padding:12px; font-size:12px; height:180px; overflow:auto; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Trainer + HR connection test</h1>
+
+<div class="buttons">
+  <button id="btn-trainer">Connect trainer</button>
+  <button id="btn-hr">Connect HR strap</button>
+</div>
+
+<div class="status">
+  <span id="st-trainer">Trainer: not connected</span>
+  <span id="st-hr">HR: not connected</span>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="label">Power</div><div class="value" id="v-power">--</div><div class="unit">W</div></div>
+  <div class="card"><div class="label">Cadence</div><div class="value" id="v-cadence">--</div><div class="unit">rpm</div></div>
+  <div class="card"><div class="label">Speed</div><div class="value" id="v-speed">--</div><div class="unit">km/h</div></div>
+  <div class="card"><div class="label">Heart rate</div><div class="value" id="v-hr">--</div><div class="unit">bpm</div></div>
+</div>
+
+<pre id="log"></pre>
+
+<script>
+// standard bluetooth gatt uuids (16-bit, as numbers)
+const ftms_service = 0x1826;           // fitness machine service
+const indoor_bike_data_char = 0x2ad2;  // ftms: power, cadence, speed
+const hr_service = 0x180d;             // heart rate service
+const hr_measurement_char = 0x2a37;    // heart rate measurement
+
+const $ = (id) => document.getElementById(id);
+
+// append a timestamped line to the on-page log (useful on phone, no devtools)
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  const el = $('log');
+  el.textContent = `${t}  ${msg}\n` + el.textContent;
+}
+
+function set_status(id, text, ok) {
+  $(id).textContent = text;
+  $(id).className = ok === undefined ? '' : (ok ? 'ok' : 'err');
+}
+
+// stop early if the browser has no web bluetooth (firefox, safari)
+if (!navigator.bluetooth) {
+  log('web bluetooth not available. use chrome/edge (pc, android) or bluefy (iphone). page must be https or localhost.');
+  $('btn-trainer').disabled = true;
+  $('btn-hr').disabled = true;
+}
+
+// parse ftms indoor bike data (spec: gatt specification supplement, 0x2ad2)
+// fields appear in a fixed order; flags tell which ones are present
+function parse_indoor_bike_data(dv) {
+  const flags = dv.getUint16(0, true);
+  let i = 2;
+  const out = {};
+  // bit 0 = "more data": when 0, instantaneous speed is present (inverted logic)
+  if ((flags & 0x0001) === 0) { out.speed = dv.getUint16(i, true) / 100; i += 2; }
+  if (flags & 0x0002) { i += 2; }                                          // average speed
+  if (flags & 0x0004) { out.cadence = dv.getUint16(i, true) / 2; i += 2; } // instantaneous cadence, 0.5 rpm
+  if (flags & 0x0008) { i += 2; }                                          // average cadence
+  if (flags & 0x0010) { i += 3; }                                          // total distance (uint24)
+  if (flags & 0x0020) { i += 2; }                                          // resistance level
+  if (flags & 0x0040) { out.power = dv.getInt16(i, true); i += 2; }        // instantaneous power
+  if (flags & 0x0080) { i += 2; }                                          // average power
+  if (flags & 0x0100) { i += 5; }                                          // energy: total, per hour, per minute
+  if (flags & 0x0200) { out.hr = dv.getUint8(i); i += 1; }                 // heart rate (if trainer relays it)
+  return out;
+}
+
+// parse heart rate measurement (0x2a37): bit 0 of flags = 16-bit value
+function parse_hr(dv) {
+  const flags = dv.getUint8(0);
+  return (flags & 0x01) ? dv.getUint16(1, true) : dv.getUint8(1);
+}
+
+// connect to the trainer and subscribe to indoor bike data notifications
+async function connect_trainer() {
+  try {
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [ftms_service] }] });
+    log(`trainer picked: ${device.name}`);
+    device.addEventListener('gattserverdisconnected', () => {
+      set_status('st-trainer', 'Trainer: disconnected', false);
+      log('trainer disconnected');
+    });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(ftms_service);
+    const ch = await service.getCharacteristic(indoor_bike_data_char);
+    ch.addEventListener('characteristicvaluechanged', (e) => {
+      const d = parse_indoor_bike_data(e.target.value);
+      if (d.power !== undefined) $('v-power').textContent = d.power;
+      if (d.cadence !== undefined) $('v-cadence').textContent = Math.round(d.cadence);
+      if (d.speed !== undefined) $('v-speed').textContent = d.speed.toFixed(1);
+    });
+    await ch.startNotifications();
+    set_status('st-trainer', `Trainer: connected (${device.name})`, true);
+    log('trainer data streaming');
+  } catch (err) {
+    set_status('st-trainer', 'Trainer: failed', false);
+    log(`trainer error: ${err.message}`);
+  }
+}
+
+// connect to the hr strap and subscribe to heart rate notifications
+async function connect_hr() {
+  try {
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [hr_service] }] });
+    log(`hr strap picked: ${device.name}`);
+    device.addEventListener('gattserverdisconnected', () => {
+      set_status('st-hr', 'HR: disconnected', false);
+      log('hr strap disconnected');
+    });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(hr_service);
+    const ch = await service.getCharacteristic(hr_measurement_char);
+    ch.addEventListener('characteristicvaluechanged', (e) => {
+      $('v-hr').textContent = parse_hr(e.target.value);
+    });
+    await ch.startNotifications();
+    set_status('st-hr', `HR: connected (${device.name})`, true);
+    log('hr data streaming');
+  } catch (err) {
+    set_status('st-hr', 'HR: failed', false);
+    log(`hr error: ${err.message}`);
+  }
+}
+
+$('btn-trainer').addEventListener('click', connect_trainer);
+$('btn-hr').addEventListener('click', connect_hr);
+</script>
+</body>
+</html>
