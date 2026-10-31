@@ -238,3 +238,18 @@ tr.sub-row td { padding-top: 0; font-size: 12px; color: var(--muted); font-weigh
 /* workout: mini interval profile on the setup screen */
 .wo-profile { display: flex; align-items: flex-end; gap: 1px; height: 64px; margin: 12px 0 6px; background: #121b25; border-radius: 8px; padding: 4px; }
 .wo-profile span { display: block; min-width: 1px; border-radius: 2px 2px 0 0; }
+
+/* badges */
+.badges summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.badge { background: #22303d; border-radius: 10px; padding: 8px 10px; opacity: .45; filter: grayscale(1); }
+.badge.on { opacity: 1; filter: none; }
+.badge b, .badge small { display: block; }
+.badge b { font-size: 14px; }
+.badge small { color: var(--muted); font-size: 11px; }
+.badge .badge-icon { font-size: 22px; }
+.badges-new { border: 2px solid var(--accent); }
+.badge-row { display: flex; gap: 12px; align-items: center; padding: 4px 0; }
+.badge-row .badge-icon { font-size: 32px; }
+.badge-row b, .badge-row small { display: block; }
+.badge-row small { color: var(--muted); }

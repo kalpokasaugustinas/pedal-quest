@@ -1,8 +1,8 @@
 // sprint cup: knockout drag-race tournament. three standing-start sprints (quarter, semi, final) against
 // one rival each, with a recovery ride between rounds. lose a round and you're out
-import { setup_2d, sky, hills, draw_rider, label, round_rect } from '../draw2d.js?v=10';
-import { step_speed } from '../physics.js?v=10';
-import { clamp, fmt_time, fmt_clock } from '../util.js?v=10';
+import { setup_2d, sky, hills, draw_rider, label, round_rect } from '../draw2d.js?v=11';
+import { step_speed } from '../physics.js?v=11';
+import { clamp, fmt_time, fmt_clock } from '../util.js?v=11';
 
 const rounds = [
   { name: 'Quarterfinal', rival: 'Rocket Rosa', color: '#e53935', strength: 0.9 },
@@ -314,6 +314,7 @@ function create(env) {
       sub: `${st.score} points · ${won}/3 rounds won · peak ${Math.round(best_peak)} W`,
       body: `<table><tr class="th"><td>Round</td><td>Rival</td><td class="num">You</td><td class="num">Rival</td><td class="num">Peak</td><td class="num">Pts</td></tr>${rows}</table>`,
       score: st.score,
+      flags: { won },
       note: `${won}/3 won · peak ${Math.round(best_peak)} W`,
     };
   }

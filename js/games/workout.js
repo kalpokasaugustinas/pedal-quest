@@ -1,7 +1,7 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
 // optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { setup_2d, round_rect, label } from '../draw2d.js?v=10';
-import { clamp, fmt_clock } from '../util.js?v=10';
+import { setup_2d, round_rect, label } from '../draw2d.js?v=11';
+import { clamp, fmt_clock } from '../util.js?v=11';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -325,6 +325,7 @@ function create(env) {
         sub: `Lasted ${fmt_clock(st.time)} · top step ${st.peak_step} W · best 1 min ${Math.round(st.best_1m)} W`,
         body: valid ? `<p class="result-note">${est > ftp ? `That’s ${est - ftp} W more than your profile FTP (${ftp} W).` : est < ftp ? `That’s ${ftp - est} W below your profile FTP (${ftp} W).` : 'Same as your profile FTP.'} Games scale their targets to your FTP.</p>` : '',
         score: valid ? est : null,
+        flags: { ramp: valid },
         note: `${fmt_clock(st.time)}${erg ? ' · ERG' : ''}`,
         // offered as a button on the results screen
         actions: valid && est !== ftp ? [{ label: `Set my FTP to ${est} W`, done_label: `FTP set to ${est} W ✓`, run: (profile) => { profile.ftp = est; } }] : [],
@@ -338,6 +339,7 @@ function create(env) {
       sub: `${plan.name} ${Math.round(env.opts.intensity * 100)}% · ${fmt_clock(done_s)} · ${rows} hard intervals${erg ? ' · ERG' : ''}`,
       body: `<p class="result-note">On target ${fmt_clock(st.on_s)} · close ${fmt_clock(st.close_s)} · off ${fmt_clock(Math.max(0, done_s - st.on_s - st.close_s))}</p>`,
       score: pct,
+      flags: { pct, erg },
       note: `FTP ${ftp}${erg ? ' · ERG' : ''}`,
     };
   }

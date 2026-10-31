@@ -13,6 +13,8 @@
 | ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
+Badges (`js/achievements.js`): 22 long-term goals across all games, checked after every finished game. Games pass `flags` in `result()` (e.g. `{ win: true }`) for game-specific badges. New badges show on the results screen; the collection is on the setup screen.
+
 Every game's results screen also shows **Your ride**: a power + heart rate chart and stats (avg / normalized / max power, best 1 min, intensity factor, kJ, HR, cadence). Recorded by the shell (`js/ride_log.js`), so games don't need to do anything.
 
 ### 🏁 Race
@@ -110,7 +112,7 @@ export default {
 //   render(dt, input), resize(), dispose(),
 //   speed() -> m/s | null,                // shared km/h display
 //   done, done_text, done_class,          // set done = true to end; the shell shows done_text
-//   result() -> { title, sub, body, score, note, actions? },
+//   result() -> { title, sub, body, score, note, flags?, actions? },   // flags feed the badges
 //     actions: [{ label, done_label, run(profile) }] -> buttons on results that change the profile
 // }
 ```
@@ -127,3 +129,4 @@ export default {
 - `pq_board_<key>`: top 10 results per board
 - `pq_ghost_summit_<climb>`: best-run trace for the ghost
 - `pq_stats`: lifetime totals
+- `pq_badges`: unlocked badges with dates, games played, climbs finished

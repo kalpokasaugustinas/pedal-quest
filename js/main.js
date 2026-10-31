@@ -1,19 +1,20 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=10';
-import { control } from './ble.js?v=10';
-import { load, store, clamp } from './util.js?v=10';
-import { set_rider_mass } from './physics.js?v=10';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=10';
-import * as ride_log from './ride_log.js?v=10';
-import race from './games/race.js?v=10';
-import crossroads from './games/crossroads.js?v=10';
-import summit from './games/summit.js?v=10';
-import pulse from './games/pulse.js?v=10';
-import spinbeat from './games/spinbeat.js?v=10';
-import escape from './games/escape.js?v=10';
-import sprint from './games/sprint.js?v=10';
-import workout from './games/workout.js?v=10';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=11';
+import { control } from './ble.js?v=11';
+import { load, store, clamp } from './util.js?v=11';
+import { set_rider_mass } from './physics.js?v=11';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=11';
+import * as ride_log from './ride_log.js?v=11';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=11';
+import race from './games/race.js?v=11';
+import crossroads from './games/crossroads.js?v=11';
+import summit from './games/summit.js?v=11';
+import pulse from './games/pulse.js?v=11';
+import spinbeat from './games/spinbeat.js?v=11';
+import escape from './games/escape.js?v=11';
+import sprint from './games/sprint.js?v=11';
+import workout from './games/workout.js?v=11';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);
@@ -182,6 +183,9 @@ function render_setup() {
   $('g-board-label').textContent = b.label;
   $('g-board').innerHTML = board_html(b, load(`pq_board_${b.key}`, []), -1);
   $('btn-start').textContent = `Start ${g.name}`;
+  const open = $('badges').open;
+  $('badges').innerHTML = collection_html();
+  $('badges').open = open;
   render_sensors();
 }
 
@@ -409,6 +413,9 @@ function finish_game() {
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
   $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
+  const fresh = check_badges({ game: current.id, opts: active_opts, flags: res.flags, ride: ride_log.summary(profile.ftp), ftp: profile.ftp, game_count: games.length });
+  $('r-badges').innerHTML = fresh_html(fresh);
+  if (fresh.length) setTimeout(() => sfx('perfect'), 400);
   // optional result actions (e.g. the ramp test's "set my ftp"): buttons that change the profile
   for (const a of res.actions || []) {
     const btn = document.createElement('button');

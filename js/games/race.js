@@ -1,7 +1,7 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=10';
-import { create_world } from '../world.js?v=10';
-import { fmt_time, ordinal } from '../util.js?v=10';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=11';
+import { create_world } from '../world.js?v=11';
+import { fmt_time, ordinal } from '../util.js?v=11';
 
 export default {
   id: 'race',
@@ -128,6 +128,7 @@ function create(env) {
       sub: `${env.opts.km} km in ${fmt_time(p.finish_time)} · avg ${avg_watts(p)} W · nitro ×${p.nitro.count}`,
       body: `<table>${rows}</table>`,
       score: p.finish_time,
+      flags: { win: pos === 1, nitro: p.nitro.count },
       note: `${ordinal(pos)} vs ${env.opts.base_watts} W bots`,
     };
   }
