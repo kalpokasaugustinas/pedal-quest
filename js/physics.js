@@ -11,16 +11,17 @@ const cda = 0.32;               // drag area m2 (hoods position)
 const rho = 1.225;              // air density kg/m3
 const g = 9.81;
 
-// resistive force (newtons) at speed v (m/s) on a road with grade in percent: rolling + gravity + air drag
-export function resist_force(v, grade = 0) {
+// resistive force (newtons) at speed v (m/s) on a road with grade in percent: rolling + gravity + air drag.
+// drag = share of normal air drag (1 = alone in the wind, 0.7 = sitting on a wheel)
+export function resist_force(v, grade = 0, drag = 1) {
   const theta = Math.atan(grade / 100);
-  return crr * rider_mass * g * Math.cos(theta) + rider_mass * g * Math.sin(theta) + 0.5 * rho * cda * v * v;
+  return crr * rider_mass * g * Math.cos(theta) + rider_mass * g * Math.sin(theta) + 0.5 * rho * cda * drag * v * v;
 }
 
 // advance speed by dt seconds for a given power (watts). gives natural acceleration, coasting and climbing
-export function step_speed(v, watts, dt, grade = 0) {
+export function step_speed(v, watts, dt, grade = 0, drag = 1) {
   const drive = watts / Math.max(v, 1);   // force = power / speed; floor avoids infinite force at standstill
-  const a = (drive - resist_force(v, grade)) / rider_mass;
+  const a = (drive - resist_force(v, grade, drag)) / rider_mass;
   return Math.max(0, v + a * dt);
 }
 

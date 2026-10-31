@@ -1,19 +1,21 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=9';
-import { control } from './ble.js?v=9';
-import { load, store, clamp } from './util.js?v=9';
-import { set_rider_mass } from './physics.js?v=9';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=9';
-import race from './games/race.js?v=9';
-import crossroads from './games/crossroads.js?v=9';
-import summit from './games/summit.js?v=9';
-import pulse from './games/pulse.js?v=9';
-import spinbeat from './games/spinbeat.js?v=9';
-import escape from './games/escape.js?v=9';
-import sprint from './games/sprint.js?v=9';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=10';
+import { control } from './ble.js?v=10';
+import { load, store, clamp } from './util.js?v=10';
+import { set_rider_mass } from './physics.js?v=10';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=10';
+import * as ride_log from './ride_log.js?v=10';
+import race from './games/race.js?v=10';
+import crossroads from './games/crossroads.js?v=10';
+import summit from './games/summit.js?v=10';
+import pulse from './games/pulse.js?v=10';
+import spinbeat from './games/spinbeat.js?v=10';
+import escape from './games/escape.js?v=10';
+import sprint from './games/sprint.js?v=10';
+import workout from './games/workout.js?v=10';
 
-const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint];
+const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);
 
 // test helper: ?warp=20 runs game time 20x faster (physics stays stable via sub-steps)
@@ -233,6 +235,7 @@ function start_game() {
   unlock_sound();                       // must happen inside the tap
   set_rider_mass(profile.weight + 9);   // rider + bike
   run = { secs: 0, kj: 0, km: 0 };
+  ride_log.reset();
   last_count = 0;
   set_paused(false);
   demo = !sensors.trainer;
@@ -324,6 +327,7 @@ function loop(ts) {
         run.secs += step;
         run.kj += (input.watts * step) / 1000;
         run.km += ((instance.speed?.() ?? 0) * step) / 1000;
+        ride_log.record(step, input);
         if (instance.done) {
           sfx(instance.done_class === 'bad' ? 'bad' : 'finish');
           phase = 'ending';
@@ -404,6 +408,21 @@ function finish_game() {
   $('r-title').textContent = res.title;
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
+  $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
+  // optional result actions (e.g. the ramp test's "set my ftp"): buttons that change the profile
+  for (const a of res.actions || []) {
+    const btn = document.createElement('button');
+    btn.className = 'secondary wide';
+    btn.textContent = a.label;
+    btn.onclick = () => {
+      a.run(profile);
+      save_profile();
+      $('p-ftp').value = profile.ftp;
+      btn.textContent = a.done_label || 'Done ✓';
+      btn.disabled = true;
+    };
+    $('r-body').appendChild(btn);
+  }
   $('r-board-label').textContent = b.label + (rank === 0 ? ' · new record! 🎉' : rank > 0 ? ` · you placed #${rank + 1}` : '');
   $('r-board').innerHTML = board_html(b, list, rank);
   render_nav();

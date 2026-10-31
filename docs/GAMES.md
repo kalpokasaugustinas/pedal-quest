@@ -11,11 +11,15 @@
 | 🎵 Spin Beat | Rhythm game: keep cadence inside scrolling blocks, metronome | cadence | points |
 | 🌩️ Escape | Endless chase: a storm with growing power hunts you | power | time survived |
 | ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
+| 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
+
+Every game's results screen also shows **Your ride**: a power + heart rate chart and stats (avg / normalized / max power, best 1 min, intensity factor, kJ, HR, cadence). Recorded by the shell (`js/ride_log.js`), so games don't need to do anything.
 
 ### 🏁 Race
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
 - Bots: slow power wave, random surges, a final sprint, and nitro at 50% of a perfect player's rate.
 - Nitro: a random 5 bpm HR window. 30 s inside fills the bar; outside it drains at half that speed. A full bar gives +80 W for 3 s.
+- Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
 
 ### 🔀 Crossroads
 - Each stage has 3 paths: easy (55–72% FTP), medium (75–92%) and hard (95–120%).
@@ -57,6 +61,12 @@
 - 10 s to get ready before round 1, 45 s of recovery between rounds. Lose a round and you're out.
 - Score: 100 per round won + 20 per second of winning margin. Live power-duel bars show your watts vs the rival's.
 
+### 📈 Workout
+- Plans: Quick Spin (15 min), Sweet Spot (30), VO2 30/30 (22), Pyramid (23), Over-Unders (31). Power = share of FTP × intensity (90 / 100 / 105%).
+- On target = 3 s average within ±5%; close = ±10% (counts half). Score = % of the session on target.
+- ERG mode: FTMS op 0x05 (set target power), sent on change, at most every 2 s, in 5 W steps. Quitting/finishing sends grade 0 to leave ERG.
+- FTP Ramp Test: 100 W, +20 W per minute. Ends after 5 s below 85% of the step (or under 50 rpm in ERG), not before 2 min. FTP = 75% of best 1-min power, rounded to 5 W. A results button saves it to the profile.
+
 ## Architecture
 
 ```
@@ -64,12 +74,13 @@ index.html        shell markup: top nav, setup, play screen, results
 style.css
 js/main.js        shell: routing (#game-id), setup/options, countdown, loop, results, leaderboards
 js/sensors.js     shared sensor state + connect + rider profile (FTP, max HR)
-js/ble.js         Web Bluetooth: FTMS indoor bike data, heart rate, FTMS control point (grade)
+js/ble.js         Web Bluetooth: FTMS indoor bike data, heart rate, FTMS control point (grade, erg power)
 js/physics.js     cycling physics (rolling, gravity, drag); same for everyone
 js/util.js        formatting, seeded random, safe localStorage
 js/draw2d.js      2D canvas helpers (sky, hills, rider sprite, labels)
 js/world.js       Three.js world for Race
-js/race_model.js  Race model: bots, nitro, standings
+js/race_model.js  Race model: bots, nitro, drafting, standings
+js/ride_log.js    per-second ride samples -> results chart + stats (all games)
 js/games/*.js     one module per game
 tools/stamp_version.py   run before each commit: build number + cache-busting ?v=N
 test.html         raw sensor test page
@@ -99,7 +110,8 @@ export default {
 //   render(dt, input), resize(), dispose(),
 //   speed() -> m/s | null,                // shared km/h display
 //   done, done_text, done_class,          // set done = true to end; the shell shows done_text
-//   result() -> { title, sub, body, score, note },
+//   result() -> { title, sub, body, score, note, actions? },
+//     actions: [{ label, done_label, run(profile) }] -> buttons on results that change the profile
 // }
 ```
 

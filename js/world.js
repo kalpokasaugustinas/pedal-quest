@@ -350,11 +350,18 @@ export function create_world(canvas, race) {
   }
   resize();
 
+  // current lateral position of a rider's model (null before the first frame)
+  const model_lx = (r) => riders.find((x) => x.r === r)?.model.lx ?? null;
+
   function render(dt) {
     const boost = race.player.nitro.boost_left > 0;
     // pose riders
     for (const { r, model } of riders) {
-      model.group.position.set(lane_x(r.lane), 0, -r.x);
+      // drafting riders slide in behind the wheel they follow (only with room for a bike between them)
+      const tx = r.wheel && r.wheel.x - r.x > 1.9 ? (model_lx(r.wheel) ?? lane_x(r.wheel.lane)) : lane_x(r.lane);
+      model.lx = model.lx ?? lane_x(r.lane);
+      model.lx += (tx - model.lx) * Math.min(1, dt * 1.5);
+      model.group.position.set(model.lx, 0, -r.x);
       for (const w of model.wheels) w.rotation.x = r.x / wheel_r;
       model.legs.forEach((leg, i) => pose_leg(leg, r.crank + i * Math.PI));
       // flickering flame while this rider's nitro burns
@@ -364,7 +371,7 @@ export function create_world(canvas, race) {
 
     // chase camera behind the player, pulled slightly towards the road centre
     const p = race.player;
-    const cx = lane_x(p.lane) * 0.5;
+    const cx = (riders[0].model.lx ?? lane_x(p.lane)) * 0.5;
     // landscape looks down more, so the rider sits above the bottom hud
     const back = portrait ? 4.0 : 5.0, height = portrait ? 2.1 : 2.3;
     camera.position.set(cx, height, -p.x + back);

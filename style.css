@@ -216,3 +216,25 @@ tr.th td { color: var(--muted); font-size: 12px; font-weight: 600; }
 .profile .toggle input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
 .lifetime { margin: 10px 0 0; }
 tr.sub-row td { padding-top: 0; font-size: 12px; color: var(--muted); font-weight: 400; }
+
+/* ride chart + stats on the results screen */
+.ride .label { display: flex; justify-content: space-between; align-items: baseline; }
+.rc-legend { font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.rc-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: -1px; }
+.lg-w { background: #3fa9f5; }
+.lg-h { background: #ef5350; }
+.ride-chart { width: 100%; height: auto; display: block; margin: 6px 0 10px; }
+.rc-power { fill: rgba(63,169,245,.35); stroke: #3fa9f5; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.rc-hr { fill: none; stroke: #ef5350; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.rc-ftp { stroke: var(--accent); stroke-dasharray: 4 4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rc-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.rc-t { fill: var(--muted); font-size: 11px; }
+.ride-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ride-stats div { background: #22303d; border-radius: 8px; padding: 6px 8px; }
+.ride-stats small { display: block; color: var(--muted); font-size: 11px; }
+.ride-stats b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.draft { color: #80deea; font-weight: 700; margin-left: 4px; white-space: nowrap; }
+
+/* workout: mini interval profile on the setup screen */
+.wo-profile { display: flex; align-items: flex-end; gap: 1px; height: 64px; margin: 12px 0 6px; background: #121b25; border-radius: 8px; padding: 4px; }
+.wo-profile span { display: block; min-width: 1px; border-radius: 2px 2px 0 0; }

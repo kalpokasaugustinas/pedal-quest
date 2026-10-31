@@ -1,5 +1,5 @@
 // race state: riders (player + bots), bot power model, standings
-import { step_speed } from './physics.js?v=9';
+import { step_speed } from './physics.js?v=10';
 
 // bot roster: name, color and strength relative to the chosen base watts
 const roster = [
@@ -16,6 +16,24 @@ const rand = (min, max) => min + Math.random() * (max - min);
 // nitro: player charges it by holding hr inside a random 5 bpm window (full after 30 s in range,
 // drains at half that speed outside). bots charge on a timer at 50% of a perfect player race.
 // a full bar fires automatically: +80 w for 3 s
+// drafting: a rider up to 5 m ahead cuts your air drag, up to 30% when you're right on the wheel
+export const draft_cfg = { max_gap: 5, min_gap: 1, max_cut: 0.3 };
+
+// share of air drag a rider saves from the closest rider just ahead (0 = none).
+// also remembers whose wheel it is (r.wheel), so the 3d view can slide the rider in behind them
+function draft_cut(r, riders) {
+  let best = 0;
+  r.wheel = null;
+  for (const o of riders) {
+    if (o === r || o.finish_time !== null) continue;
+    const gap = o.x - r.x;
+    if (gap <= 0.2 || gap > draft_cfg.max_gap) continue;
+    const k = Math.min(1, (draft_cfg.max_gap - gap) / (draft_cfg.max_gap - draft_cfg.min_gap));
+    if (draft_cfg.max_cut * k > best) { best = draft_cfg.max_cut * k; r.wheel = o; }
+  }
+  return best;
+}
+
 export const nitro_cfg = { charge_s: 30, drain_ratio: 0.5, boost_s: 3, boost_watts: 80, bot_share: 0.5 };
 const bot_charge_s = (nitro_cfg.charge_s + nitro_cfg.boost_s) / nitro_cfg.bot_share - nitro_cfg.boost_s;   // 63 s
 
@@ -36,7 +54,7 @@ export function bot_lineup(base_watts) {
 
 // common rider fields: position x (m), speed v (m/s), crank angle, energy (joules) for avg watts
 function new_rider(fields) {
-  return { x: 0, v: 0, watts: 0, crank: rand(0, 6.28), energy: 0, finish_time: null, nitro: new_nitro(), ...fields };
+  return { x: 0, v: 0, watts: 0, draft: 0, crank: rand(0, 6.28), energy: 0, finish_time: null, nitro: new_nitro(), ...fields };
 }
 
 export function create_race({ distance_m, base_watts }) {
@@ -103,7 +121,8 @@ export function update_race(race, dt, player_watts, player_cadence, player_hr = 
     const base = done ? 0 : (r.is_player ? player_watts : bot_watts(r, race));
     const watts = base + (!done && r.nitro.boost_left > 0 ? nitro_cfg.boost_watts : 0);
     const prev_x = r.x;
-    r.v = step_speed(r.v, watts, dt);
+    r.draft = done || race.time < 3 ? (r.wheel = null, 0) : draft_cut(r, race.riders);   // no drafting in the start bunch
+    r.v = step_speed(r.v, watts, dt, 0, 1 - r.draft);
     r.x += r.v * dt;
     r.watts = watts;
     // cadence only drives the leg animation; bots spin ~85-90 rpm

@@ -1,7 +1,7 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=9';
-import { create_world } from '../world.js?v=9';
-import { fmt_time, ordinal } from '../util.js?v=9';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=10';
+import { create_world } from '../world.js?v=10';
+import { fmt_time, ordinal } from '../util.js?v=10';
 
 export default {
   id: 'race',
@@ -14,6 +14,7 @@ export default {
     'Nitro: keep your heart rate inside the target window. 30 s in range fills the bar, outside it drains at half speed.',
     'A full bar fires automatically: +80 W for 3 s, then a new window is picked.',
     'Bots get nitro too, at half the rate of a perfect player.',
+    'Drafting: ride within 5 m behind anyone and your air drag drops by up to 30%. Bots draft too.',
   ],
   options: [
     { key: 'km', label: 'Race distance', choices: [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], def: 2 },
@@ -35,7 +36,7 @@ function create(env) {
       <div id="h-pos" class="pos"></div>
       <div class="hud-mid">
         <div id="progress" class="progress">${race.riders.map((r) => `<span class="dot${r.is_player ? ' me' : ''}" style="background:${r.color}"></span>`).join('')}</div>
-        <div class="hud-sub"><span id="h-time"></span> · <span id="h-left"></span></div>
+        <div class="hud-sub"><span id="h-time"></span> · <span id="h-left"></span> <span id="h-draft" class="draft hidden"></span></div>
       </div>
     </div>`;
   env.overlay.innerHTML = '<div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
@@ -84,6 +85,8 @@ function create(env) {
     $('h-pos').textContent = `${order.indexOf(p) + 1}/${race.riders.length}`;
     $('h-time').textContent = fmt_time(p.finish_time ?? race.time);
     $('h-left').textContent = `${(Math.max(0, race.distance_m - p.x) / 1000).toFixed(2)} km left`;
+    $('h-draft').classList.toggle('hidden', p.draft < 0.02);
+    $('h-draft').textContent = `💨 draft −${Math.round(p.draft * 100)}%`;
     race.riders.forEach((r, i) => {
       dots[i].style.left = `${Math.min(100, (r.x / race.distance_m) * 100)}%`;
     });

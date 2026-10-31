@@ -113,4 +113,12 @@ export const control = {
     dv.setUint8(6, 51);                                                              // wind resistance 0.51 kg/m
     try { await write_cp(new Uint8Array(dv.buffer)); } catch { /* a single failed write is harmless */ }
   },
+  // erg mode: the trainer holds this power no matter how fast you pedal. set_grade(0) switches back to normal
+  async set_power(watts) {
+    if (!control.available) return;
+    const dv = new DataView(new ArrayBuffer(3));
+    dv.setUint8(0, 0x05);                                                    // op: set target power
+    dv.setInt16(1, Math.round(Math.max(0, Math.min(2000, watts))), true);   // watts
+    try { await write_cp(new Uint8Array(dv.buffer)); } catch { /* a single failed write is harmless */ }
+  },
 };
