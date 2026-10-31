@@ -1,14 +1,16 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=5';
-import { control } from './ble.js?v=5';
-import { load, store, clamp } from './util.js?v=5';
-import race from './games/race.js?v=5';
-import crossroads from './games/crossroads.js?v=5';
-import summit from './games/summit.js?v=5';
-import pulse from './games/pulse.js?v=5';
-import spinbeat from './games/spinbeat.js?v=5';
-import escape from './games/escape.js?v=5';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=6';
+import { control } from './ble.js?v=6';
+import { load, store, clamp } from './util.js?v=6';
+import { set_rider_mass } from './physics.js?v=6';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=6';
+import race from './games/race.js?v=6';
+import crossroads from './games/crossroads.js?v=6';
+import summit from './games/summit.js?v=6';
+import pulse from './games/pulse.js?v=6';
+import spinbeat from './games/spinbeat.js?v=6';
+import escape from './games/escape.js?v=6';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape];
 const $ = (id) => document.getElementById(id);
@@ -91,6 +93,10 @@ function render_sensors() {
     el.textContent = sensors.status[kind];
     el.className = `st ${status_class(sensors.status[kind])}`;
   }
+  const life = load('pq_stats', null);
+  $('lifetime').textContent = life
+    ? `Lifetime: ${life.rides} games · ${Math.floor(life.secs / 3600)} h ${Math.floor((life.secs % 3600) / 60)} min · ${Math.round(life.km)} km · ${Math.round(life.kj)} kJ`
+    : '';
   $('mode-note').textContent = sensors.trainer
     ? 'Trainer connected: your watts drive the game.'
     : 'No trainer connected: games run in demo mode with sliders for watts, cadence and heart rate.';
@@ -111,6 +117,19 @@ $('p-ftp').onchange = () => {
   $('p-ftp').value = profile.ftp;
   save_profile();
   render_setup();
+};
+$('p-weight').value = profile.weight;
+$('p-sound').checked = profile.sound;
+set_sound(profile.sound);
+$('p-weight').onchange = () => {
+  profile.weight = clamp(Math.round(+$('p-weight').value || 75), 35, 150);
+  $('p-weight').value = profile.weight;
+  save_profile();
+};
+$('p-sound').onchange = () => {
+  profile.sound = $('p-sound').checked;
+  set_sound(profile.sound);
+  save_profile();
 };
 $('p-maxhr').onchange = () => {
   profile.max_hr = clamp(Math.round(+$('p-maxhr').value || 185), 120, 220);
@@ -177,6 +196,8 @@ let phase_end = 0;
 let last_ts = 0;
 let demo = false;
 let wake_lock = null;
+let run = null;               // this game's totals for lifetime stats
+let last_count = 0;           // countdown number already beeped
 
 async function request_wake_lock() {
   try { wake_lock = await navigator.wakeLock?.request('screen'); } catch { /* not supported */ }
@@ -206,6 +227,10 @@ function insets() {
 
 function start_game() {
   active_opts = game_opts(current);
+  unlock_sound();                       // must happen inside the tap
+  set_rider_mass(profile.weight + 9);   // rider + bike
+  run = { secs: 0, kj: 0, km: 0 };
+  last_count = 0;
   demo = !sensors.trainer;
   const hr_slider = sensors.hr === null && !sensors.hr_strap;
   $('demo-w').classList.toggle('hidden', !demo);
@@ -235,6 +260,7 @@ function start_game() {
     profile,
     trainer: control,
     big_text: show_big_text,
+    sfx,
     insets,
   });
   phase = 'countdown';
@@ -268,9 +294,12 @@ function loop(ts) {
   if (phase === 'countdown') {
     const left = phase_end - ts;
     if (left > 0) {
-      show_big_text(String(Math.ceil(left / 1000)));
+      const n = Math.ceil(left / 1000);
+      if (n !== last_count) { last_count = n; sfx('tick'); }
+      show_big_text(String(n));
     } else {
       phase = 'play';
+      sfx('go');
       show_big_text('GO!', 800);
     }
   } else {
@@ -281,7 +310,11 @@ function loop(ts) {
       remaining -= step;
       if (phase === 'play') {
         instance.update(step, input);
+        run.secs += step;
+        run.kj += (input.watts * step) / 1000;
+        run.km += ((instance.speed?.() ?? 0) * step) / 1000;
         if (instance.done) {
+          sfx(instance.done_class === 'bad' ? 'bad' : 'finish');
           phase = 'ending';
           phase_end = ts + 2500;
           show_big_text(instance.done_text || 'FINISH', 2500, instance.done_class || '');
@@ -307,11 +340,36 @@ function update_metrics(input) {
   $('m-speed').textContent = v === null ? '--' : (v * 3.6).toFixed(1);
   $('m-cad').textContent = Math.round(input.cadence);
   $('m-hr').textContent = input.hr ?? '--';
+  $('m-hr').style.color = hr_zone_color(input.hr);
+}
+
+// heart rate colour by zone (share of max hr): grey, blue, green, orange, red
+function hr_zone_color(hr) {
+  if (hr === null) return '';
+  const pct = hr / profile.max_hr;
+  if (pct < 0.6) return '#b0bec5';
+  if (pct < 0.7) return '#64b5f6';
+  if (pct < 0.8) return '#81c784';
+  if (pct < 0.9) return '#ffb74d';
+  return '#ef5350';
+}
+
+// add this game's riding to lifetime totals (only real rides: > 1 min)
+function save_run_stats() {
+  if (!run || run.secs < 60) return;
+  const life = load('pq_stats', { rides: 0, secs: 0, kj: 0, km: 0 });
+  life.rides += 1;
+  life.secs += run.secs;
+  life.kj += run.kj;
+  life.km += run.km;
+  store('pq_stats', life);
+  run = null;
 }
 
 window.addEventListener('resize', () => { if (phase !== 'idle') instance?.resize?.(); });
 
 function leave_play() {
+  save_run_stats();
   phase = 'idle';
   instance?.dispose?.();
   instance = null;
@@ -343,7 +401,12 @@ function finish_game() {
 $('btn-start').onclick = start_game;
 $('btn-again').onclick = start_game;
 $('btn-setup').onclick = () => { render_setup(); show('screen-setup'); };
-$('btn-quit').onclick = () => { leave_play(); render_setup(); show('screen-setup'); };
+$('btn-quit').onclick = () => {
+  if (phase === 'play' && run && run.secs > 20 && !confirm('Quit this game? Progress will be lost.')) return;
+  leave_play();
+  render_setup();
+  show('screen-setup');
+};
 
 // keyboard controls for demo mode on a pc: arrows = watts, [ ] = cadence, - + = heart rate
 window.addEventListener('keydown', (e) => {
@@ -356,5 +419,14 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '=' || e.key === '+') nudge('in-hr', 1);
   if (e.key === '-') nudge('in-hr', -1);
 });
+
+// one-time move of race best times saved before build 5 (pq_best_<km>) into the leaderboards
+for (const km of [1, 2, 5, 10]) {
+  const best = load(`pq_best_${km}`, null);
+  if (typeof best !== 'number') continue;
+  const key = `pq_board_race_${km}km`;
+  if (!load(key, []).length) store(key, [{ score: best, note: 'from v1', date: '2026-10-31' }]);
+  try { localStorage.removeItem(`pq_best_${km}`); } catch { /* storage blocked */ }
+}
 
 select_game(location.hash.slice(1));

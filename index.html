@@ -6,7 +6,10 @@
 <meta name="theme-color" content="#0f1720">
 <meta name="description" content="Cycling minigames for your smart trainer and heart rate strap.">
 <title>Pedal Quest</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -14,7 +17,7 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 5 · 2026-10-31 17:30</span>
+    <span id="version">build 6 · 2026-10-31 17:38</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -28,7 +31,10 @@
     <div class="profile">
       <label>FTP <input type="number" id="p-ftp" inputmode="numeric" min="60" max="600"> W</label>
       <label>Max HR <input type="number" id="p-maxhr" inputmode="numeric" min="120" max="220"> bpm</label>
+      <label>Weight <input type="number" id="p-weight" inputmode="numeric" min="35" max="150"> kg</label>
+      <label class="toggle"><input type="checkbox" id="p-sound"> Sounds</label>
     </div>
+    <p id="lifetime" class="small lifetime"></p>
   </div>
 
   <div class="game-head">
@@ -86,6 +92,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=5"></script>
+<script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

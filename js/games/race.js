@@ -1,7 +1,7 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=5';
-import { create_world } from '../world.js?v=5';
-import { fmt_time, ordinal } from '../util.js?v=5';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=6';
+import { create_world } from '../world.js?v=6';
+import { fmt_time, ordinal } from '../util.js?v=6';
 
 export default {
   id: 'race',
@@ -62,6 +62,7 @@ function create(env) {
       if (race.player.nitro.count > last_boosts) {
         last_boosts = race.player.nitro.count;
         env.big_text('NITRO!', 1200, 'hot');
+        env.sfx('boost');
       }
       if (race.player.finish_time !== null) {
         game.done = true;

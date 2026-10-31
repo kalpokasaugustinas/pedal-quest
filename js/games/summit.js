@@ -1,8 +1,8 @@
 // summit: time-trial up a climb. the trainer's resistance follows the gradient (ftms simulation mode)
 // and a ghost of your best run rides along
-import { setup_2d, sky, hills, clouds, draw_rider, label, round_rect } from '../draw2d.js?v=5';
-import { step_speed } from '../physics.js?v=5';
-import { clamp, fmt_time, load, store } from '../util.js?v=5';
+import { setup_2d, sky, hills, clouds, draw_rider, label, round_rect } from '../draw2d.js?v=6';
+import { step_speed } from '../physics.js?v=6';
+import { clamp, fmt_time, load, store } from '../util.js?v=6';
 
 // climbs as [length m, grade %] segments
 const climbs = {
@@ -226,10 +226,11 @@ function create(env) {
     // big gradient number under the profile, with the next change
     const big = clamp(w * 0.16, 40, 84);
     const gy = ins.top + profile_h + 24 + big * 0.6;
-    label(ctx, `${g}%`, w / 2, gy, big, grade_color(g));
+    const gx_label = w > h ? w * 0.82 : w / 2;   // landscape: keep it clear of the rider
+    label(ctx, `${g}%`, gx_label, gy, big, grade_color(g));
     const i = seg_index(c, Math.min(st.x, c.length - 0.01));
     const next = c.pts[i + 1];
-    if (next && st.finish === null) label(ctx, `then ${next.g}% in ${Math.round(c.pts[i].x - st.x)} m`, w / 2, gy + big * 0.7, 16, '#fff');
+    if (next && st.finish === null) label(ctx, `then ${next.g}% in ${Math.round(c.pts[i].x - st.x)} m`, gx_label, gy + big * 0.7, 16, '#fff');
   }
 
   // whole-climb profile chart with rider + ghost dots

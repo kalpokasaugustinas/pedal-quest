@@ -1,8 +1,8 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
-import { setup_2d, sky, hills, draw_rider, label, mix } from '../draw2d.js?v=5';
-import { step_speed } from '../physics.js?v=5';
-import { clamp, fmt_clock } from '../util.js?v=5';
+import { setup_2d, sky, hills, draw_rider, label, mix } from '../draw2d.js?v=6';
+import { step_speed } from '../physics.js?v=6';
+import { clamp, fmt_clock } from '../util.js?v=6';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km
@@ -83,6 +83,7 @@ function create(env) {
         st.next_cp += checkpoint_m;
         st.checkpoints += 1;
         env.big_text(`SHELTER! −${checkpoint_push} m`, 1400, 'good');
+        env.sfx('good');
       }
       // lightning gets more frequent as the storm closes in
       const gap = st.x - st.storm_x;
@@ -90,15 +91,20 @@ function create(env) {
         st.flash = 1;
         st.bolt = Math.random();
       }
+      // warning beep every 2 s while the storm is close
+      if (gap < 25 && st.time - (st.last_warn ?? -9) > 2) {
+        st.last_warn = st.time;
+        env.sfx('warn');
+      }
       if (gap <= 0) {
         game.done = true;
         game.done_text = 'CAUGHT!';
         game.done_class = 'bad';
       }
     },
-    render() {
+    render(dt, input) {
       draw_scene();
-      update_hud();
+      update_hud(input);
     },
     resize: () => view.resize(),
     dispose() {},
@@ -209,13 +215,16 @@ function create(env) {
     label(ctx, 'SHELTER', x, ground_y - 90, 14, '#fff');
   }
 
-  function update_hud() {
+  function update_hud(input) {
     const gap = st.x - st.storm_x;
     $('es-time').textContent = fmt_clock(st.time);
     $('es-gap').textContent = `Storm ${Math.max(0, Math.round(gap))} m behind`;
     $('es-gap').style.color = gap < 25 ? '#ff8a80' : gap < 50 ? '#ffd54f' : '';
     $('es-sub').textContent = `${(st.x / 1000).toFixed(2)} km · ${st.checkpoints} shelters`;
-    $('es-storm').textContent = `Storm power ${Math.round(storm_watts())} W`;
+    const sw = Math.round(storm_watts());
+    const you = Math.round(input.watts);
+    $('es-storm').textContent = `Storm ${sw} W · you ${you} W ${you >= sw ? '▲' : '▼'}`;
+    $('es-storm').style.color = you >= sw ? '#7ee08a' : '#ff8a80';
     $('es-cp').textContent = `shelter in ${Math.round(st.next_cp - st.x)} m`;
     $('es-fill').style.width = `${clamp(gap / 120, 0, 1) * 100}%`;
     $('es-fill').classList.toggle('bad', gap < 30);

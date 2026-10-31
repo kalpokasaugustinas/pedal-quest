@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { setup_2d, sky, hills, clouds, draw_rider, round_rect, label } from '../draw2d.js?v=5';
-import { step_speed } from '../physics.js?v=5';
-import { rand, clamp, fmt_clock } from '../util.js?v=5';
+import { setup_2d, sky, hills, clouds, draw_rider, round_rect, label } from '../draw2d.js?v=6';
+import { step_speed } from '../physics.js?v=6';
+import { rand, clamp, fmt_clock } from '../util.js?v=6';
 
 const themes = [
   { name: 'Valley Road', sky: ['#6fb8ec', '#d4eefa'], far: '#8fbf86', near: '#6aa25a', ground: '#5f9a4a', road: '#3a3d42', dash: '#ffffff' },
@@ -50,6 +50,7 @@ export default {
     'Hold your 3-second average at 95%+ of the target. You get the path’s points × the share of time on target.',
     'Clean stage (90%+ on target) grows your streak multiplier: ×1.1, ×1.2 … up to ×1.5. A missed stage resets it.',
     '❓ Mystery paths hide their watts until you commit, but they pay 1.5× more.',
+    'After the ride you see whether each pick was the best points-per-watt deal.',
     'Pick nothing in time and you get the easiest path.',
   ],
   options: [
@@ -106,6 +107,7 @@ function create(env) {
     st.t_phase = 0;
     st.on_target = 0;
     env.overlay.innerHTML = '';
+    env.sfx('click');
     env.big_text(st.path.mystery ? `${st.path.watts} W!` : 'GO!', 1200);
   }
 
@@ -117,8 +119,15 @@ function create(env) {
     st.streak = clean ? Math.min(max_streak, st.streak + 1) : 0;
     st.total += pts;
     st.flash = 1;
-    st.log.push({ name: st.path.theme.name, mystery: st.path.mystery, watts: st.path.watts, offered: st.path.points, share, mult, pts, clean });
+    // value = points per 100 w; best = the offered path with the highest value
+    const value = (p) => (p.points / p.watts) * 100;
+    const best = st.paths.reduce((a, b) => (value(b) > value(a) ? b : a));
+    st.log.push({
+      name: st.path.theme.name, mystery: st.path.mystery, watts: st.path.watts, offered: st.path.points,
+      share, mult, pts, clean, value: value(st.path), best_value: value(best), best_name: best.theme.name,
+    });
     env.big_text(`+${pts}${clean ? ' ✓' : ''}`, 1400, clean ? 'good' : '');
+    env.sfx(clean ? 'good' : 'warn');
     st.stage += 1;
     if (st.stage >= env.opts.stages) {
       game.done = true;
@@ -257,10 +266,14 @@ function create(env) {
         <td class="num">${Math.round(l.share * 100)}%</td>
         <td class="num">${l.offered}×${l.mult.toFixed(1)}</td>
         <td class="num">${l.pts}</td>
-      </tr>`).join('');
+      </tr>
+      <tr class="sub-row"><td></td><td colspan="5">${l.value >= l.best_value - 0.01
+        ? `✓ best value: ${l.value.toFixed(0)} pts per 100 W`
+        : `value ${l.value.toFixed(0)} pts/100 W · best was ${l.best_name} (${l.best_value.toFixed(0)})`}</td></tr>`).join('');
+    const smart = st.log.filter((l) => l.value >= l.best_value - 0.01).length;
     return {
       title: `${st.total} points`,
-      sub: `${clean}/${st.log.length} clean stages · avg ${Math.round(st.energy / Math.max(1, st.time))} W · FTP ${ftp} W`,
+      sub: `${clean}/${st.log.length} clean stages · ${smart}/${st.log.length} best-value picks · avg ${Math.round(st.energy / Math.max(1, st.time))} W`,
       body: `<table><tr class="th"><td>#</td><td>Path</td><td class="num">Target</td><td class="num">On target</td><td class="num">Offer</td><td class="num">Pts</td></tr>${rows}</table>`,
       score: st.total,
       note: `${clean}/${st.log.length} clean · FTP ${ftp}`,

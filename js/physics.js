@@ -1,6 +1,11 @@
 // simple road cycling physics. same model for player, bots, ghosts and storms, so every game is fair
 
-export const rider_mass = 85;   // kg, rider + bike
+export let rider_mass = 85;     // kg, rider + bike (set from the profile when a game starts)
+
+// set rider + bike mass; bots/ghosts/storms use the same mass, so games stay fair
+export function set_rider_mass(kg) {
+  rider_mass = Math.min(160, Math.max(40, kg));
+}
 const crr = 0.004;              // rolling resistance coefficient (good road tyres)
 const cda = 0.32;               // drag area m2 (hoods position)
 const rho = 1.225;              // air density kg/m3

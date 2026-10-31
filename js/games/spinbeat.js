@@ -1,7 +1,7 @@
 // spin beat: a rhythm game for your legs. target cadence blocks scroll down a highway,
 // keep your cadence inside them to score; hitting in a row builds a combo multiplier
-import { setup_2d, round_rect, label } from '../draw2d.js?v=5';
-import { clamp, seeded } from '../util.js?v=5';
+import { setup_2d, round_rect, label } from '../draw2d.js?v=6';
+import { clamp, seeded } from '../util.js?v=6';
 
 // tracks are generated from a fixed seed, so the same track is the same every time (fair leaderboards)
 const tracks = {
@@ -184,7 +184,11 @@ function create(env) {
       ctx.fillText(String(r), x, now_y + 26);
     }
 
-    // note blocks: outer = good window, inner = perfect window
+    // note blocks: outer = good window, inner = perfect window (clipped just below the now line)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, w, now_y + 12);
+    ctx.clip();
     for (const n of notes) {
       const y1 = y_of(n.t + n.dur), y2 = y_of(n.t);
       if (y2 < ins.top - 20 || y1 > now_y + 40) continue;
@@ -198,6 +202,7 @@ function create(env) {
       ctx.fill();
       if (y2 - y1 > 24) label(ctx, `${n.rpm}`, x_of(n.rpm), Math.max(y1 + 16, Math.min(y2 - 14, ins.top + 20)), 14, '#fff');
     }
+    ctx.restore();
 
     // now line
     ctx.strokeStyle = 'rgba(255,255,255,0.8)';
