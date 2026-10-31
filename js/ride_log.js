@@ -3,23 +3,31 @@
 
 let samples = [];     // [{ w, hr, rpm }] one per second
 let acc = null;       // running sums for the current second
+let started = null;   // wall-clock start time (for the export file)
 
 // start a new log at the beginning of a game
 export function reset() {
   samples = [];
-  acc = { t: 0, w: 0, hr: 0, hr_n: 0, rpm: 0 };
+  started = new Date();
+  acc = { t: 0, w: 0, hr: 0, hr_n: 0, rpm: 0, m: 0 };
 }
 
-// add dt seconds of input; closes a sample every full second
-export function record(dt, input) {
+// add dt seconds of input (speed in m/s, null = game has no speed); closes a sample every full second
+export function record(dt, input, speed = null) {
   if (!acc) reset();
-  acc.t += dt;
-  acc.w += input.watts * dt;
-  acc.rpm += input.cadence * dt;
-  if (input.hr !== null && input.hr !== undefined) { acc.hr += input.hr * dt; acc.hr_n += dt; }
-  if (acc.t >= 1) {
-    samples.push({ w: acc.w / acc.t, rpm: acc.rpm / acc.t, hr: acc.hr_n > 0 ? acc.hr / acc.hr_n : null });
-    acc = { t: 0, w: 0, hr: 0, hr_n: 0, rpm: 0 };
+  // split dt at the second boundary, so samples are exactly 1 s apart (no time lost to overshoot)
+  while (dt > 1e-9) {
+    const part = Math.min(dt, 1 - acc.t);
+    dt -= part;
+    acc.t += part;
+    acc.m += (speed ?? 0) * part;
+    acc.w += input.watts * part;
+    acc.rpm += input.cadence * part;
+    if (input.hr !== null && input.hr !== undefined) { acc.hr += input.hr * part; acc.hr_n += part; }
+    if (acc.t >= 1 - 1e-6) {   // epsilon: ten 0.1 s steps add up to 0.99999...
+      samples.push({ w: acc.w / acc.t, rpm: acc.rpm / acc.t, hr: acc.hr_n > 0 ? acc.hr / acc.hr_n : null, m: acc.m });
+      acc = { t: 0, w: 0, hr: 0, hr_n: 0, rpm: 0, m: 0 };
+    }
   }
 }
 
@@ -148,4 +156,32 @@ export function ride_html(ftp) {
     ${chart_svg(ftp)}
     <div class="ride-stats">${cells.map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div>
   </div>`;
+}
+
+// tcx file of the ride (garmin training center format): strava, garmin connect, intervals.icu etc. import it.
+// games without a speed (rhythm/workout) get a virtual speed from the shared physics, so distance isn't 0
+export function tcx(sport_name, speed_of_watts) {
+  if (samples.length < 10 || !started) return null;
+  let dist = 0;
+  const pts = samples.map((s, i) => {
+    dist += s.m > 0 ? s.m : speed_of_watts(s.w);
+    const t = new Date(started.getTime() + (i + 1) * 1000).toISOString();
+    return `<Trackpoint><Time>${t}</Time><DistanceMeters>${dist.toFixed(1)}</DistanceMeters>`
+      + (s.hr !== null ? `<HeartRateBpm><Value>${Math.round(s.hr)}</Value></HeartRateBpm>` : '')
+      + `<Cadence>${Math.round(s.rpm)}</Cadence>`
+      + `<Extensions><ns3:TPX><ns3:Watts>${Math.round(s.w)}</ns3:Watts></ns3:TPX></Extensions></Trackpoint>`;
+  });
+  const sum = summary(0);
+  const id = started.toISOString();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2">
+<Activities><Activity Sport="Biking"><Id>${id}</Id>
+<Lap StartTime="${id}"><TotalTimeSeconds>${samples.length}</TotalTimeSeconds><DistanceMeters>${dist.toFixed(1)}</DistanceMeters><Calories>${Math.round(sum.kj)}</Calories>`
+    + (sum.avg_hr !== null ? `<AverageHeartRateBpm><Value>${Math.round(sum.avg_hr)}</Value></AverageHeartRateBpm><MaximumHeartRateBpm><Value>${Math.round(sum.max_hr)}</Value></MaximumHeartRateBpm>` : '')
+    + `<Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod>
+<Track>${pts.join('\n')}</Track>
+<Notes>Pedal Quest: ${sport_name}</Notes></Lap>
+<Creator xsi:type="Device_t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Name>Pedal Quest</Name></Creator>
+</Activity></Activities></TrainingCenterDatabase>
+`;
 }

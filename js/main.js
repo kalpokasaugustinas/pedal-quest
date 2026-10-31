@@ -1,21 +1,21 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=12';
-import { control } from './ble.js?v=12';
-import { load, store, clamp } from './util.js?v=12';
-import { set_rider_mass } from './physics.js?v=12';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=12';
-import * as ride_log from './ride_log.js?v=12';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=12';
-import * as daily from './daily.js?v=12';
-import race from './games/race.js?v=12';
-import crossroads from './games/crossroads.js?v=12';
-import summit from './games/summit.js?v=12';
-import pulse from './games/pulse.js?v=12';
-import spinbeat from './games/spinbeat.js?v=12';
-import escape from './games/escape.js?v=12';
-import sprint from './games/sprint.js?v=12';
-import workout from './games/workout.js?v=12';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=13';
+import { control } from './ble.js?v=13';
+import { load, store, clamp } from './util.js?v=13';
+import { set_rider_mass, steady_speed } from './physics.js?v=13';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=13';
+import * as ride_log from './ride_log.js?v=13';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=13';
+import * as daily from './daily.js?v=13';
+import race from './games/race.js?v=13';
+import crossroads from './games/crossroads.js?v=13';
+import summit from './games/summit.js?v=13';
+import pulse from './games/pulse.js?v=13';
+import spinbeat from './games/spinbeat.js?v=13';
+import escape from './games/escape.js?v=13';
+import sprint from './games/sprint.js?v=13';
+import workout from './games/workout.js?v=13';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);
@@ -357,7 +357,7 @@ function loop(ts) {
         run.secs += step;
         run.kj += (input.watts * step) / 1000;
         run.km += ((instance.speed?.() ?? 0) * step) / 1000;
-        ride_log.record(step, input);
+        ride_log.record(step, input, instance.speed?.() ?? null);
         if (instance.done) {
           sfx(instance.done_class === 'bad' ? 'bad' : 'finish');
           phase = 'ending';
@@ -439,6 +439,7 @@ function finish_game() {
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
   $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
+  $('btn-export').classList.toggle('hidden', ride_log.summary(profile.ftp).secs < 60);
   // daily challenge result (before badges, so streak badges see the new streak)
   $('r-daily').innerHTML = '';
   if (daily_run && daily_run.game === current.id) {
@@ -498,6 +499,17 @@ $('btn-share').onclick = async () => {
       setTimeout(() => { $('btn-share').textContent = 'Share result'; }, 1500);
     }
   } catch { /* share cancelled */ }
+};
+
+// export the last ride as a .tcx file (strava / garmin connect upload)
+$('btn-export').onclick = () => {
+  const xml = ride_log.tcx(current.name, (w) => steady_speed(w));
+  if (!xml) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.garmin.tcx+xml' }));
+  a.download = `pedal-quest-${current.id}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.tcx`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
 
 $('btn-start').onclick = () => { daily_run = null; start_game(); };

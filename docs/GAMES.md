@@ -13,6 +13,8 @@
 | ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
+Ride export: results have a **Download ride (.tcx)** button (rides over 1 min). The TCX has 1-s trackpoints with power, HR, cadence and distance, so Strava / Garmin Connect / intervals.icu can import it. Games without a speed (Spin Beat, Workout, Pulse) get a virtual distance from the flat-road physics.
+
 Daily challenge (`js/daily.js`): one game + settings + goal per local calendar day, seeded by the date (same for everyone). Completing it on consecutive days builds a streak. The card is on the setup screen.
 
 Badges (`js/achievements.js`): 24 long-term goals across all games, checked after every finished game. Games pass `flags` in `result()` (e.g. `{ win: true }`) for game-specific badges. New badges show on the results screen; the collection is on the setup screen.

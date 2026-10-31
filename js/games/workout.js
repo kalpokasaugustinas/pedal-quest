@@ -1,7 +1,7 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
 // optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { setup_2d, round_rect, label } from '../draw2d.js?v=12';
-import { clamp, fmt_clock } from '../util.js?v=12';
+import { setup_2d, round_rect, label } from '../draw2d.js?v=13';
+import { clamp, fmt_clock } from '../util.js?v=13';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -171,14 +171,14 @@ function create(env) {
       // 1-s samples for the trace + best 1-min power
       st.sec_acc += dt;
       st.sec_w += input.watts * dt;
-      if (st.sec_acc >= 1) {
+      if (st.sec_acc >= 1 - 1e-6) {
         const w = st.sec_w / st.sec_acc;
         st.trace.push([st.time, w]);
         st.last60.push(w);
         if (st.last60.length > 60) st.last60.shift();
         if (st.last60.length === 60) st.best_1m = Math.max(st.best_1m, st.last60.reduce((a, x) => a + x, 0) / 60);
-        st.sec_acc = 0;
-        st.sec_w = 0;
+        st.sec_acc = Math.max(0, st.sec_acc - 1);   // carry the overshoot into the next second
+        st.sec_w = input.watts * st.sec_acc;
       }
 
       // ramp test ends when you can't hold the step for 5 s (power below 85%, or cadence collapsed in erg)
