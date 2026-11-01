@@ -1,21 +1,21 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=17';
-import { control } from './ble.js?v=17';
-import { load, store, clamp } from './util.js?v=17';
-import { set_rider_mass, steady_speed } from './physics.js?v=17';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=17';
-import * as ride_log from './ride_log.js?v=17';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=17';
-import * as daily from './daily.js?v=17';
-import race from './games/race.js?v=17';
-import crossroads from './games/crossroads.js?v=17';
-import summit from './games/summit.js?v=17';
-import pulse from './games/pulse.js?v=17';
-import spinbeat from './games/spinbeat.js?v=17';
-import escape from './games/escape.js?v=17';
-import sprint from './games/sprint.js?v=17';
-import workout from './games/workout.js?v=17';
+import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=18';
+import { control } from './ble.js?v=18';
+import { load, store, clamp } from './util.js?v=18';
+import { set_rider_mass, steady_speed } from './physics.js?v=18';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=18';
+import * as ride_log from './ride_log.js?v=18';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=18';
+import * as daily from './daily.js?v=18';
+import race from './games/race.js?v=18';
+import crossroads from './games/crossroads.js?v=18';
+import summit from './games/summit.js?v=18';
+import pulse from './games/pulse.js?v=18';
+import spinbeat from './games/spinbeat.js?v=18';
+import escape from './games/escape.js?v=18';
+import sprint from './games/sprint.js?v=18';
+import workout from './games/workout.js?v=18';
 
 const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
 const $ = (id) => document.getElementById(id);

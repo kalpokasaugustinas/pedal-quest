@@ -4,7 +4,7 @@
 // race coordinates: rider x (meters along the course). the scenery is drawn vis_scale times faster than the
 // physics (the world flies by), while riders keep their real gaps to the player so the pack looks natural
 import * as THREE from 'three';
-import { seeded } from './util.js?v=17';
+import { seeded } from './util.js?v=18';
 
 export const vis_scale = 2.5;              // visual speed multiplier (speed numbers and physics are unchanged)
 const lane_w = 1.1;                        // meters per lane
@@ -20,7 +20,7 @@ export const themes = {
   meadow: {
     name: 'Sunny meadow',
     sky: ['#3f9be0', '#bfe3f5'], fog: '#bfe0ee', fog_range: [80, 700],
-    hemi: ['#bfe0ff', '#2f5a1c', 0.55], key: ['#fff0d0', 3.6], key_dir: [-60, 55, 25],
+    hemi: ['#d8e8f4', '#4a6a3a', 1.0], key: ['#ffe9cc', 2.7], key_dir: [-60, 55, 25],
     grass: ['#5fa62c', '#529a27', '#6db535', '#468c22', '#78bb3c'], high: ['#7f9a38', '#94844a'],
     mountain: ['#b08a68', '#9a7556', '#c9a582', '#86664c'], snow: '#f4f1ea', snow_line: 0.82,
     round: ['#55a52e', '#62b236', '#4a9628', '#70bb3e'], pine: ['#2f8530', '#287a2b', '#379238'],
@@ -30,7 +30,7 @@ export const themes = {
   valley: {
     name: 'Misty valley',
     sky: ['#a9c79f', '#eef0d4'], fog: '#d8e2c2', fog_range: [50, 560],
-    hemi: ['#f0f4dc', '#2f5a3a', 0.65], key: ['#fff4d8', 3.0], key_dir: [55, 45, 20],
+    hemi: ['#f0f2e0', '#40644a', 1.05], key: ['#fff0d6', 2.4], key_dir: [55, 45, 20],
     grass: ['#4c9a3c', '#418d35', '#58a646', '#3a8030', '#62ad4c'], high: ['#2f7f6a', '#286f5c'],
     mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#286a58'], snow: null, snow_line: 1,
     round: ['#5aa35a', '#4f9650'], pine: ['#2e7a58', '#28704f', '#358763'],
@@ -40,7 +40,7 @@ export const themes = {
   night: {
     name: 'Starry night',
     sky: ['#081638', '#1e3a78'], fog: '#17305f', fog_range: [60, 620],
-    hemi: ['#3e5fae', '#0c2414', 0.4], key: ['#cfdcff', 3.4], key_dir: [-55, 60, 20],
+    hemi: ['#5470b4', '#1a3428', 0.75], key: ['#d6e0ff', 2.7], key_dir: [-55, 60, 20],
     grass: ['#2f9a3a', '#37a542', '#288c34', '#40b04a', '#24802f'], high: ['#22702f', '#34548a'],
     mountain: ['#3a5590', '#4a68a8', '#2c4478', '#5a7ac0'], snow: '#dfe9fb', snow_line: 0.78,
     round: ['#3f9f45', '#34903b'], pine: ['#2f9a3c', '#27883a', '#3aab45', '#2a7f35'],
@@ -96,8 +96,10 @@ function height_at(x, z) {
 
 // random colour from a palette with a small brightness jitter (keeps facets distinct)
 const tmp_color = new THREE.Color();
+const mood = { sat: -0.16, light: 0.025 };   // calm, soft colours: applied to every palette colour
 function palette_color(list, r, out = tmp_color) {
   out.set(list[Math.floor(r * list.length) % list.length]);
+  out.offsetHSL(0, mood.sat, mood.light);
   out.offsetHSL(0, ((r * 13) % 1 - 0.5) * 0.06, ((r * 7) % 1 - 0.5) * 0.11);
   return out;
 }
@@ -166,7 +168,7 @@ const xs = (() => {
   const right = [road_edge - 0.05, road_edge + 1.5, road_edge + 3, road_edge + 5, 9.5, 12, 14.5, 17, 20, 23.5, 27.5, 32, 38, 45, 54, 65, 78, 94, 115, 140, 175, 220, 280, 360, 460, 600];
   return [...right.map((x) => -x).reverse(), ...right];
 })();
-const z_step = 6;
+const z_step = 5;
 
 function build_chunk_geometry(geom, z0, theme) {
   const rows = Math.round(chunk_len / z_step);
@@ -207,7 +209,7 @@ function build_chunk_geometry(geom, z0, theme) {
 // ---- instanced props: trees, rocks, roadside posts ----
 
 function make_props(scene, theme) {
-  const per_chunk = 130;
+  const per_chunk = 170;
   const n = per_chunk * chunk_count;
   const rnd = seeded(7);
   const mk = (geom, color, count = n, shadow = true) => {
@@ -220,24 +222,32 @@ function make_props(scene, theme) {
   };
   // round tree: two faceted blobs on a trunk
   const crown = merge([
-    jitter(new THREE.IcosahedronGeometry(1.8, 0), 0.7, rnd).translate(0, 3.8, 0),
-    jitter(new THREE.IcosahedronGeometry(1.2, 0), 0.5, rnd).translate(0.7, 5.0, 0.3),
+    jitter(new THREE.IcosahedronGeometry(1.8, 1), 0.55, rnd).translate(0, 3.8, 0),
+    jitter(new THREE.IcosahedronGeometry(1.25, 1), 0.4, rnd).translate(0.8, 5.0, 0.3),
+    jitter(new THREE.IcosahedronGeometry(1.0, 1), 0.35, rnd).translate(-0.9, 4.5, -0.4),
   ]);
   const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.6, 5).translate(0, 1.3, 0);
   // pine: three stacked, slightly drooping cones (the classic low-poly pine)
   const pine = merge([
-    jitter(new THREE.ConeGeometry(1.7, 2.6, 7, 1), 0.35, rnd, true).translate(0, 2.4, 0),
-    jitter(new THREE.ConeGeometry(1.35, 2.3, 7, 1), 0.3, rnd, true).translate(0, 3.7, 0),
-    jitter(new THREE.ConeGeometry(0.95, 2.1, 6, 1), 0.25, rnd, true).translate(0, 4.9, 0),
+    jitter(new THREE.ConeGeometry(1.8, 2.6, 10, 2), 0.35, rnd, true).translate(0, 2.3, 0),
+    jitter(new THREE.ConeGeometry(1.45, 2.3, 9, 2), 0.3, rnd, true).translate(0, 3.5, 0),
+    jitter(new THREE.ConeGeometry(1.15, 2.1, 8, 2), 0.25, rnd, true).translate(0, 4.5, 0),
+    jitter(new THREE.ConeGeometry(0.8, 2.0, 7, 2), 0.2, rnd, true).translate(0, 5.5, 0),
   ]);
   const pine_trunk = new THREE.CylinderGeometry(0.22, 0.3, 1.6, 5).translate(0, 0.8, 0);
-  const rock = jitter(new THREE.DodecahedronGeometry(1, 0), 0.55, rnd).scale(1.2, 0.75, 1).translate(0, 0.35, 0);
+  const rock = jitter(new THREE.DodecahedronGeometry(1, 1), 0.45, rnd).scale(1.2, 0.75, 1).translate(0, 0.35, 0);
   // roadside post with a reflector band
   const post = new THREE.BoxGeometry(0.12, 1.0, 0.12).translate(0, 0.5, 0);
   const posts_per_chunk = Math.ceil(chunk_len / 25) * 2 + 2;
   const tuft = merge([0, 2.1, 4.2].map((a) => new THREE.ConeGeometry(0.09, 0.45, 3).translate(Math.cos(a) * 0.12, 0.2, Math.sin(a) * 0.12)));
-  const tufts_per_chunk = 260;
+  const tufts_per_chunk = 420;
+  const bush = merge([
+    jitter(new THREE.IcosahedronGeometry(0.7, 1), 0.25, rnd).scale(1, 0.75, 1).translate(0, 0.45, 0),
+    jitter(new THREE.IcosahedronGeometry(0.5, 1), 0.2, rnd).scale(1, 0.75, 1).translate(0.55, 0.35, 0.2),
+  ]);
+  const bushes_per_chunk = 60;
   const props = {
+    bushes_per_chunk, bush: mk(bush, '#ffffff', bushes_per_chunk * chunk_count),
     tufts_per_chunk, tuft: mk(tuft, '#ffffff', tufts_per_chunk * chunk_count, false),
     per_chunk, posts_per_chunk,
     crown: mk(crown, '#ffffff'), trunk: mk(trunk, theme.trunk),
@@ -286,6 +296,15 @@ function fill_props(props, slot, chunk_i, z0, theme) {
     } else {
       set(props.rock, i, x, y, z, s * (0.5 + rnd() * 0.9), 1, rot, palette_color(theme.rock, rnd()));
     }
+  }
+  // bushes in the verge and under the trees
+  const bb = slot * props.bushes_per_chunk;
+  for (let k3 = 0; k3 < props.bushes_per_chunk; k3++) {
+    const side = rnd() < 0.5 ? -1 : 1;
+    const x = side * (road_edge + 2 + rnd() ** 1.3 * 45);
+    const z = z0 - rnd() * chunk_len;
+    set(props.bush, bb + k3, x, height_at(x, z) - 0.1, z, 0.7 + rnd() * 1.1, 1, rnd() * 6.28,
+      palette_color(theme.round, rnd()).offsetHSL(0, 0, -0.04));
   }
   // grass tufts close to the road: small detail that reads as texture at speed
   const tb = slot * props.tufts_per_chunk;
@@ -404,9 +423,9 @@ function make_backdrop(scene, theme) {
     const ahead = Math.abs(Math.atan2(Math.sin(m.a + Math.PI / 2), Math.cos(m.a + Math.PI / 2)));   // angle from straight ahead
     if (m.r < 600 && ahead < 0.45) m.r += 380;
     // a mountain = a main peak + a shoulder peak, both jittered for crisp facets
-    const main = jitter(new THREE.ConeGeometry(m.w, m.h, 7, 4), m.w * 0.22, rnd, true);
+    const main = jitter(new THREE.ConeGeometry(m.w, m.h, 11, 7), m.w * 0.17, rnd, true);
     const sh_h = m.h * (0.55 + rnd() * 0.2);
-    const shoulder = jitter(new THREE.ConeGeometry(m.w * 0.7, sh_h, 6, 3), m.w * 0.18, rnd, true)
+    const shoulder = jitter(new THREE.ConeGeometry(m.w * 0.7, sh_h, 9, 5), m.w * 0.15, rnd, true)
       .translate(m.w * 0.55, (sh_h - m.h) / 2, m.w * 0.15);
     const g = merge([main, shoulder]);
     const p = g.attributes.position;
@@ -541,7 +560,7 @@ function build_course(scene, race, theme) {
 // ---- riders: chunky low-poly cyclist on a road bike ----
 
 // unit prism stretched between two points (tubes, limbs). 5 sides = visible facets
-const unit_cyl = new THREE.CylinderGeometry(1, 1, 1, 5);
+const unit_cyl = new THREE.CylinderGeometry(1, 1, 1, 7);
 const y_axis = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3();
 function make_bar(material, radius, radius_z = radius) {
@@ -631,53 +650,53 @@ function make_rider(color) {
   saddle.position.copy(v(-0.22, 1.0));
   g.add(saddle);
 
-  // body: tapered, flat-sided torso leaning forward, with a white stripe and a race number on the back
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 6), mats.jersey);
+  // upper body: its own group pivoting at the hips, so it can lean, rise out of the saddle and rock.
+  // parts are built in rider coordinates, then re-based on the hip pivot
+  const body = new THREE.Group();
+  const add_body = (mesh) => { mesh.castShadow = true; body.add(mesh); return mesh; };
+  const torso = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 8), mats.jersey));
   torso.position.copy(v(0.02, 1.2));
   torso.rotation.x = -1.05;   // lean forward
   torso.scale.set(1.15, 1, 0.8);
-  torso.castShadow = true;
-  g.add(torso);
-  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.175, 0.07, 6), mats.white);
+  const stripe = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.175, 0.07, 8), mats.white));
   stripe.position.copy(v(0.06, 1.23));
   stripe.rotation.x = -1.05;
   stripe.scale.set(1.16, 1, 0.81);
-  g.add(stripe);
-  const hips = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), mats.shorts);
+  const hips = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), mats.shorts));
   hips.position.copy(v(...geo.hip));
   hips.scale.set(1.15, 0.8, 1);
-  g.add(hips);
-
-  // arms: upper arm + forearm with a fixed elbow bend, gloves on the hoods
-  for (const s of [-1, 1]) {
-    const sh = v(geo.shoulder[0], geo.shoulder[1], s * 0.19), el = v(0.36, 1.16, s * 0.22), hd = v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2);
-    add_bar(mats.jersey, 0.055, sh, el);
-    add_bar(mats.skin, 0.042, el, hd);
-    const glove = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), mats.tire);
-    glove.position.copy(hd);
-    g.add(glove);
-  }
-
-  // head: skin, faceted aero helmet in the rider colour with a dark visor
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), mats.skin);
+  // head: skin, faceted aero helmet in the rider colour with a white vent and a dark visor
+  const head = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), mats.skin));
   head.position.copy(v(0.36, 1.5));
-  head.castShadow = true;
-  g.add(head);
-  const helmet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), mats.jersey);
+  const helmet = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 1), mats.jersey));
   helmet.position.copy(v(0.33, 1.56));
   helmet.scale.set(0.95, 0.7, 1.35);
-  helmet.castShadow = true;
-  g.add(helmet);
-  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.3), mats.white);
+  const vent = add_body(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.3), mats.white));
   vent.position.copy(v(0.32, 1.66));
-  g.add(vent);
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), mats.tire);
+  const visor = add_body(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), mats.tire));
   visor.position.copy(v(0.46, 1.5));
-  g.add(visor);
+  const hip0 = v(...geo.hip);
+  for (const ch of body.children) ch.position.sub(hip0);
+  body.position.copy(hip0);
+  g.add(body);
+
+  // arms: shoulder follows the body, hand stays on the hoods, elbow from a simple two-bone ik
+  const arms = [-1, 1].map((s) => {
+    const glove = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), mats.tire);
+    glove.position.copy(v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2));
+    g.add(glove);
+    return {
+      side: s,
+      shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.19).sub(hip0),
+      hand: glove.position.clone(),
+      upper: add_bar(mats.jersey, 0.055),
+      fore: add_bar(mats.skin, 0.042),
+    };
+  });
 
   // nitro flame behind the rear wheel, visible only while boosting
   const flame = new THREE.Mesh(
-    new THREE.ConeGeometry(0.16, 1.0, 5),
+    new THREE.ConeGeometry(0.16, 1.0, 6),
     new THREE.MeshBasicMaterial({ color: '#ff8a00', transparent: true, opacity: 0.9, depthWrite: false }),
   );
   flame.rotation.x = Math.PI / 2;
@@ -698,13 +717,20 @@ function make_rider(color) {
       shoe,
     };
   });
-  return { group: g, wheels, legs, flame, mats: Object.values(mats), faded: false };
+  // the bike group sits inside a root group: the root is placed on the road, the bike rolls inside it
+  const root = new THREE.Group();
+  root.add(g);
+  return {
+    group: root, bike: g, body, arms, wheels, legs, flame, mats: Object.values(mats), faded: false,
+    // smoothed animation state
+    anim: { effort: 0.6, stand: 0, coast: 0, strain: 0, prev_v: 0, accel: 0, t: Math.random() * 10 },
+  };
 }
 
 // thigh + shin from hip to pedal; knee from two-segment inverse kinematics (side view, up positive)
-function pose_leg(leg, angle) {
+function pose_leg(leg, angle, hx = geo.hip[0], hy = geo.hip[1]) {
   const crank_len = 0.17, seg = 0.46;
-  const [bx, by] = geo.bb, [hx, hy] = geo.hip;
+  const [bx, by] = geo.bb;
   const fx = bx + crank_len * Math.cos(angle);
   const fy = by - crank_len * Math.sin(angle);
   const dx = fx - hx, dy = fy - hy;
@@ -718,6 +744,60 @@ function pose_leg(leg, angle) {
   place_bar(leg.shin, v(kx, ky, s), v(fx, fy + 0.03, s));
   place_bar(leg.crank, v(bx, by, s), v(fx, fy, s));
   leg.shoe.position.copy(v(fx + 0.03, fy + 0.02, s * 1.15));
+}
+
+// arm: shoulder (moves with the body) to the fixed hand; elbow bends out and down
+const arm_tmp = { sh: new THREE.Vector3(), d: new THREE.Vector3(), n: new THREE.Vector3(), el: new THREE.Vector3() };
+function pose_arm(arm, body) {
+  const seg = 0.3;
+  const { sh, d, n, el } = arm_tmp;
+  sh.copy(arm.shoulder_local).applyQuaternion(body.quaternion).add(body.position);
+  d.subVectors(arm.hand, sh);
+  const len = d.length();
+  const half = Math.min(len, 2 * seg - 0.001) / 2;
+  const bend = Math.sqrt(seg * seg - half * half);
+  d.normalize();
+  // bend direction: down and slightly outwards, made perpendicular to the arm
+  n.set(arm.side * 0.3, -1, 0.25);
+  n.addScaledVector(d, -n.dot(d)).normalize();
+  el.copy(sh).addScaledVector(d, half).addScaledVector(n, bend);
+  place_bar(arm.upper, sh, el);
+  place_bar(arm.fore, el, arm.hand);
+}
+
+// body language from effort: ref_watts = what this rider can hold comfortably (ftp / bot average).
+//  coasting -> sits up, slow breathing; steady -> small shoulder rock with each stroke;
+//  hard / surging / nitro -> out of the saddle, bike rocks side to side, head down, heavy breathing
+function animate_rider(model, r, dt, ref_watts, boost) {
+  const a = model.anim;
+  const k = (rate) => Math.min(1, dt * rate);   // smoothing factor
+  a.t += dt;
+  if (dt > 0) a.accel += ((r.v - a.prev_v) / dt - a.accel) * k(3);
+  a.prev_v = r.v;
+  const effort = r.watts / Math.max(ref_watts || 150, 50);
+  a.effort += (effort - a.effort) * k(2.5);
+  const coasting = r.watts < 15;
+  const standing = boost || a.effort > 1.3 || (a.accel > 0.5 && a.effort > 0.95);
+  a.coast += ((coasting ? 1 : 0) - a.coast) * k(2);
+  a.stand += ((standing && !coasting ? 1 : 0) - a.stand) * k(3);
+  a.strain += (Math.min(1, Math.max(0, (a.effort - 0.75) / 0.7)) * (1 - a.coast) - a.strain) * k(2);
+
+  const crank = r.crank;
+  const stroke = Math.sin(crank);   // one side-to-side cycle per pedal revolution
+  // the bike rolls with the pedal stroke: tiny when seated, big when standing
+  const roll = stroke * (0.015 + 0.03 * a.strain + 0.13 * a.stand);
+  model.bike.rotation.z = roll;
+  // upper body: sit up when coasting, head down when straining, rise + move forward when standing
+  const b = model.body;
+  const hx = geo.hip[0] + 0.14 * a.stand, hy = geo.hip[1] + 0.16 * a.stand;
+  b.rotation.x = 0.22 * a.coast - 0.1 * a.strain - 0.12 * a.stand;
+  b.rotation.z = -roll * 0.75 + stroke * 0.04 * a.strain;   // shoulders counter the bike, rocking with effort
+  b.rotation.y = stroke * 0.05 * a.stand;
+  const breathe = Math.sin(a.t * (1.6 + 6 * a.strain)) * (0.006 + 0.012 * a.strain);
+  b.position.set(stroke * 0.03 * a.stand, hy + breathe, -hx);
+  // legs follow the hips (standing lifts them), arms follow the shoulders
+  model.legs.forEach((leg, i) => pose_leg(leg, crank + i * Math.PI, hx, hy));
+  for (const arm of model.arms) pose_arm(arm, b);
 }
 
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
@@ -763,7 +843,7 @@ function make_wind(scene) {
 // ---- public api ----
 
 // build a fresh 3d world for this race; returns { render(dt), resize(), dispose() }
-export function create_world(canvas, race, theme_id = 'meadow') {
+export function create_world(canvas, race, theme_id = 'meadow', ftp = 200) {
   const theme = themes[theme_id] || themes.meadow;
   if (!renderer || renderer.domElement !== canvas) {
     renderer?.dispose();
@@ -771,15 +851,16 @@ export function create_world(canvas, race, theme_id = 'meadow') {
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;   // pcf + radius = soft, blurred shadow edges
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // deeper, filmic colours with soft highlights
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.0;
 
   const scene = new THREE.Scene();
   scene.background = canvas_texture(4, 256, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, theme.sky[0]);
-    grad.addColorStop(0.7, theme.sky[1]);
+    // sky colours pulled towards the fog colour: a softer, hazier sky
+    grad.addColorStop(0, '#' + new THREE.Color(theme.sky[0]).lerp(new THREE.Color(theme.fog), 0.2).getHexString());
+    grad.addColorStop(0.7, '#' + new THREE.Color(theme.sky[1]).lerp(new THREE.Color(theme.fog), 0.3).getHexString());
     grad.addColorStop(1, theme.fog);
     g.fillStyle = grad;
     g.fillRect(0, 0, w, h);
@@ -789,7 +870,8 @@ export function create_world(canvas, race, theme_id = 'meadow') {
   // key light from the side: lit facets vs shaded facets is the whole low-poly look
   const sun = new THREE.DirectionalLight(theme.key[0], theme.key[1]);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.radius = 4;
   Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 200 });
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.04;
@@ -891,9 +973,9 @@ export function create_world(canvas, race, theme_id = 'meadow') {
       model.lx += (tx - model.lx) * Math.min(1, dt * 1.5);
       model.group.position.set(model.lx, 0, rider_z(r));
       for (const w of model.wheels) w.rotation.x = (r.x * vis_scale) / wheel_r;
-      model.legs.forEach((leg, i) => pose_leg(leg, r.crank + i * Math.PI));
-      // riders between the camera and the player fade out, so they never block the view
-      const near = Math.max(0, Math.min(1, (cam_z - model.group.position.z - 1.5) / 3.5));
+      animate_rider(model, r, dt, r.is_player ? ftp : r.avg_watts, r.nitro.boost_left > 0);
+      // riders between the camera and the player fade out (not the ones riding alongside you)
+      const near = Math.max(0, Math.min(1, (cam_z - model.group.position.z - 1.0) / 2.2));
       const fade = !r.is_player && near < 1;
       if (fade || model.faded) {
         for (const m of model.mats) { m.transparent = fade; m.opacity = fade ? 0.05 + 0.95 * near * near : 1; m.depthWrite = !fade; }

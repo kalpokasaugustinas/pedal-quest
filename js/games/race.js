@@ -1,7 +1,7 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=17';
-import { create_world, themes } from '../world.js?v=17';
-import { fmt_time, ordinal } from '../util.js?v=17';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=18';
+import { create_world, themes } from '../world.js?v=18';
+import { fmt_time, ordinal } from '../util.js?v=18';
 
 export default {
   id: 'race',
@@ -30,7 +30,7 @@ export default {
 function create(env) {
   const $ = (id) => document.getElementById(id);
   const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts });
-  const world = create_world(env.canvas, race, env.opts.scenery);
+  const world = create_world(env.canvas, race, env.opts.scenery, env.profile.ftp);
 
   env.hud.innerHTML = `
     <div class="race-top">
@@ -40,7 +40,9 @@ function create(env) {
         <div class="hud-sub"><span id="h-time"></span> · <span id="h-left"></span> <span id="h-draft" class="draft hidden"></span></div>
       </div>
     </div>`;
-  env.overlay.innerHTML = '<div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
+  // mood layers above the 3d view: warm soft-light tint + soft vignette (calm, filmic look)
+  env.overlay.innerHTML = '<div class="mood-tint"></div><div class="mood-vignette"></div><div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
+  env.canvas.classList.add('soft-grade');
   env.bottom.innerHTML = `
     <div id="nitro" class="nitro">
       <span class="nitro-label">NITRO</span>

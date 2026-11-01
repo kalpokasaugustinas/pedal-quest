@@ -267,3 +267,8 @@ tr.sub-row td { padding-top: 0; font-size: 12px; color: var(--muted); font-weigh
 .history li:last-child { border-bottom: 0; }
 .h-date { color: var(--muted); grid-row: span 2; font-variant-numeric: tabular-nums; }
 .h-num { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* race mood filter: gentle desaturation + warm soft-light tint + vignette */
+.game-canvas.soft-grade { filter: saturate(0.88) contrast(0.94) brightness(1.03); }
+.mood-tint { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,214,170,.22), rgba(255,190,150,.12) 60%, rgba(120,110,170,.18)); mix-blend-mode: soft-light; }
+.mood-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 85% 75% at 50% 45%, rgba(0,0,0,0) 55%, rgba(18,22,40,.38) 100%); }
