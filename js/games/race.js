@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=23';
-import { create_world } from '../world.js?v=23';
-import { scenery_option } from '../kit3d.js?v=23';
-import { fmt_time, ordinal } from '../util.js?v=23';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=24';
+import { create_world } from '../world.js?v=24';
+import { scenery_option } from '../kit3d.js?v=24';
+import { fmt_time, ordinal } from '../util.js?v=24';
 
 export default {
   id: 'race',
@@ -12,9 +12,10 @@ export default {
   uses: ['power', 'cadence', 'hr'],
   how: [
     'Your watts drive your rider. Bots ride the same physics with their own average power, random attacks and a final sprint.',
-    'Nitro: keep your heart rate inside the target window (8 bpm, somewhere in 78–92% of your max HR: race effort). 30 s in range fills the bar, outside it drains at half speed. Ride steady: spikes overshoot it.',
-    'A full bar fires automatically: +80 W for 3 s, then a new window is picked.',
-    'Bots get nitro too, at half the rate of a perfect player.',
+    'Nitro: keep your heart rate at or above the target (e.g. HR ≥ 152). It is set just under your own heart rate of the last 15 s and has no upper limit, so steady race effort charges it and riding harder never hurts. Just keep it up.',
+    '30 s above the line fills the bar; below it the charge just waits. The target starts 20 s into the race, is at least 65% of your max HR (soft pedalling charges nothing) and resets to your current heart rate after 25 s below it.',
+    'A full bar fires automatically: +80 W for 3 s, then a new target is set from your heart rate.',
+    'Bots get nitro too, at half the rate of a rider who never fades.',
     'Drafting: ride within 5 m behind anyone and your air drag drops by up to 30%. Bots draft too.',
   ],
   options: [
@@ -107,7 +108,7 @@ function create(env) {
     $('nitro').classList.toggle('in-range', !boosting && n.in_range && last_hr !== null);
     $('nitro').classList.toggle('off', last_hr === null);
     $('nitro-fill').style.width = `${(boosting ? n.boost_left / nitro_cfg.boost_s : n.charge) * 100}%`;
-    $('nitro-range').textContent = last_hr === null ? 'needs HR strap' : `HR ${n.range[0]}–${n.range[1]}`;
+    $('nitro-range').textContent = last_hr === null ? 'needs HR strap' : (n.target ? `HR ≥ ${n.target}` : 'HR warming up');
     $('boost-fx').classList.toggle('hidden', !boosting);
   }
 

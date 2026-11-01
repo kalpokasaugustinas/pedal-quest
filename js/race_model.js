@@ -1,5 +1,5 @@
 // race state: riders (player + bots), bot power model, standings
-import { step_speed } from './physics.js?v=23';
+import { step_speed } from './physics.js?v=24';
 
 // bot roster: name, color and strength relative to the chosen base watts
 const roster = [
@@ -13,8 +13,8 @@ const roster = [
 const bot_lanes = [0, 1, 3, 4, 5];   // player rides in lane 2
 const rand = (min, max) => min + Math.random() * (max - min);
 
-// nitro: player charges it by holding hr inside a random 8 bpm window of the race zone (full after 30 s in range,
-// drains at half that speed outside). bots charge on a timer at 50% of a perfect player race.
+// nitro: player charges it by keeping hr at or above a target line set from their own current race hr
+// (full after 30 s above it, below it the charge just waits). bots charge on a timer at 50% of a perfect player race.
 // a full bar fires automatically: +80 w for 3 s
 // drafting: a rider up to 5 m ahead cuts your air drag, up to 30% when you're right on the wheel
 export const draft_cfg = { max_gap: 5, min_gap: 1, max_cut: 0.3 };
@@ -34,21 +34,21 @@ function draft_cut(r, riders) {
   return best;
 }
 
-export const nitro_cfg = { charge_s: 30, drain_ratio: 0.5, boost_s: 3, boost_watts: 80, bot_share: 0.5 };
+export const nitro_cfg = { charge_s: 30, boost_s: 3, boost_watts: 80, bot_share: 0.5 };
 const bot_charge_s = (nitro_cfg.charge_s + nitro_cfg.boost_s) / nitro_cfg.bot_share - nitro_cfg.boost_s;   // 63 s
 
-// random 8 bpm hr window inside the race zone (78-92% of max hr), e.g. 148-156 with max hr 185.
-// racing hard puts you there anyway: the skill is holding your effort steady instead of spiking
-export const nitro_zone = [0.78, 0.92];
-const nitro_width = 8;
-function new_hr_range(max_hr) {
-  const lo = Math.round(max_hr * nitro_zone[0]), hi = Math.round(max_hr * nitro_zone[1]) - nitro_width;
-  const low = lo + Math.floor(Math.random() * (hi - lo + 1));
-  return [low, low + nitro_width];
+// the target never asks you to ease off: there is no upper limit, and the line sits 1-3 bpm under your smoothed
+// hr of the last ~15 s, so steady race effort is already above it and pushing harder only helps. the skill is not
+// fading. a floor (65% of max hr) means soft pedalling charges nothing. below the line for 25 s: it is reset
+// to your current hr (no punishment, just a new target)
+export const nitro_hr = { floor: 0.65, tau_s: 15, warmup_s: 20, retry_s: 25 };
+function new_hr_target(n) {
+  return Math.max(Math.round(n.max_hr * nitro_hr.floor), Math.round(n.ema) - 1 - Math.floor(Math.random() * 3));
 }
 
 function new_nitro(charge = 0, max_hr = 185) {
-  return { charge, boost_left: 0, count: 0, in_range: false, max_hr, range: new_hr_range(max_hr) };
+  // target stays null until there are warmup_s of hr readings (hr needs time to rise at the start)
+  return { charge, boost_left: 0, count: 0, in_range: false, max_hr, target: null, ema: null, hr_s: 0, miss_s: 0 };
 }
 
 // bots with their average watts for a given base strength (shown on the setup screen)
@@ -101,9 +101,17 @@ function update_nitro(r, dt, hr) {
   }
   if (r.is_player) {
     if (hr === null || hr === undefined) return;
-    n.in_range = hr >= n.range[0] && hr <= n.range[1];
-    const rate = dt / nitro_cfg.charge_s;
-    n.charge = Math.max(0, n.charge + (n.in_range ? rate : -rate * nitro_cfg.drain_ratio));
+    // smoothed hr: what the rider can hold right now
+    n.ema = n.ema === null ? hr : n.ema + (hr - n.ema) * Math.min(1, dt / nitro_hr.tau_s);
+    n.hr_s += dt;
+    if (!n.target) {
+      if (n.hr_s < nitro_hr.warmup_s) return;
+      n.target = new_hr_target(n);
+    }
+    n.in_range = hr >= n.target;
+    n.miss_s = n.in_range ? 0 : n.miss_s + dt;
+    if (n.miss_s > nitro_hr.retry_s) { n.target = new_hr_target(n); n.miss_s = 0; }
+    if (n.in_range) n.charge += dt / nitro_cfg.charge_s;   // below the line the charge just waits
   } else {
     n.charge += dt / bot_charge_s;
   }
@@ -111,7 +119,7 @@ function update_nitro(r, dt, hr) {
     n.charge = 0;
     n.boost_left = nitro_cfg.boost_s;
     n.count += 1;
-    n.range = new_hr_range(n.max_hr);
+    if (r.is_player) n.target = new_hr_target(n);
   }
 }
 

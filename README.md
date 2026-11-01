@@ -7,7 +7,7 @@ A browser game controlled by your indoor bike trainer and heart rate strap. Your
 ## Games
 Pick a game from the tabs at the top. Bluetooth stays connected while you switch. All games use the same low-poly 3D world (3 scenery themes).
 
-- 🏁 **Race**: 3D race against 5 bots with drafting. Nitro charges when you hold your heart rate in a target window of your race zone.
+- 🏁 **Race**: 3D race against 5 bots with drafting. Nitro charges while you keep your heart rate at or above a target set from your own race effort (no upper limit: riding harder never hurts).
 - 🔀 **Crossroads**: the road forks into 3 real paths each stage. Each shows the watts to hold and the points it pays. Do the math.
 - ⚡ **Sprint Cup**: one race where rivals and ghosts of your own past runs attack you from behind, one after another. Hold them off.
 - 📈 **Workout**: structured interval sessions scaled to your FTP, with optional ERG mode and an FTP ramp test.

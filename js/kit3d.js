@@ -1,9 +1,10 @@
 // 3d scene kit shared by every game: a low-poly, flat-shaded world (think faceted landscape art) around a road
 // that can curve (road_x) and climb (road_y). big faceted mountains with strong side light, layered pines with
-// warm trunks, calm colours, lit clouds, campfires, wind streaks, and riders with body language.
+// warm trunks, calm colours, drifting lit clouds, campfires, boulders, elk and deer, hikers, birds, wind streaks,
+// and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=23';
+import { seeded } from './util.js?v=24';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -18,7 +19,7 @@ export const themes = {
     mountain: ['#b08a68', '#9a7556', '#c9a582', '#86664c'], snow: '#f4f1ea', snow_line: 0.82,
     round: ['#55a52e', '#62b236', '#4a9628', '#70bb3e'], pine: ['#2f8530', '#287a2b', '#379238'],
     trunk: '#a8622f', rock: ['#a4a4a8', '#8e8f96'], mix: { round: 0.55, pine: 0.3, rock: 0.15 },
-    asphalt: '#6c6f78', cloud: '#ffffff', cloud_glow: 0.25, stars: false, camps: 0.25,
+    asphalt: '#6c6f78', cloud: '#ffffff', cloud_glow: 0.25, stars: false, camps: 0.25, animals: 0.5, hikers: 0.4, birds: true,
   },
   valley: {
     name: 'Misty valley',
@@ -28,7 +29,7 @@ export const themes = {
     mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#286a58'], snow: null, snow_line: 1,
     round: ['#5aa35a', '#4f9650'], pine: ['#2e7a58', '#28704f', '#358763'],
     trunk: '#8a5230', rock: ['#7d8a80', '#6d786f'], mix: { round: 0.12, pine: 0.7, rock: 0.18 },
-    asphalt: '#6e6860', cloud: '#f6f7ea', cloud_glow: 0.3, stars: false, camps: 0.2,
+    asphalt: '#6e6860', cloud: '#f6f7ea', cloud_glow: 0.3, stars: false, camps: 0.2, animals: 0.55, hikers: 0.35, birds: true,
   },
   night: {
     name: 'Starry night',
@@ -38,7 +39,7 @@ export const themes = {
     mountain: ['#3a5590', '#4a68a8', '#2c4478', '#5a7ac0'], snow: '#dfe9fb', snow_line: 0.78,
     round: ['#3f9f45', '#34903b'], pine: ['#2f9a3c', '#27883a', '#3aab45', '#2a7f35'],
     trunk: '#b8622a', rock: ['#5e6f96', '#4f5f86', '#6b7da6'], mix: { round: 0.05, pine: 0.8, rock: 0.15 },
-    asphalt: '#3a3f56', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55,
+    asphalt: '#3a3f56', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55, animals: 0.4, hikers: 0.25, birds: false,
   },
 };
 
@@ -186,7 +187,15 @@ function make_props(scene, theme) {
     jitter(new THREE.IcosahedronGeometry(0.5, 1), 0.2, rnd).scale(1, 0.75, 1).translate(0.55, 0.35, 0.2),
   ]);
   const bushes_per_chunk = 60;
+  // boulder pile: two or three big rocks leaning together
+  const boulder = merge([
+    jitter(new THREE.DodecahedronGeometry(1.3, 0), 0.5, rnd).scale(1.2, 0.8, 1).translate(0, 0.6, 0),
+    jitter(new THREE.DodecahedronGeometry(0.9, 0), 0.35, rnd).translate(1.4, 0.45, 0.5),
+    jitter(new THREE.DodecahedronGeometry(0.6, 0), 0.25, rnd).translate(-1.1, 0.3, 0.8),
+  ]);
+  const boulders_per_chunk = 5;
   const props = {
+    boulders_per_chunk, boulder: mk(boulder, '#ffffff', boulders_per_chunk * chunk_count),
     bushes_per_chunk, bush: mk(bush, '#ffffff', bushes_per_chunk * chunk_count),
     tufts_per_chunk, tuft: mk(tuft, '#ffffff', tufts_per_chunk * chunk_count, false),
     per_chunk, posts_per_chunk,
@@ -269,7 +278,222 @@ function make_camps(scene, theme) {
   return { camps, lights };
 }
 
-// ---- backdrop: big faceted mountains, lit clouds, stars ----
+// ---- wildlife and hikers: elk and deer in the woods (most bolt when you ride by), hikers on the verge who
+// wave as you pass, a flock of birds crossing the sky. one small set per terrain chunk, recycled with it ----
+
+// vertex-coloured parts: every moving body part is one merged mesh (few draw calls)
+function paint(geom, color) {
+  const g = geom.index ? geom.toNonIndexed() : geom;
+  const c = new THREE.Color(color).offsetHSL(0, mood.sat, mood.light);
+  const n = g.attributes.position.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
+function merge_painted(geoms) {
+  const pos = [], col = [];
+  for (const g of geoms) {
+    pos.push(...g.attributes.position.array);
+    col.push(...g.attributes.color.array);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  out.computeVertexNormals();
+  return out;
+}
+const part = (geoms, mat) => {
+  const m = new THREE.Mesh(merge_painted(geoms), mat);
+  m.castShadow = true;
+  return m;
+};
+// a group at a pivot point, holding one part (legs, arms, neck swing around their pivot)
+const pivot = (x, y, z, mesh) => {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.add(mesh);
+  return g;
+};
+
+// elk: big, dark neck, pale rump, antlers. deer: smaller, tan. models face -z like the riders
+const animal_kinds = {
+  elk: { size: 1, body: '#7a5236', neck: '#4a3020', rump: '#d8bd90', leg: '#3b281a', antlers: '#eadbb8', run_v: 7 },
+  deer: { size: 0.72, body: '#b07a42', neck: '#a06e3c', rump: '#f2e6cc', leg: '#6b4a2c', antlers: null, run_v: 8.5 },
+};
+function make_animal(kind, mat, rnd) {
+  const k = animal_kinds[kind];
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.scale.setScalar(k.size);
+  root.add(body);
+  body.add(part([
+    paint(jitter(new THREE.IcosahedronGeometry(0.6, 1), 0.1, rnd).scale(0.72, 0.66, 1.45).translate(0, 1.45, 0), k.body),
+    paint(new THREE.IcosahedronGeometry(0.3, 0).scale(1.2, 1, 0.6).translate(0, 1.5, 0.78), k.rump),
+    paint(new THREE.ConeGeometry(0.08, 0.25, 4).rotateX(-2.4).translate(0, 1.62, 0.95), k.rump),
+  ], mat));
+  // neck + head swing around the chest: rotation.x < 0 lowers the head to graze
+  const head_parts = [
+    paint(new THREE.CylinderGeometry(0.16, 0.25, 0.9, 6).rotateX(-0.55).translate(0, 0.38, -0.2), k.neck),
+    paint(jitter(new THREE.BoxGeometry(0.26, 0.28, 0.55), 0.05, rnd).translate(0, 0.8, -0.55), k.neck),
+    paint(new THREE.BoxGeometry(0.17, 0.16, 0.18).translate(0, 0.74, -0.86), '#2a1d14'),
+    paint(new THREE.ConeGeometry(0.06, 0.22, 4).rotateZ(1.1).translate(0.19, 0.98, -0.42), k.neck),
+    paint(new THREE.ConeGeometry(0.06, 0.22, 4).rotateZ(-1.1).translate(-0.19, 0.98, -0.42), k.neck),
+  ];
+  if (k.antlers) {
+    for (const sx of [-1, 1]) {
+      // beam rising up, out and back from the top of the head, with three forward tines
+      const dir = new THREE.Vector3(sx * 0.56, 0.73, 0.4).normalize(), base = new THREE.Vector3(sx * 0.08, 0.94, -0.5);
+      const mid = base.clone().addScaledVector(dir, 0.42);
+      head_parts.push(paint(new THREE.CylinderGeometry(0.025, 0.045, 0.84, 4)
+        .applyQuaternion(new THREE.Quaternion().setFromUnitVectors(y_axis, dir)).translate(mid.x, mid.y, mid.z), k.antlers));
+      for (const t of [0.3, 0.55, 0.8]) {
+        const p = base.clone().addScaledVector(dir, 0.84 * t);
+        head_parts.push(paint(new THREE.ConeGeometry(0.025, 0.3, 4).rotateX(-0.45).translate(p.x, p.y + 0.13, p.z - 0.07), k.antlers));
+      }
+    }
+  }
+  const head = pivot(0, 1.5, -0.75, part(head_parts, mat));
+  body.add(head);
+  // legs hang from the hips and shoulders: 0 front left, 1 front right, 2 back left, 3 back right
+  const legs = [[-0.2, -0.6], [0.2, -0.6], [-0.2, 0.62], [0.2, 0.62]].map(([x, z]) => {
+    const l = pivot(x, 1.3, z, part([
+      paint(new THREE.CylinderGeometry(0.075, 0.05, 1.22, 5).translate(0, -0.61, 0), k.leg),
+      paint(new THREE.CylinderGeometry(0.06, 0.07, 0.1, 5).translate(0, -1.25, 0), '#1e1610'),
+    ], mat));
+    body.add(l);
+    return l;
+  });
+  root.visible = false;
+  return { root, body, head, legs, kind: k, x: 0, z: 0, yaw: 0, state: 'graze', timer: 0, phase: 0, t: 0 };
+}
+
+// hiker with a backpack; a headlamp at night. faces -z
+const jackets = ['#d84a3a', '#3f6fd0', '#f0a030', '#4a9a5a', '#8a4ac0', '#e86fa0'];
+function make_hiker(mat, rnd, night) {
+  const jacket = jackets[Math.floor(rnd() * jackets.length)];
+  const pants = ['#3a3f4a', '#5a4a3a', '#2f4a5a'][Math.floor(rnd() * 3)];
+  const skin = ['#f0c8a0', '#d8a47a', '#a8744e', '#6e4a30'][Math.floor(rnd() * 4)];
+  const pack = ['#2f6f4a', '#c8582a', '#3a4a6a', '#6a5a3a'][Math.floor(rnd() * 4)];
+  const root = new THREE.Group();
+  root.add(part([
+    paint(jitter(new THREE.BoxGeometry(0.4, 0.58, 0.25), 0.04, rnd).translate(0, 1.2, 0), jacket),
+    paint(new THREE.BoxGeometry(0.34, 0.5, 0.2).translate(0, 1.25, 0.22), pack),
+    paint(new THREE.CylinderGeometry(0.08, 0.08, 0.38, 6).rotateZ(Math.PI / 2).translate(0, 1.55, 0.24), '#d8c8a0'),
+    paint(new THREE.IcosahedronGeometry(0.13, 1).translate(0, 1.64, 0), skin),
+    paint(new THREE.CylinderGeometry(0.12, 0.14, 0.09, 7).translate(0, 1.75, 0), rnd() < 0.5 ? jacket : '#e8e0d0'),
+  ], mat));
+  const legs = [-0.1, 0.1].map((x) => {
+    const l = pivot(x, 0.92, 0, part([
+      paint(new THREE.CylinderGeometry(0.08, 0.065, 0.85, 5).translate(0, -0.43, 0), pants),
+      paint(new THREE.BoxGeometry(0.12, 0.09, 0.22).translate(0, -0.88, -0.04), '#3a2a1e'),
+    ], mat));
+    root.add(l);
+    return l;
+  });
+  const arms = [-0.26, 0.26].map((x) => {
+    const a = pivot(x, 1.45, 0, part([
+      paint(new THREE.CylinderGeometry(0.06, 0.05, 0.56, 5).translate(0, -0.28, 0), jacket),
+      paint(new THREE.IcosahedronGeometry(0.05, 0).translate(0, -0.58, 0), skin),
+    ], mat));
+    root.add(a);
+    return a;
+  });
+  if (night) {
+    const lamp = new THREE.Mesh(new THREE.IcosahedronGeometry(0.04, 0), new THREE.MeshBasicMaterial({ color: '#fff6c8', fog: false }));
+    lamp.position.set(0, 1.7, -0.13);
+    root.add(lamp);
+  }
+  root.visible = false;
+  return { root, legs, arms, x: 0, rx: 0, z: 0, z0: 0, dir: -1, phase: rnd() * 6.28, wave_t: 0, waved: false };
+}
+
+// flock of birds: each bird is two flapping wings (one instanced mesh, one draw call), flying in a v across the sky
+function make_birds(scene) {
+  const n = 9;
+  const wing = new THREE.BufferGeometry();
+  wing.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -0.25, 0, 0, 0.2, 1.1, 0, 0.12], 3));
+  wing.computeVertexNormals();
+  const mesh = new THREE.InstancedMesh(wing, new THREE.MeshBasicMaterial({ color: '#2a2c36', side: THREE.DoubleSide }), n * 2);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  for (let i = 0; i < n * 2; i++) mesh.setMatrixAt(i, hidden);
+  const f = { x: 0, y: 0, z: 0, yaw: 0, wait: 6, t: 0 };
+  const q = new THREE.Quaternion(), qf = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  const fwd = new THREE.Vector3(0, 0, 1);
+  return {
+    update(dt, cam_x, cam_z) {
+      f.t += dt;
+      if (f.wait > 0) {
+        f.wait -= dt;
+        if (f.wait > 0) return;
+        // new flock: starts off to one side ahead of the camera and flies across the road
+        const side = Math.random() < 0.5 ? -1 : 1;
+        f.x = cam_x + side * (140 + Math.random() * 60);
+        f.z = cam_z - 90 - Math.random() * 140;
+        f.y = 28 + Math.random() * 25;
+        f.yaw = side * (Math.PI / 2 + (Math.random() - 0.5) * 0.7);   // heading towards the other side
+      }
+      const v = 11;
+      f.x -= Math.sin(f.yaw) * v * dt;
+      f.z -= Math.cos(f.yaw) * v * dt;
+      if (Math.hypot(f.x - cam_x, f.z - cam_z) > 320) {
+        f.wait = 12 + Math.random() * 25;
+        for (let i = 0; i < n * 2; i++) mesh.setMatrixAt(i, hidden);
+        mesh.instanceMatrix.needsUpdate = true;
+        return;
+      }
+      const s = Math.sin(f.yaw), c = Math.cos(f.yaw);
+      for (let i = 0; i < n; i++) {
+        // v formation: leader first, then alternating left / right, each a step further back
+        const rank = Math.ceil(i / 2), lr = i % 2 ? -1 : 1;
+        const ox = lr * rank * 2.4, oz = rank * 2.2, oy = Math.sin(f.t * 1.3 + i) * 0.5;
+        p.set(f.x + ox * c + oz * s, f.y + oy, f.z - ox * s + oz * c);
+        const flap = Math.sin(f.t * 9 + i * 0.8) * 0.65;
+        for (const w of [1, -1]) {
+          qf.setFromAxisAngle(fwd, flap * w);
+          q.setFromAxisAngle(up, f.yaw).multiply(qf);
+          mesh.setMatrixAt(i * 2 + (w > 0 ? 0 : 1), m4.compose(p, q, sc.set(1.5 * w, 1.5, 1.5)));
+        }
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+function make_wildlife(scene, theme) {
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const rnd = seeded(31);
+  // per chunk: an elk, two deer (a doe and a fawn) and two hikers; most stay hidden
+  const slots = Array.from({ length: chunk_count }, () => {
+    const s = {
+      elk: make_animal('elk', mat, rnd), deer: [make_animal('deer', mat, rnd), make_animal('deer', mat, rnd)],
+      hikers: [make_hiker(mat, rnd, theme.stars), make_hiker(mat, rnd, theme.stars)],
+    };
+    s.deer[1].body.scale.multiplyScalar(0.75);
+    for (const o of [s.elk, ...s.deer, ...s.hikers]) scene.add(o.root);
+    return s;
+  });
+  return { slots, birds: theme.birds ? make_birds(scene) : null };
+}
+
+// leg swing, head and body bob for one animal
+function animate_animal(a, dt, speed) {
+  const gallop = speed > 3;
+  a.phase += dt * (gallop ? 11 : speed > 0 ? 5 : 0);
+  const amp = gallop ? 0.7 : speed > 0 ? 0.32 : 0;
+  const offs = gallop ? [0, 0.5, Math.PI, Math.PI + 0.5] : [0, Math.PI, Math.PI, 0];
+  a.legs.forEach((l, i) => { l.rotation.x += (Math.sin(a.phase + offs[i]) * amp - l.rotation.x) * Math.min(1, dt * 12); });
+  const head = a.state === 'graze' ? -1.75 + Math.sin(a.t * 5) * 0.06 : a.state === 'flee' ? 0.2 : 0;
+  a.head.rotation.x += (head - a.head.rotation.x) * Math.min(1, dt * 2.5);
+  a.body.position.y = gallop ? Math.abs(Math.sin(a.phase)) * 0.15 : 0;
+  a.body.rotation.x = gallop ? Math.sin(a.phase) * 0.06 : 0;
+}
+
+
+// cloud box around the camera: x from -span to span, z from far ahead to a bit behind. approach = share of your
+// forward speed the clouds come towards you (parallax: a feeling of travelling under them)
+const cloud_box = { n: 18, span: 1000, z: [-1150, 400], approach: 0.3 };
 
 function make_backdrop(scene, theme) {
   const group = new THREE.Group();
@@ -307,10 +531,11 @@ function make_backdrop(scene, theme) {
   }
   scene.add(group);
 
-  // big faceted clouds: clusters of squashed icosahedrons, lit plus a soft glow
+  // big faceted clouds: clusters of squashed icosahedrons, lit plus a soft glow. they drift sideways on the wind
+  // and slowly come closer as you ride; each fades in far away and out at the edges of its box, so wrapping never pops
   const clouds = new THREE.Group();
-  const cloud_mat = new THREE.MeshStandardMaterial({ color: theme.cloud, flatShading: true, roughness: 1, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow });
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < cloud_box.n; i++) {
+    const cloud_mat = new THREE.MeshStandardMaterial({ color: theme.cloud, flatShading: true, roughness: 1, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow, transparent: true });
     const parts = [];
     const n = 4 + Math.floor(rnd() * 3);
     for (let j = 0; j < n; j++) {
@@ -318,13 +543,23 @@ function make_backdrop(scene, theme) {
       parts.push(jitter(new THREE.IcosahedronGeometry(r, 0), r * 0.35, rnd).scale(1.2, 0.45, 0.8).translate(j * 26 - n * 13, rnd() * 6, rnd() * 12));
     }
     const c = new THREE.Mesh(merge(parts), cloud_mat);
-    const a = -Math.PI / 2 + (rnd() - 0.5) * 2.6;   // mostly ahead of the riders
-    const r = 420 + rnd() * 380;
-    c.position.set(Math.cos(a) * r, 190 + rnd() * 140, Math.sin(a) * r);
+    c.position.set((rnd() * 2 - 1) * cloud_box.span, 190 + rnd() * 150, cloud_box.z[0] + rnd() * (cloud_box.z[1] - cloud_box.z[0]));
     c.rotation.y = rnd() * 0.6 - 0.3;
+    c.userData.v = 5 + rnd() * 9;   // wind drift (m/s); far clouds look slow, near ones fast
     clouds.add(c);
   }
   scene.add(clouds);
+  // moved = metres the camera went forward this frame
+  function update_clouds(dt, moved) {
+    const [z0, z1] = cloud_box.z;
+    for (const c of clouds.children) {
+      c.position.x += c.userData.v * dt;
+      c.position.z += moved * cloud_box.approach;
+      if (c.position.x > cloud_box.span) c.position.x -= 2 * cloud_box.span;
+      if (c.position.z > z1) c.position.z -= z1 - z0;
+      c.material.opacity = smoothstep(0, 220, cloud_box.span - Math.abs(c.position.x)) * smoothstep(0, 250, c.position.z - z0) * smoothstep(0, 120, z1 - c.position.z);
+    }
+  }
 
   let stars = null;
   if (theme.stars) {
@@ -341,7 +576,7 @@ function make_backdrop(scene, theme) {
     moon.position.set(-700, 700, -1300);
     stars.add(moon);
   }
-  return { group, clouds, stars };
+  return { group, clouds, stars, update_clouds };
 }
 
 
@@ -651,7 +886,7 @@ export function curve_x(z) {
 // coordinates: forward = -z. the road centre line is road_x(z), its height road_y(z) (both in visual meters).
 // games give positions as visual z and a sideways offset from the road centre.
 //
-// opts: { theme, road_w, lanes, road_x(z), road_y(z), surface(z) -> 'asphalt'|'gravel'|'dirt', camps, posts }
+// opts: { theme, road_w, lanes, road_x(z), road_y(z), surface(z) -> 'asphalt'|'gravel'|'dirt', camps, posts, wildlife }
 export function create_kit(canvas, opts = {}) {
   const theme = themes[opts.theme] || themes.meadow;
   const road_w = opts.road_w ?? 7.6;
@@ -843,6 +1078,7 @@ export function create_kit(canvas, opts = {}) {
   const backdrop = make_backdrop(scene, theme);
   const props = make_props(scene, theme);
   const camps = opts.camps === false ? null : make_camps(scene, theme);
+  const wild = opts.wildlife === false ? null : make_wildlife(scene, theme);
   const terrain_mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 });
   const chunks = Array.from({ length: chunk_count }, (_, slot) => {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), terrain_mat);
@@ -902,6 +1138,15 @@ export function create_kit(canvas, opts = {}) {
       if (in_clearing(x, z)) { props.bush.setMatrixAt(bb + k, hidden); continue; }
       set_inst(props.bush, bb + k, x, ground(x, z) - 0.1, z, s, 1, rot, palette_color(theme.round, cr).offsetHSL(0, 0, -0.04));
     }
+    // boulder piles in the woods, a few close to the road
+    const ob = slot * props.boulders_per_chunk;
+    for (let k = 0; k < props.boulders_per_chunk; k++) {
+      const { z, rx } = spot(6, rnd() ** 1.4 * 55);
+      const x = road_x(z) + rx;
+      const s = 0.8 + rnd() * 1.4, rot = rnd() * 6.28, cr = rnd();
+      if (in_clearing(x, z)) { props.boulder.setMatrixAt(ob + k, hidden); continue; }
+      set_inst(props.boulder, ob + k, x, ground(x, z) - 0.3 * s, z, s, 0.8 + cr * 0.4, rot, palette_color(theme.rock, cr));
+    }
     // grass tufts close to the road: small detail that reads as texture at speed
     const tb = slot * props.tufts_per_chunk;
     for (let k = 0; k < props.tufts_per_chunk; k++) {
@@ -942,6 +1187,93 @@ export function create_kit(canvas, opts = {}) {
     c.group.rotation.y = side < 0 ? 0 : Math.PI;   // tent on the far side of the fire
   }
 
+  // wildlife for one chunk: maybe an elk or a pair of deer in the woods, maybe one or two hikers on the verge
+  function place_wild(slot, chunk_i, z0) {
+    if (!wild) return;
+    const w = wild.slots[slot];
+    const rnd = seeded(chunk_i * 15485863 + 3);
+    for (const o of [w.elk, ...w.deer, ...w.hikers]) o.root.visible = false;
+    if (rnd() < theme.animals) {
+      const herd = rnd() < 0.4 ? [w.elk] : [w.deer[0], w.deer[1]];
+      const side = rnd() < 0.5 ? -1 : 1;
+      const rx = side * (road_edge + 9 + rnd() * 26), z = z0 - 10 - rnd() * (chunk_len - 20);
+      const skittish = rnd() < 0.75;   // most bolt when you ride by, some don't care
+      herd.forEach((a, k) => {
+        a.z = z + k * 2.5;
+        a.x = road_x(a.z) + rx + k * side * 1.5;
+        if (in_clearing(a.x, a.z)) return;
+        Object.assign(a, { yaw: rnd() * 6.28, state: 'graze', timer: 2 + rnd() * 5, skittish, fled: false, side });
+        a.root.visible = true;
+      });
+    }
+    if (rnd() < theme.hikers) {
+      const count = rnd() < 0.5 ? 2 : 1;
+      const side = rnd() < 0.5 ? -1 : 1, dir = rnd() < 0.6 ? -1 : 1;
+      const z = z0 - 10 - rnd() * (chunk_len - 20);
+      for (let k = 0; k < count; k++) {
+        const h = w.hikers[k];
+        Object.assign(h, { z: z + k * 1.7 * -dir, z0: z, dir, rx: side * (road_edge + 2.3 + k * 0.5 + rnd() * 0.4), wave_t: 0, waved: false });
+        if (h.z < road_end || in_clearing(road_x(h.z) + h.rx, h.z)) continue;
+        h.root.visible = true;
+      }
+    }
+  }
+
+  // animals graze, look up, wander and (if skittish) bolt away from the road when you come close.
+  // hikers walk up and down their stretch of verge and wave once as you pass
+  function update_wild(dt, cam_z) {
+    if (!wild) return;
+    for (const w of wild.slots) {
+      for (const a of [w.elk, ...w.deer]) {
+        if (!a.root.visible) continue;
+        a.t += dt;
+        a.timer -= dt;
+        const rx = a.x - road_x(a.z);
+        const ahead = cam_z - a.z;   // > 0: the animal is in front of the camera
+        if (a.skittish && !a.fled && ahead > -5 && ahead < 30 && Math.abs(rx) < 32) {
+          // bolt: away from the road and a bit forward
+          a.state = 'flee';
+          a.fled = true;
+          a.timer = 2.5 + Math.random() * 1.5;
+          a.yaw = heading(a.z) - Math.sign(rx) * (0.9 + Math.random() * 0.3);
+        } else if (a.timer <= 0) {
+          if (a.state === 'graze') { a.state = Math.random() < 0.5 ? 'look' : 'walk'; a.timer = 2 + Math.random() * 3; a.yaw += (Math.random() - 0.5) * 1.5; }
+          else { a.state = 'graze'; a.timer = 3 + Math.random() * 5; }
+        }
+        const speed = a.state === 'flee' ? a.kind.run_v : a.state === 'walk' ? 0.9 : 0;
+        if (speed) {
+          a.x -= Math.sin(a.yaw) * speed * dt;
+          a.z -= Math.cos(a.yaw) * speed * dt;
+          // wandering animals turn back before they reach the road
+          if (a.state === 'walk' && Math.abs(a.x - road_x(a.z)) < road_edge + 6) a.yaw += Math.PI;
+        }
+        animate_animal(a, dt, speed);
+        a.root.position.set(a.x, ground(a.x, a.z) - 0.05, a.z);
+        a.root.rotation.y = a.yaw;
+      }
+      for (const h of w.hikers) {
+        if (!h.root.visible) continue;
+        h.z += h.dir * 1.25 * dt;
+        if (Math.abs(h.z - h.z0) > 35) h.dir = Math.sign(h.z0 - h.z);   // turn around at the end of the stretch
+        h.phase += dt * 5.2;
+        const x = road_x(h.z) + h.rx;
+        h.root.position.set(x, ground(x, h.z) + Math.abs(Math.sin(h.phase)) * 0.03, h.z);
+        h.root.rotation.y = heading(h.z) + (h.dir > 0 ? Math.PI : 0);
+        h.legs.forEach((l, i) => { l.rotation.x = Math.sin(h.phase + i * Math.PI) * 0.45; });
+        h.arms.forEach((a, i) => { a.rotation.x = -Math.sin(h.phase + i * Math.PI) * 0.35; a.rotation.z = 0; });
+        if (!h.waved && Math.abs(cam_z - h.z) < 14) { h.waved = true; h.wave_t = 2.6; }
+        if (h.wave_t > 0) {
+          h.wave_t -= dt;
+          // the arm on the road side goes up and waves (local x flips when walking towards the camera)
+          const s = -Math.sign(h.rx) * (h.dir > 0 ? -1 : 1);
+          const arm = h.arms[s < 0 ? 0 : 1];
+          arm.rotation.x = 0;
+          arm.rotation.z = s * (2.5 + Math.sin(h.wave_t * 14) * 0.35);
+        }
+      }
+    }
+  }
+
   function build_chunk(c, i) {
     c.index = i;
     const z0 = -i * chunk_len;
@@ -955,6 +1287,7 @@ export function create_kit(canvas, opts = {}) {
     c.road.material = road_mats[surface(z0 - chunk_len / 2)] || road_mats.asphalt;
     fill_props(c.slot, i, z0);
     place_camp(c.slot, i, z0);
+    place_wild(c.slot, i, z0);
   }
 
   // keep the chunk window around the camera: chunk i covers visual z in [-(i+1)L, -iL]
@@ -1251,15 +1584,20 @@ export function create_kit(canvas, opts = {}) {
   // ---- frame ----
 
   // f = { focus_z (where the action is), speed (visual m/s for wind), boost, look_back (camera looks backwards) }
+  let last_cz = 0;
   function frame(dt, f) {
     t_total += dt;
     const cz = camera.position.z, cx = camera.position.x;
     update_chunks(f.look_back ? cz : Math.min(cz, f.focus_z + 10), f.look_back ? 5 : 1);
     update_camps(cz);
+    update_wild(dt, cz);
+    wild?.birds?.update(dt, cx, cz);
     wind.update(dt, cz, cx, f.speed ?? 0, !!f.boost);
     update_dust(dt);
     backdrop.group.position.set(cx, road_y(cz), cz);
-    backdrop.clouds.position.set(cx + Math.sin(t_total * 0.01) * 60, road_y(cz), cz);
+    backdrop.update_clouds(dt, Math.min(5, Math.max(0, last_cz - cz)));
+    last_cz = cz;
+    backdrop.clouds.position.set(cx, road_y(cz), cz);
     if (backdrop.stars) backdrop.stars.position.set(cx, 0, cz);
     base.position.set(cx, road_y(cz) - 1.5, cz);
     const fz = f.focus_z;
@@ -1315,7 +1653,7 @@ export function create_kit(canvas, opts = {}) {
     add_flat_zone(x, z, r) { flat_zones.push({ x, z, r }); },
     clear_flat_zones() { flat_zones.length = 0; },
     add_rider, place_rider, fade_for, chase, add_arch, add_board, add_sign, add_trail, remove, invalidate,
-    frame, resize, dispose, hide_mirror,
+    frame, resize, dispose, hide_mirror, wild,
   };
 }
 

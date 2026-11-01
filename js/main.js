@@ -1,23 +1,23 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=23';
-import { control } from './ble.js?v=23';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=23';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=23';
-import { stats_html } from './stats.js?v=23';
-import { set_rider_mass, steady_speed } from './physics.js?v=23';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=23';
-import * as ride_log from './ride_log.js?v=23';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=23';
-import * as daily from './daily.js?v=23';
-import race from './games/race.js?v=23';
-import crossroads from './games/crossroads.js?v=23';
-import summit from './games/summit.js?v=23';
-import pulse from './games/pulse.js?v=23';
-import spinbeat from './games/spinbeat.js?v=23';
-import escape from './games/escape.js?v=23';
-import sprint from './games/sprint.js?v=23';
-import workout from './games/workout.js?v=23';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=24';
+import { control } from './ble.js?v=24';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=24';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=24';
+import { stats_html } from './stats.js?v=24';
+import { set_rider_mass, steady_speed } from './physics.js?v=24';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=24';
+import * as ride_log from './ride_log.js?v=24';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=24';
+import * as daily from './daily.js?v=24';
+import race from './games/race.js?v=24';
+import crossroads from './games/crossroads.js?v=24';
+import summit from './games/summit.js?v=24';
+import pulse from './games/pulse.js?v=24';
+import spinbeat from './games/spinbeat.js?v=24';
+import escape from './games/escape.js?v=24';
+import sprint from './games/sprint.js?v=24';
+import workout from './games/workout.js?v=24';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];

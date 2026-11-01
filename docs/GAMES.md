@@ -36,10 +36,11 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 ### 🏁 Race
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
 - Bots: slow power wave, random surges, a final sprint, and nitro at 50% of a perfect player's rate.
-- Nitro: a random 8 bpm HR window inside the race zone (78–92% of max HR, so hard riding gets you there; spiking overshoots). 30 s inside fills the bar; outside it drains at half that speed. A full bar gives +80 W for 3 s.
-- Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds, campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: Sunny meadow, Misty valley, Starry night.
+- Nitro: HR at or above a target line (`HR ≥ 152`), no upper limit, so chasing nitro never asks you to ease off. The line is set 1–3 bpm under your smoothed HR (15 s), first 20 s into the race (HR needs time to rise), again after every nitro, and reset to your current HR after 25 s below it. Floor 65% of max HR (soft pedalling charges nothing). 30 s above fills the bar; below it the charge waits (no drain). A full bar gives +80 W for 3 s. The skill: don't fade.
+- Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds drifting on the wind (and slowly coming closer as you ride; they fade at the edges of their box so wrapping never pops), boulder piles, wildlife and hikers (see below), campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: Sunny meadow, Misty valley, Starry night.
 - Mood: calm, soft colours (every palette colour desaturated a bit), softer PCF shadows, a CSS grade on the canvas (saturate / contrast) plus a warm soft-light tint and a vignette layer.
 - Riders: low-poly cyclist (tapered torso with stripe, aero helmet with visor, shoes) on a road bike with deep rims in the rider colour. Body language from effort (`animate_rider` in `js/world.js`; reference = FTP for you, average watts for bots): coasting = sits up and rests; steady = small shoulder rock; hard / surging / nitro = out of the saddle, bike rocks side to side with each pedal stroke, head down, heavy breathing. Arms and legs follow via simple IK.
+- Wildlife (`make_wildlife` in `js/kit3d.js`, per terrain chunk, recycled with it): an elk or a doe + fawn in the woods (graze, look up, wander, never onto the road; 75% bolt away from the road when you come within 30 m), one or two hikers with backpacks walking their stretch of verge who wave once as you pass (headlamps at night), and a flock of birds in a V crossing the sky now and then (not at night). Odds per theme: `animals`, `hikers`, `birds`. `create_kit(..., { wildlife: false })` turns it off.
 - Visual speed: the scenery moves 2.5× faster than the physics (`vis_scale` in `js/world.js`); speed, watts and times are unchanged. Riders keep their real gaps to the player so the pack looks natural. Wind streaks scale with speed; riders between the camera and you fade out.
 - Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
 
@@ -48,7 +49,7 @@ Effects: ~1.2 km of terrain ahead, shadows over ~140 m around the action (no pop
 
 Roads wind (`curve_x` in the kit: long sweeping bends, s-curves and the odd tight turn, varying along the route); Spin Beat stays straight so its lanes stay readable. Escape's camera sits ~10 m ahead of you looking back, locked (no lag), so you never ride out of the picture.
 
-Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, { theme, road_w, lanes, road_x(z), road_y(z), surface(z), camps, posts, paint_road })`. Games place riders (`place_rider`), steer the camera (`chase`) and call `frame()` each render. Every game has a **Scenery** option (meadow / valley / night).
+Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, { theme, road_w, lanes, road_x(z), road_y(z), surface(z), camps, posts, wildlife, paint_road })`. Games place riders (`place_rider`), steer the camera (`chase`) and call `frame()` each render. Every game has a **Scenery** option (meadow / valley / night).
 - Crossroads: a single bike track (2.6 m) that forks in a clearing into 3 signposted trails; your pick bends the road into that trail (and its surface: asphalt, gravel, dirt).
 - Summit: the road really climbs (distance ×1.6, height ×2.2 on screen); grade boards, KOM arch, translucent ghost; profile chart as an overlay.
 - Pulse Pilot: you pedal a winged bicycle (wings flap once per pedal stroke) over the valley through gate frames at bpm heights; big bpm boards above each gate; dashed flight trail + projection line.
@@ -118,7 +119,7 @@ js/cloud.js       optional google sign-in + firestore sync of all players
 js/stats.js       stats tab
 js/draw2d.js      2D canvas helpers (overlay layer for charts / bars, labels)
 js/kit3d.js       shared low-poly 3d kit: terrain/road chunks (road can curve + climb), props, mountains,
-                  lights + colour grade, campfires, wind, riders with body language, chase camera, arches, signs, trails
+                  lights + colour grade, campfires, wildlife + hikers + birds, wind, riders with body language, chase camera, arches, signs, trails
 js/world.js       Race world on the kit (course + pack)
 js/race_model.js  Race model: bots, nitro, drafting, standings
 js/ride_log.js    per-second ride samples -> results chart + stats (all games)
