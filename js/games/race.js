@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg, styles } from '../race_model.js?v=26';
-import { create_world } from '../world.js?v=26';
-import { scenery_option } from '../kit3d.js?v=26';
-import { fmt_time, ordinal } from '../util.js?v=26';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg, styles } from '../race_model.js?v=27';
+import { create_world } from '../world.js?v=27';
+import { scenery_option } from '../kit3d.js?v=27';
+import { fmt_time, ordinal } from '../util.js?v=27';
 
 export default {
   id: 'race',
@@ -91,6 +91,16 @@ function create(env) {
     result,
   };
 
+  let lb_t = 0;
+  function render_leaderboard(order, p) {
+    $('leaderboard').innerHTML = order.map((r, i) => {
+      const gap = Math.round(r.x - p.x);
+      const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
+      const fire = (r.nitro.boost_left > 0 ? ' 🔥' : '') + (r.tactic ? { attack: ' ⚔️', chase: ' 🎯', follow: ' 🧲' }[r.tactic.kind] : '');
+      return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}${fire}<span class="gap">${gap_text}</span></li>`;
+    }).join('');
+  }
+
   function update_hud() {
     const order = standings(race);
     const p = race.player;
@@ -102,13 +112,10 @@ function create(env) {
     race.riders.forEach((r, i) => {
       dots[i].style.left = `${Math.min(100, (r.x / race.distance_m) * 100)}%`;
     });
-    // leaderboard: rider names are fixed constants, so innerHTML is safe
-    $('leaderboard').innerHTML = order.map((r, i) => {
-      const gap = Math.round(r.x - p.x);
-      const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
-      const fire = (r.nitro.boost_left > 0 ? ' 🔥' : '') + (r.tactic ? { attack: ' ⚔️', chase: ' 🎯', follow: ' 🧲' }[r.tactic.kind] : '');
-      return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}${fire}<span class="gap">${gap_text}</span></li>`;
-    }).join('');
+    // leaderboard: rider names are fixed constants, so innerHTML is safe. rebuilt 5x per second, not every
+    // frame (a dom rebuild each frame costs a layout + paint on phones)
+    const now = performance.now();
+    if (now - lb_t > 200) { lb_t = now; render_leaderboard(order, p); }
 
     // nitro bar: charge (or remaining boost), target window, colour by state
     const n = p.nitro;

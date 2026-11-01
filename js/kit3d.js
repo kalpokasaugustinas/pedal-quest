@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=26';
+import { seeded } from './util.js?v=27';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -142,6 +142,9 @@ function make_precip(scene, snow) {
 export const ambience = { rain: false, water: 0, crowd: 0, birds: false };
 
 let renderer = null;   // one renderer per canvas; each race builds a new scene
+// render resolution learned on this device (auto resolution below); the next game starts from it
+let learned_pr = null, pr_ceiling = null;
+const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 // ---- helpers ----
 
@@ -1044,20 +1047,21 @@ export function create_kit(canvas, opts = {}) {
     renderer?.dispose();
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // auto resolution: start at 1.5x (or what this device managed last game), step down when frames come late
+  const pr_max = Math.min(window.devicePixelRatio || 1, 2), pr_min = Math.min(1, pr_max);
+  let pr = learned_pr ?? Math.min(pr_max, 1.5);
+  renderer.setPixelRatio(pr);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;   // pcf + radius = soft, blurred shadow edges
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // deeper, filmic colours with soft highlights
   renderer.toneMappingExposure = 1.0;
-  // calm colour grade: css filter on the canvas + warm soft-light tint + vignette layers on top of it
-  canvas.classList.add('soft-grade');
+  // calm colour grade: one plain overlay (warm tint + vignette). no css filter / blend modes on the canvas:
+  // on phones those cost a full-screen pass every frame
   const mood_layers = [];
-  for (const cls of ['mood-tint', 'mood-vignette']) {
-    const d = document.createElement('div');
-    d.className = cls;
-    canvas.parentElement?.appendChild(d);
-    mood_layers.push(d);
-  }
+  const mood_div = document.createElement('div');
+  mood_div.className = 'mood-grade';
+  canvas.parentElement?.appendChild(mood_div);
+  mood_layers.push(mood_div);
 
   const scene = new THREE.Scene();
   // sky gradient pulled towards the fog colour (softer, hazier); redrawn during a sunset ride
@@ -1082,7 +1086,7 @@ export function create_kit(canvas, opts = {}) {
   // key light from the side: lit facets vs shaded facets is the whole low-poly look
   const sun = new THREE.DirectionalLight(theme.key[0], theme.key[1]);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(phone ? 1024 : 2048, phone ? 1024 : 2048);   // phones: lighter shadow map
   sun.shadow.radius = 4;
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 500 });
   sun.shadow.bias = -0.0005;
@@ -1605,6 +1609,29 @@ export function create_kit(canvas, opts = {}) {
   const cam_pos = new THREE.Vector3(0, 3, 6), cam_look = new THREE.Vector3(0, 1, -10);
   let cam_ready = false;
 
+  // late frames (> 1.5x the screen refresh) in the last ~2 s lower the resolution a step; a long smooth stretch
+  // raises it again, but never back to a level that already stuttered. pauses (> 250 ms) are ignored
+  let last_frame = 0, quality_t = performance.now();
+  const frame_ms = [];
+  function adapt_resolution() {
+    const now = performance.now();
+    if (last_frame) { frame_ms.push(now - last_frame); if (frame_ms.length > 120) frame_ms.shift(); }
+    last_frame = now;
+    if (frame_ms.length < 90 || now - quality_t < 2000) return;
+    const sorted = [...frame_ms].sort((a, b) => a - b);
+    const refresh = sorted[Math.floor(sorted.length * 0.1)];
+    const late = frame_ms.filter((t) => t > refresh * 1.5 && t < 250).length / frame_ms.length;
+    let next = pr;
+    if (late > 0.08 && pr > pr_min) { pr_ceiling = pr - 0.25; next = pr - 0.25; }
+    else if (late < 0.01 && now - quality_t > 10000 && pr + 0.25 <= Math.min(pr_max, pr_ceiling ?? pr_max)) next = pr + 0.25;
+    if (next === pr) return;
+    pr = learned_pr = Math.max(pr_min, next);
+    renderer.setPixelRatio(pr);
+    resize();
+    quality_t = now;
+    frame_ms.length = 0;
+  }
+
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     renderer.setSize(w, h, false);
@@ -2086,6 +2113,7 @@ export function create_kit(canvas, opts = {}) {
     sun.position.copy(sun.target.position).add(sun_off);
     renderer.render(scene, camera);
     if (f.mirror) render_mirror(f.mirror);
+    adapt_resolution();
   }
 
   // rear-view mirror: a small inset at the top showing the road behind the rider at m.z
@@ -2107,7 +2135,9 @@ export function create_kit(canvas, opts = {}) {
     renderer.setScissorTest(true);
     renderer.setScissor(mx, h - my - mh, mw, mh);
     renderer.setViewport(mx, h - my - mh, mw, mh);
+    renderer.shadowMap.autoUpdate = false;   // reuse this frame's shadow map: the mirror would redraw it
     renderer.render(scene, mirror_cam);
+    renderer.shadowMap.autoUpdate = true;
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, w, h);
     // frame around the mirror (html, so it stays crisp)
@@ -2125,7 +2155,6 @@ export function create_kit(canvas, opts = {}) {
     Object.assign(ambience, { rain: false, water: 0, crowd: 0, birds: false });
     dispose_scene(scene);
     for (const d of mood_layers) d.remove();
-    canvas.classList.remove('soft-grade');
   }
 
   return {
