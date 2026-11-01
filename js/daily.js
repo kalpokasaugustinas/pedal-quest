@@ -1,5 +1,5 @@
 // daily challenge: one game + settings + goal per calendar day (same for everyone on that day), with a streak
-import { load, store, seeded } from './util.js?v=22';
+import { load, store, seeded } from './util.js?v=23';
 
 const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)];
 const round10 = (w) => Math.max(50, Math.min(500, Math.round(w / 10) * 10));

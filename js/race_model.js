@@ -1,5 +1,5 @@
 // race state: riders (player + bots), bot power model, standings
-import { step_speed } from './physics.js?v=22';
+import { step_speed } from './physics.js?v=23';
 
 // bot roster: name, color and strength relative to the chosen base watts
 const roster = [
@@ -13,7 +13,7 @@ const roster = [
 const bot_lanes = [0, 1, 3, 4, 5];   // player rides in lane 2
 const rand = (min, max) => min + Math.random() * (max - min);
 
-// nitro: player charges it by holding hr inside a random 5 bpm window (full after 30 s in range,
+// nitro: player charges it by holding hr inside a random 8 bpm window of the race zone (full after 30 s in range,
 // drains at half that speed outside). bots charge on a timer at 50% of a perfect player race.
 // a full bar fires automatically: +80 w for 3 s
 // drafting: a rider up to 5 m ahead cuts your air drag, up to 30% when you're right on the wheel
@@ -37,14 +37,18 @@ function draft_cut(r, riders) {
 export const nitro_cfg = { charge_s: 30, drain_ratio: 0.5, boost_s: 3, boost_watts: 80, bot_share: 0.5 };
 const bot_charge_s = (nitro_cfg.charge_s + nitro_cfg.boost_s) / nitro_cfg.bot_share - nitro_cfg.boost_s;   // 63 s
 
-// random hr window, e.g. 110-115 or 122-127
-function new_hr_range() {
-  const low = 110 + Math.floor(Math.random() * 21);
-  return [low, low + 5];
+// random 8 bpm hr window inside the race zone (78-92% of max hr), e.g. 148-156 with max hr 185.
+// racing hard puts you there anyway: the skill is holding your effort steady instead of spiking
+export const nitro_zone = [0.78, 0.92];
+const nitro_width = 8;
+function new_hr_range(max_hr) {
+  const lo = Math.round(max_hr * nitro_zone[0]), hi = Math.round(max_hr * nitro_zone[1]) - nitro_width;
+  const low = lo + Math.floor(Math.random() * (hi - lo + 1));
+  return [low, low + nitro_width];
 }
 
-function new_nitro(charge = 0) {
-  return { charge, boost_left: 0, count: 0, in_range: false, range: new_hr_range() };
+function new_nitro(charge = 0, max_hr = 185) {
+  return { charge, boost_left: 0, count: 0, in_range: false, max_hr, range: new_hr_range(max_hr) };
 }
 
 // bots with their average watts for a given base strength (shown on the setup screen)
@@ -57,8 +61,8 @@ function new_rider(fields) {
   return { x: 0, v: 0, watts: 0, draft: 0, crank: rand(0, 6.28), energy: 0, finish_time: null, nitro: new_nitro(), ...fields };
 }
 
-export function create_race({ distance_m, base_watts }) {
-  const player = new_rider({ name: 'You', color: '#ffd400', is_player: true, lane: 2 });
+export function create_race({ distance_m, base_watts, max_hr = 185 }) {
+  const player = new_rider({ name: 'You', color: '#ffd400', is_player: true, lane: 2, nitro: new_nitro(0, max_hr) });
   const bots = bot_lineup(base_watts).map((b, i) => new_rider({
     ...b,
     is_player: false,
@@ -107,7 +111,7 @@ function update_nitro(r, dt, hr) {
     n.charge = 0;
     n.boost_left = nitro_cfg.boost_s;
     n.count += 1;
-    n.range = new_hr_range();
+    n.range = new_hr_range(n.max_hr);
   }
 }
 

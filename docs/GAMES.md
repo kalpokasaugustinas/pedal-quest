@@ -15,13 +15,15 @@
 
 Main games: Race, Crossroads, Sprint Cup, Workout (in the top tabs and the daily challenge). Summit, Pulse Pilot, Spin Beat and Escape are archived: hidden from the tabs, still playable from the Stats tab or a `#game-id` link. Their badges only show once earned.
 
-Players (`js/util.js`): a picker on the setup screen. Every `pq_*` key belongs to the active player; the first player ("me") keeps the plain keys, others use `<key>@<player id>`. Switching players reloads the profile in place, so Bluetooth stays connected.
+Rider bar (top of setup and stats, folded once the trainer connects): player name (rename only), sync button, trainer + HR strap connect, FTP / max HR / weight / sounds. Set once, every game reads them. Weight is the physics mass (rider + 9 kg bike): it sets acceleration, speed, distance and climbing; bots use the same mass, so it doesn't change who wins.
+
+Player storage (`js/util.js`): every `pq_*` key belongs to the active player; the first player ("me") keeps the plain keys, others would use `<key>@<player id>`. The UI has one player; the multi-player storage is kept for later.
 
 Cloud sync (`js/cloud.js`, optional): Google sign-in through Firebase, same project and method as Muscle Map. All players' keys go as one JSON string into the `pedal_quest` field of `users/<uid>` in Firestore (merge write: Muscle Map keeps its own field). Changes upload 1.5 s after the last write; a change from another device applies live, but never during a game (it waits until the game ends). First sign-in on a device with rides asks which copy wins.
 
 Stats tab (`js/stats.js`, `#stats`): lifetime totals, most played game, daily streak, days ridden, records (max power, best 5 s / 1 / 5 / 20 min, best NP, max HR, longest ride / distance / work, each with the day), and per game: plays, time, distance and the best result of every board.
 
-Ride history: the setup screen lists recent rides and this week's totals (Monday to Sunday).
+Ride history and badges: collapsed sections at the bottom of the Stats tab. The history lists recent rides and this week's totals (Monday to Sunday).
 
 Ride export: results have a **Download ride (.tcx)** button (rides over 1 min). The TCX has 1-s trackpoints with power, HR, cadence and distance, so Strava / Garmin Connect / intervals.icu can import it. Games without a speed (Spin Beat, Workout, Pulse) get a virtual distance from the flat-road physics.
 
@@ -34,7 +36,7 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 ### 🏁 Race
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
 - Bots: slow power wave, random surges, a final sprint, and nitro at 50% of a perfect player's rate.
-- Nitro: a random 5 bpm HR window. 30 s inside fills the bar; outside it drains at half that speed. A full bar gives +80 W for 3 s.
+- Nitro: a random 8 bpm HR window inside the race zone (78–92% of max HR, so hard riding gets you there; spiking overshoots). 30 s inside fills the bar; outside it drains at half that speed. A full bar gives +80 W for 3 s.
 - Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds, campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: Sunny meadow, Misty valley, Starry night.
 - Mood: calm, soft colours (every palette colour desaturated a bit), softer PCF shadows, a CSS grade on the canvas (saturate / contrast) plus a warm soft-light tint and a vignette layer.
 - Riders: low-poly cyclist (tapered torso with stripe, aero helmet with visor, shoes) on a road bike with deep rims in the rider colour. Body language from effort (`animate_rider` in `js/world.js`; reference = FTP for you, average watts for bots): coasting = sits up and rests; steady = small shoulder rock; hard / surging / nitro = out of the saddle, bike rocks side to side with each pedal stroke, head down, heavy breathing. Arms and legs follow via simple IK.

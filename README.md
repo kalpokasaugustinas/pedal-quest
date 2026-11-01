@@ -7,7 +7,7 @@ A browser game controlled by your indoor bike trainer and heart rate strap. Your
 ## Games
 Pick a game from the tabs at the top. Bluetooth stays connected while you switch. All games use the same low-poly 3D world (3 scenery themes).
 
-- 🏁 **Race**: 3D race against 5 bots with drafting. Nitro charges when you keep your heart rate in a target window.
+- 🏁 **Race**: 3D race against 5 bots with drafting. Nitro charges when you hold your heart rate in a target window of your race zone.
 - 🔀 **Crossroads**: the road forks into 3 real paths each stage. Each shows the watts to hold and the points it pays. Do the math.
 - ⚡ **Sprint Cup**: one race where rivals and ghosts of your own past runs attack you from behind, one after another. Hold them off.
 - 📈 **Workout**: structured interval sessions scaled to your FTP, with optional ERG mode and an FTP ramp test.
@@ -19,7 +19,7 @@ Archived for now (still playable from the 📊 Stats tab):
 - 🌩️ **Escape**: an endless chase. A storm with growing power hunts you down.
 
 Every game has local top-10 leaderboards and a ride chart (power + heart rate) on the results screen. 24 badges to unlock, and a daily challenge with a streak. Download any ride as a .tcx file for Strava. Set your FTP, max HR and weight once, and the games scale to you.
-Several players per device, each with their own profile, scores, history and badges. Optional Google sign-in syncs all players across your devices. The 📊 Stats tab shows totals, the most played game, best results per game and all-time power / heart rate records.
+Set your rider details and connect the trainer + HR strap once in the rider bar at the top; every game uses them. Optional Google sign-in syncs your data across devices. The 📊 Stats tab shows totals, the most played game, best results per game and all-time power / heart rate records.
 No trainer? Demo mode gives you sliders for watts, cadence and heart rate.
 
 Details, rules and the architecture for developers: [docs/GAMES.md](docs/GAMES.md).

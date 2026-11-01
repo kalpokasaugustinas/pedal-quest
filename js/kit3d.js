@@ -3,7 +3,7 @@
 // warm trunks, calm colours, lit clouds, campfires, wind streaks, and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=22';
+import { seeded } from './util.js?v=23';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)

@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -17,15 +17,19 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 22 · 2026-11-01 15:15</span>
+    <span id="version">build 23 · 2026-11-01 15:37</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
 
-<!-- setup screen: sensors, profile, selected game's rules and options -->
-<section id="screen-setup" class="screen active">
-  <div class="panel">
-    <div class="row player-row"><label class="small" for="player">Player</label><select id="player"></select><button id="sync" class="sync-btn" hidden></button></div>
+<!-- rider bar: set up once for every game (name, sync, trainer + hr strap, rider details) -->
+<details id="rider" class="rider">
+  <summary id="rider-sum"></summary>
+  <div class="rider-body">
+    <div class="row player-row">
+      <label class="small" for="player-name">Player name</label><input id="player-name" maxlength="24" autocomplete="nickname">
+      <button id="sync" class="sync-btn" hidden></button>
+    </div>
     <div class="row"><button id="btn-trainer">Connect trainer</button><span id="st-trainer" class="st">not connected</span></div>
     <div class="row"><button id="btn-hr" class="secondary">Connect HR strap</button><span id="st-hr" class="st">optional</span></div>
     <p id="ble-warning" class="warn hidden">This browser has no Web Bluetooth. Use Chrome on Android or PC. Demo mode still works.</p>
@@ -35,8 +39,12 @@
       <label>Weight <input type="number" id="p-weight" inputmode="numeric" min="35" max="150"> kg</label>
       <label class="toggle"><input type="checkbox" id="p-sound"> Sounds</label>
     </div>
-    <p id="lifetime" class="small lifetime"></p>
+    <p class="small">Every game reads these. FTP sizes targets and rivals, max HR sets heart rate zones, weight sets how fast your watts move you (speed, distance, climbing).</p>
   </div>
+</details>
+
+<!-- setup screen: the selected game's rules and options -->
+<section id="screen-setup" class="screen active">
 
   <div class="panel daily" id="daily"></div>
 
@@ -52,13 +60,15 @@
   <p class="small" id="mode-note"></p>
 
   <div class="panel"><div class="label" id="g-board-label">Top scores</div><ol id="g-board" class="board"></ol></div>
-  <details class="panel badges" id="history"></details>
-  <details class="panel badges" id="badges"></details>
   <p class="small"><a href="test.html">Connection test page</a></p>
 </section>
 
-<!-- stats tab: totals, records, best result per game -->
-<section id="screen-stats" class="screen"><div id="stats-body"></div></section>
+<!-- stats tab: totals, records, best result per game, ride history, badges -->
+<section id="screen-stats" class="screen">
+  <div id="stats-body"></div>
+  <details class="panel badges" id="history"></details>
+  <details class="panel badges" id="badges"></details>
+</section>
 
 <!-- play screen shared by all games: canvas + game hud + shared metrics -->
 <section id="screen-play" class="screen">
@@ -106,6 +116,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=22"></script>
+<script type="module" src="js/main.js?v=23"></script>
 </body>
 </html>

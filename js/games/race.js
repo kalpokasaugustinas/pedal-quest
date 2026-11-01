@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=22';
-import { create_world } from '../world.js?v=22';
-import { scenery_option } from '../kit3d.js?v=22';
-import { fmt_time, ordinal } from '../util.js?v=22';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=23';
+import { create_world } from '../world.js?v=23';
+import { scenery_option } from '../kit3d.js?v=23';
+import { fmt_time, ordinal } from '../util.js?v=23';
 
 export default {
   id: 'race',
@@ -12,7 +12,7 @@ export default {
   uses: ['power', 'cadence', 'hr'],
   how: [
     'Your watts drive your rider. Bots ride the same physics with their own average power, random attacks and a final sprint.',
-    'Nitro: keep your heart rate inside the target window. 30 s in range fills the bar, outside it drains at half speed.',
+    'Nitro: keep your heart rate inside the target window (8 bpm, somewhere in 78–92% of your max HR: race effort). 30 s in range fills the bar, outside it drains at half speed. Ride steady: spikes overshoot it.',
     'A full bar fires automatically: +80 W for 3 s, then a new window is picked.',
     'Bots get nitro too, at half the rate of a perfect player.',
     'Drafting: ride within 5 m behind anyone and your air drag drops by up to 30%. Bots draft too.',
@@ -30,7 +30,7 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts });
+  const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts, max_hr: env.profile.max_hr });
   const world = create_world(env.canvas, race, env.opts.scenery, env.profile.ftp);
 
   env.hud.innerHTML = `
