@@ -1,8 +1,9 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
-import { setup_2d, sky, hills, draw_rider, label, mix } from '../draw2d.js?v=18';
-import { step_speed } from '../physics.js?v=18';
-import { clamp, fmt_clock } from '../util.js?v=18';
+import * as THREE from 'three';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { step_speed } from '../physics.js?v=19';
+import { clamp, fmt_clock } from '../util.js?v=19';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km
@@ -25,6 +26,7 @@ export default {
   ],
   options: [
     { key: 'level', label: 'Storm start power', choices: [[0.55, 'Easy · 55% FTP'], [0.65, 'Normal · 65%'], [0.75, 'Hard · 75%']], def: 0.65 },
+    scenery_option('valley'),
   ],
   setup_html: (o, profile) => {
     const at = (min) => Math.round(profile.ftp * (o.level + ramp_per_min * min));
@@ -36,7 +38,6 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
   const ftp = env.profile.ftp;
   const st = {
     x: 0, v: 0, crank: 0, time: 0, energy: 0,
@@ -61,6 +62,7 @@ function create(env) {
     speed: () => st.v,
     update(dt, input) {
       st.v = step_speed(st.v, game.done ? 0 : input.watts, dt);
+      watts_now = game.done ? 0 : input.watts;
       st.x += st.v * dt;
       st.crank += (input.cadence / 60) * 2 * Math.PI * dt;
       st.rain_t += dt;
@@ -103,116 +105,126 @@ function create(env) {
       }
     },
     render(dt, input) {
-      draw_scene();
+      draw_scene(dt);
       update_hud(input);
     },
-    resize: () => view.resize(),
-    dispose() {},
+    resize: () => kit.resize(),
+    dispose: () => kit.dispose(),
     result,
   };
 
-  function draw_scene() {
-    const { ctx, w, h } = view;
-    const ins = env.insets();
+  // ---- 3d: the camera rides ahead looking back at you; the storm wall rolls in behind ----
+  const vis = 2.5;
+  const kit = create_kit(env.canvas, { theme: env.opts.scenery });
+  const me = kit.add_rider('#ffd400');
+  const base_light = { hemi: kit.hemi.intensity, sun: kit.sun.intensity, fog: kit.scene.fog.color.clone(), near: kit.scene.fog.near, far: kit.scene.fog.far };
+  const storm_fog = new THREE.Color('#3a4152');
+
+  // storm wall: big dark faceted cloud blobs across the valley, slowly churning
+  const storm = new THREE.Group();
+  const cloud_mat = new THREE.MeshStandardMaterial({ color: '#2a2f3d', flatShading: true, roughness: 1 });
+  const blobs = [];
+  for (let i = 0; i < 40; i++) {
+    const r = 10 + Math.random() * 14;
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), cloud_mat);
+    b.position.set((Math.random() - 0.5) * 170, 6 + Math.random() * 55, (Math.random() - 0.5) * 30);
+    b.scale.y = 0.7;
+    b.userData.spin = (Math.random() - 0.5) * 0.4;
+    storm.add(b);
+    blobs.push(b);
+  }
+  // rain: falling streaks in and just ahead of the wall
+  const rain_n = 400;
+  const rain_pos = new Float32Array(rain_n * 6);
+  const rain_geo = new THREE.BufferGeometry();
+  rain_geo.setAttribute('position', new THREE.BufferAttribute(rain_pos, 3));
+  const rain_pts = Array.from({ length: rain_n }, () => ({ x: (Math.random() - 0.5) * 120, y: Math.random() * 40, z: -Math.random() * 40 + 10 }));
+  const rain = new THREE.LineSegments(rain_geo, new THREE.LineBasicMaterial({ color: '#a8b8d8', transparent: true, opacity: 0.5 }));
+  rain.frustumCulled = false;
+  storm.add(rain);
+  // lightning: a jagged line + a flash light
+  const bolt_geo = new THREE.BufferGeometry();
+  bolt_geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12 * 3), 3));
+  const bolt = new THREE.Line(bolt_geo, new THREE.LineBasicMaterial({ color: '#fffbe0', transparent: true }));
+  bolt.frustumCulled = false;
+  const flash_light = new THREE.PointLight('#dfe8ff', 0, 400, 1.2);
+  flash_light.position.set(0, 30, 0);
+  storm.add(bolt, flash_light);
+  kit.scene.add(storm);
+
+  // shelter hut beside the road at the next checkpoint
+  const hut = new THREE.Group();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 4), new THREE.MeshStandardMaterial({ color: '#8d6e63', flatShading: true }));
+  wall.position.y = 1.5;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.2, 4), new THREE.MeshStandardMaterial({ color: '#c62828', flatShading: true }));
+  roof.position.y = 4.1;
+  roof.rotation.y = Math.PI / 4;
+  roof.scale.z = 0.8;
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2), new THREE.MeshBasicMaterial({ color: '#ffe082' }));
+  door.position.set(0, 1, 2.01);
+  hut.add(wall, roof, door);
+  hut.traverse((o) => { o.castShadow = true; });
+  kit.scene.add(hut);
+  let hut_cp = null, hut_board = null;
+
+  let watts_now = 0, last_bolt = -1;
+  function draw_scene(dt) {
+    const z = -st.x * vis;
     const gap = st.x - st.storm_x;
     const danger = clamp(1 - gap / 90, 0, 1);   // 0 = safe, 1 = caught
-    const px = w * 0.62;
-    // zoom out so the storm front is always on screen
-    const ppm = clamp(Math.min(w / 90, (px - 30) / Math.max(20, gap + 10)), 1.5, 14);
-    const sx = (x) => px + (x - st.x) * ppm;
-    const ground_y = h - ins.bottom - Math.max(50, h * 0.08);
+    kit.place_rider(me, { z, x: 0, watts: watts_now, v: st.v, crank: st.crank, dist: st.x * vis, ref: ftp }, dt);
 
-    // sky darkens as the storm gets closer
-    sky(ctx, w, ground_y, mix('#6fb8ec', '#2b3242', danger), mix('#d4eefa', '#596273', danger));
-    hills(ctx, w, ground_y, st.x * ppm * 0.15, Math.min(150, ground_y * 0.35), mix('#8fbf86', '#3c4a40', danger), 0);
-    hills(ctx, w, ground_y, st.x * ppm * 0.35, Math.min(80, ground_y * 0.2), mix('#6aa25a', '#334034', danger), 2);
-    ctx.fillStyle = mix('#5f9a4a', '#2f3d2c', danger);
-    ctx.fillRect(0, ground_y, w, h - ground_y);
-    ctx.fillStyle = '#3a3d42';
-    ctx.fillRect(0, ground_y, w, 34);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    const off = (st.x * ppm) % 50;
-    for (let x = -off; x < w; x += 50) ctx.fillRect(x, ground_y + 15, 24, 4);
+    // storm wall at the front's position (real gap, so it reads like in the 2d version but bigger)
+    const sz = -st.storm_x * vis + 12;
+    storm.position.set(kit.road_x(sz), kit.road_y(sz), sz);
+    for (const b of blobs) { b.rotation.y += b.userData.spin * dt; b.rotation.x += b.userData.spin * 0.5 * dt; }
+    for (let i = 0; i < rain_n; i++) {
+      const p = rain_pts[i];
+      p.y -= 40 * dt;
+      if (p.y < 0) { p.y = 40; p.x = (Math.random() - 0.5) * 120; p.z = -Math.random() * 40 + 10; }
+      const o = i * 6;
+      rain_pos[o] = p.x; rain_pos[o + 1] = p.y; rain_pos[o + 2] = p.z;
+      rain_pos[o + 3] = p.x - 0.3; rain_pos[o + 4] = p.y - 1.6; rain_pos[o + 5] = p.z;
+    }
+    rain_geo.attributes.position.needsUpdate = true;
+    // lightning bolt from the cloud base to the ground when the game flashes
+    if (st.flash > 0 && st.bolt !== last_bolt) {
+      last_bolt = st.bolt;
+      const bp = bolt_geo.attributes.position;
+      let bx = (st.bolt - 0.5) * 70, by = 32;
+      for (let i = 0; i < 12; i++) {
+        bp.setXYZ(i, bx, by, -8 + Math.random() * 4);
+        bx += (Math.random() - 0.5) * 6;
+        by -= 32 / 11;
+      }
+      bp.needsUpdate = true;
+    }
+    bolt.visible = st.flash > 0;
+    bolt.material.opacity = st.flash;
+    flash_light.intensity = st.flash * 4000;
 
-    // shelter checkpoint ahead
-    const cpx = sx(st.next_cp);
-    if (cpx < w + 80) draw_shelter(ctx, cpx, ground_y);
+    // the world darkens as the storm closes in
+    kit.hemi.intensity = base_light.hemi * (1 - 0.55 * danger) + st.flash * 1.5;
+    kit.sun.intensity = base_light.sun * (1 - 0.7 * danger);
+    kit.scene.fog.color.copy(base_light.fog).lerp(storm_fog, danger * 0.8);
+    kit.scene.fog.near = base_light.near * (1 - 0.5 * danger);
+    kit.scene.fog.far = base_light.far * (1 - 0.35 * danger);
 
-    // km markers
-    ctx.font = '700 12px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    const marker_step = ppm < 4 ? 200 : 100;
-    for (let m = Math.ceil((st.x - px / ppm) / marker_step) * marker_step; sx(m) < w; m += marker_step) {
-      if (m <= 0) continue;
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(sx(m) - 1, ground_y - 22, 3, 22);
-      ctx.fillText(`${m} m`, sx(m), ground_y - 26);
+    // shelter at the next checkpoint
+    if (hut_cp !== st.next_cp) {
+      hut_cp = st.next_cp;
+      const hz = -hut_cp * vis;
+      const hx = kit.road_x(hz) + kit.road_edge + 6;
+      hut.position.set(hx, kit.ground(hx, hz), hz);
+      if (hut_board) kit.remove(hut_board);
+      hut_board = kit.add_board(hz + 6, `SHELTER ${st.checkpoints + 1}`, 1, '#c62828', '#ffffff', 2.6);
     }
 
-    const s = clamp(h * 0.06, 32, 54);
-    draw_rider(ctx, px, ground_y + 24, s, { color: '#ffd400', crank: st.crank, wheel: st.x / 0.34 });
-
-    // storm front: jagged dark cloud wall from the left edge, rain inside it
-    const front = sx(st.storm_x);
-    if (front > -60) {
-      const t = st.rain_t;
-      ctx.fillStyle = 'rgba(25,28,40,0.92)';
-      ctx.beginPath();
-      ctx.moveTo(-10, 0);
-      for (let y = 0; y <= h; y += 16) {
-        const wobble = 22 * Math.sin(y / 37 + t * 2) + 12 * Math.sin(y / 13 - t * 3);
-        ctx.lineTo(front + wobble, y);
-      }
-      ctx.lineTo(-10, h);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(160,180,220,0.35)';
-      ctx.lineWidth = 1.5;
-      for (let i = 0; i < 60; i++) {
-        const rx = ((i * 53.3 + t * 40) % Math.max(20, front + 30)) - 10;
-        const ry = (i * 97.1 + t * 600) % h;
-        ctx.beginPath();
-        ctx.moveTo(rx, ry);
-        ctx.lineTo(rx - 4, ry + 14);
-        ctx.stroke();
-      }
-    }
-
-    // lightning flash + bolt
-    if (st.flash > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${0.35 * st.flash})`;
-      ctx.fillRect(0, 0, w, h);
-      if (front > 0 && st.bolt !== null) {
-        ctx.strokeStyle = `rgba(255,255,220,${st.flash})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        let bx = front * st.bolt, by = 0;
-        ctx.moveTo(bx, by);
-        while (by < ground_y) {
-          bx += (Math.random() - 0.5) * 40;
-          by += 30;
-          ctx.lineTo(bx, by);
-        }
-        ctx.stroke();
-      }
-    }
-
-    if (gap < 25 && !game.done) label(ctx, '⚠ STORM!', w / 2, ins.top + 60, 34, '#ff5252');
-  }
-
-  function draw_shelter(ctx, x, ground_y) {
-    ctx.fillStyle = '#8d6e63';
-    ctx.fillRect(x - 30, ground_y - 46, 60, 46);
-    ctx.fillStyle = '#c62828';
-    ctx.beginPath();
-    ctx.moveTo(x - 40, ground_y - 46);
-    ctx.lineTo(x, ground_y - 76);
-    ctx.lineTo(x + 40, ground_y - 46);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#ffe082';
-    ctx.fillRect(x - 10, ground_y - 30, 20, 30);
-    label(ctx, 'SHELTER', x, ground_y - 90, 14, '#fff');
+    // camera ahead of you, looking back: you riding at it, the storm behind (zooms out as the gap grows)
+    const gap_vis = Math.max(10, gap * vis);
+    const speed = st.v * vis;
+    kit.chase({ z, reverse: true, back: 5 + Math.min(3, gap_vis * 0.015), height: 2.3 + Math.min(2.5, gap_vis * 0.012), look_ahead: Math.min(50, gap_vis * 0.35), look_y: 4, speed, smooth: 3 }, dt);
+    kit.frame(dt, { focus_z: z, speed, look_back: true });
   }
 
   function update_hud(input) {

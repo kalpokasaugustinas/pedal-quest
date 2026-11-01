@@ -1,8 +1,10 @@
 // sprint cup: knockout drag-race tournament. three standing-start sprints (quarter, semi, final) against
 // one rival each, with a recovery ride between rounds. lose a round and you're out
-import { setup_2d, sky, hills, draw_rider, label, round_rect } from '../draw2d.js?v=18';
-import { step_speed } from '../physics.js?v=18';
-import { clamp, fmt_time, fmt_clock } from '../util.js?v=18';
+import * as THREE from 'three';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { step_speed } from '../physics.js?v=19';
+import { clamp, fmt_time, fmt_clock } from '../util.js?v=19';
 
 const rounds = [
   { name: 'Quarterfinal', rival: 'Rocket Rosa', color: '#e53935', strength: 0.9 },
@@ -36,6 +38,7 @@ export default {
   options: [
     { key: 'level', label: 'Rival level', choices: [[1.4, 'Club'], [1.7, 'Racer'], [2.0, 'Pro']], def: 1.4 },
     { key: 'dist', label: 'Sprint distance', choices: [[200, '200 m'], [250, '250 m'], [400, '400 m']], def: 250 },
+    scenery_option('meadow'),
   ],
   setup_html: (o, profile) => `<p class="small">Rival peak power: ${rounds.map((r) => `${r.rival} ~${Math.round(profile.ftp * o.level * r.strength)} W`).join(' · ')} (from FTP ${profile.ftp} W).</p>`,
   board: (o) => ({ key: `sprint_${o.level}_${o.dist}`, label: `Top scores · ${o.dist} m · level ${o.level}`, lower: false, fmt: (s) => `${s} pts` }),
@@ -44,7 +47,6 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
   const ftp = env.profile.ftp;
   const dist = env.opts.dist;
   const st = {
@@ -100,6 +102,7 @@ function create(env) {
     env.big_text(`WIN +${pts}`, 1500, 'good');
     env.sfx('perfect');
     st.round += 1;
+    st.cruise_x = base_x + st.p.x;   // keep riding on from the finish line
     st.phase = 'recover';
     st.t_phase = 0;
   }
@@ -161,83 +164,94 @@ function create(env) {
       if (st.p.finish !== null && st.r.finish !== null) end_round();
     },
     render(dt, input) {
-      draw_scene(input);
+      draw_scene(input, dt);
       update_hud(input);
     },
-    resize: () => view.resize(),
-    dispose() {},
+    resize: () => { kit.resize(); view.resize(); },
+    dispose: () => kit.dispose(),
     result,
   };
 
-  function draw_scene(input) {
-    const { ctx, w, h } = view;
-    const ins = env.insets();
+  // ---- 3d: open road between rounds; each sprint gets a start + finish arch and a crowd at the line ----
+  const vis = 2.5;
+  const kit = create_kit(env.canvas, { theme: env.opts.scenery, road_w: 6, lanes: 2 });
+  const me = kit.add_rider('#ffd400');
+  const rival_model = kit.add_rider(rounds[0].color);
+  const view = overlay_2d(env.overlay);   // duel bars + round card on top of the 3d view
+  let arches = [], built_for = -1, base_x = 0;
+
+  // crowd: little low-poly people along the last stretch, cheering (bobbing) during the sprint
+  const crowd_n = 160;
+  const body_geo = new THREE.CylinderGeometry(0.22, 0.28, 1.0, 6).translate(0, 0.5, 0);
+  const head_geo = new THREE.IcosahedronGeometry(0.17, 0).translate(0, 1.2, 0);
+  const bodies = new THREE.InstancedMesh(body_geo, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), crowd_n);
+  const heads = new THREE.InstancedMesh(head_geo, new THREE.MeshStandardMaterial({ color: '#e9b27f', flatShading: true }), crowd_n);
+  bodies.frustumCulled = heads.frustumCulled = false;
+  bodies.castShadow = true;
+  kit.scene.add(bodies, heads);
+  const fans = Array.from({ length: crowd_n }, (_, i) => ({ side: i % 2 ? 1 : -1, along: Math.random(), off: 1.2 + Math.random() * 3, phase: Math.random() * 6 }));
+  const shirt = ['#ef5350', '#42a5f5', '#ffee58', '#66bb6a', '#ffffff', '#ab47bc', '#ffa726'];
+  fans.forEach((f, i) => bodies.setColorAt(i, new THREE.Color(shirt[i % shirt.length])));
+  const m4 = new THREE.Matrix4();
+
+  // start + finish arch for the current round (the sprint starts where you were cruising)
+  function build_round() {
+    for (const a of arches) kit.remove(a);
+    base_x = st.cruise_x;
+    const z0 = -base_x * vis, z1 = -(base_x + dist) * vis;
+    arches = [kit.add_arch(z0, 'START', '#2e7d32'), kit.add_arch(z1, 'FINISH', '#c62828')];
+    for (let m = 50; m < dist; m += 50) arches.push(kit.add_board(-(base_x + m) * vis, `${dist - m} m`, -1));
+    built_for = st.round;
+    rival_model.mats[0].color.set(rounds[st.round].color);
+  }
+
+  function place_crowd(t) {
+    const z1 = -(base_x + dist) * vis;
+    fans.forEach((f, i) => {
+      const z = z1 + 12 - f.along * 90;
+      const x = kit.road_x(z) + f.side * (kit.road_edge + f.off);
+      const jump = st.phase === 'sprint' ? Math.max(0, Math.sin(t * 9 + f.phase)) * 0.35 : 0;
+      m4.makeTranslation(x, kit.ground(x, z) + jump, z);
+      bodies.setMatrixAt(i, m4);
+      heads.setMatrixAt(i, m4);
+    });
+    bodies.instanceMatrix.needsUpdate = true;
+    heads.instanceMatrix.needsUpdate = true;
+    if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
+  }
+
+  let t_anim = 0;
+  function draw_scene(input, dt) {
+    t_anim += dt;
     const sprinting = st.phase === 'sprint' || st.phase === 'staging';
-    const cam_x = sprinting ? Math.max(st.p.x, st.r.x) * 0.5 + Math.min(st.p.x, st.r.x) * 0.5 : st.cruise_x;
-    const ppm = clamp(w / 35, 8, 30);
-    const cx = w * 0.45;
-    const sx = (x) => cx + (x - cam_x) * ppm;
-    const ground_y = h - ins.bottom - Math.max(40, h * 0.06);
-    const lane_h = Math.min(70, h * 0.09);
-
-    sky(ctx, w, ground_y, '#ff9a5c', '#ffe0b2');   // evening track light
-    hills(ctx, w, ground_y - lane_h * 2, cam_x * ppm * 0.1, Math.min(120, h * 0.15), '#a1887f', 0);
-    // stands with a crowd
-    ctx.fillStyle = '#5d4037';
-    ctx.fillRect(0, ground_y - lane_h * 2 - 30, w, 30);
-    for (let i = 0; i < w; i += 9) {
-      const x = i - ((cam_x * ppm * 0.6) % 9);
-      ctx.fillStyle = ['#ef5350', '#42a5f5', '#ffee58', '#66bb6a', '#ffffff'][Math.abs(Math.floor((i + cam_x * 5) / 9)) % 5];
-      ctx.beginPath();
-      ctx.arc(x, ground_y - lane_h * 2 - 22 + Math.sin(i + st.t_phase * 10) * (sprinting ? 2 : 0), 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // track: two lanes
-    ctx.fillStyle = '#c0574a';
-    ctx.fillRect(0, ground_y - lane_h * 2, w, lane_h * 2 + 10);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillRect(0, ground_y - lane_h * 2, w, 3);
-    ctx.fillRect(0, ground_y - lane_h, w, 2);
-    ctx.fillRect(0, ground_y + 8, w, 3);
-    ctx.fillStyle = '#6d4c41';
-    ctx.fillRect(0, ground_y + 11, w, h - ground_y);
-
+    if (sprinting && built_for !== st.round) build_round();
+    if (built_for >= 0) place_crowd(t_anim);
+    const ftp_ref = ftp;
+    let pz, speed;
     if (sprinting) {
-      // start and finish lines, 50 m marks
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(sx(0) - 2, ground_y - lane_h * 2, 4, lane_h * 2 + 10);
-      for (let m = 50; m < dist; m += 50) {
-        const x = sx(m);
-        if (x < -20 || x > w + 20) continue;
-        ctx.fillRect(x - 1, ground_y - lane_h * 2, 2, 8);
-        label(ctx, `${m}`, x, ground_y - lane_h * 2 - 40, 12, '#fff');
-      }
-      const fx = sx(dist);
-      if (fx > -20 && fx < w + 20) {
-        const sq = 8;
-        for (let y = ground_y - lane_h * 2, row = 0; y < ground_y + 10; y += sq, row++) {
-          for (let col = 0; col < 2; col++) {
-            ctx.fillStyle = (row + col) % 2 ? '#111' : '#fff';
-            ctx.fillRect(fx - sq + col * sq, y, sq, sq);
-          }
-        }
-      }
-    }
-
-    const s = clamp(lane_h * 0.75, 28, 52);
-    const rival = rounds[st.round];
-    if (sprinting) {
-      draw_rider(ctx, sx(st.r.x), ground_y - lane_h - 2, s * 0.9, { color: rival.color, crank: st.r.crank, wheel: st.r.x / 0.34 });
-      draw_rider(ctx, sx(st.p.x), ground_y + 6, s, { color: '#ffd400', crank: st.p.crank, wheel: st.p.x / 0.34 });
-      // off-screen rival marker
-      const rx = sx(st.r.x);
-      if (rx > w) label(ctx, `${rival.rival} ${Math.round(st.r.x - st.p.x)} m ▶`, w - 10, ground_y - lane_h * 1.5, 14, rival.color, 'right');
-      if (rx < 0) label(ctx, `◀ ${rival.rival} ${Math.round(st.p.x - st.r.x)} m`, 10, ground_y - lane_h * 1.5, 14, rival.color, 'left');
-      draw_power_duel(ctx, w, ins.top + 24, input);
+      pz = -(base_x + st.p.x) * vis;
+      // rival keeps the real gap to you (like the race pack)
+      const rz = pz - (st.r.x - st.p.x);
+      const rw = st.phase === 'sprint' && st.r.finish === null ? rival_watts(rival_peak(), st.t_sprint) : 0;
+      kit.place_rider(me, { z: pz, x: -0.9, watts: st.p.finish === null ? input.watts : 0, v: st.p.v, crank: st.p.crank, dist: -pz, ref: ftp_ref }, dt);
+      kit.place_rider(rival_model, { z: rz, x: 0.9, watts: rw, v: st.r.v, crank: st.r.crank, dist: -rz, ref: rival_peak() / 1.6 }, dt);
+      rival_model.group.visible = true;
+      speed = st.p.v * vis;
     } else {
-      draw_rider(ctx, cx, ground_y + 6, s, { color: '#ffd400', crank: st.p.crank, wheel: st.cruise_x / 0.34 });
-      draw_round_card(ctx, w, ins.top + 20, Math.max(ins.top + 20, ground_y - lane_h * 2 - 60));
+      pz = -st.cruise_x * vis;
+      kit.place_rider(me, { z: pz, x: 0, watts: input.watts, v: st.p.v, crank: st.p.crank, dist: -pz, ref: ftp_ref }, dt);
+      rival_model.group.visible = false;
+      speed = st.p.v * vis;
     }
+    kit.chase({ z: pz, x: sprinting ? 0 : 0, speed, smooth: 6 }, dt);
+    kit.frame(dt, { focus_z: pz, speed });
+
+    // 2d overlay: live power duel during the sprint, the next-round card between rounds
+    const { w, h } = view;
+    const ins = env.insets();
+    view.clear();
+    if (sprinting) draw_power_duel(view.ctx, w, ins.top + 24, input);
+    else draw_round_card(view.ctx, w, ins.top + 20, Math.max(ins.top + 200, h * 0.45));
   }
 
   // live power duel in the sky: your watts vs the rival's (watch them fade!)

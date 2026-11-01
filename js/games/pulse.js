@@ -1,8 +1,9 @@
 // pulse pilot: your heart rate is your altitude. fly a pedal-powered plane through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
-import { setup_2d, sky, hills, clouds, round_rect, label } from '../draw2d.js?v=18';
-import { step_speed } from '../physics.js?v=18';
-import { clamp, rand } from '../util.js?v=18';
+import * as THREE from 'three';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { step_speed } from '../physics.js?v=19';
+import { clamp, rand } from '../util.js?v=19';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect
@@ -25,6 +26,7 @@ export default {
   options: [
     { key: 'gates', label: 'Gates', choices: [[8, '8'], [12, '12'], [20, '20']], def: 8 },
     { key: 'zone', label: 'Heart rate zone', choices: [['easy', 'Easy (55–75%)'], ['mixed', 'Mixed (60–85%)'], ['hard', 'Hard (70–92%)']], def: 'mixed' },
+    scenery_option('meadow'),
   ],
   setup_html: (o, profile) => {
     const [lo, hi] = zone_range(o.zone, profile.max_hr);
@@ -57,7 +59,6 @@ function make_gates(count, lo, hi) {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
   const [lo, hi] = zone_range(env.opts.zone, env.profile.max_hr);
   const view_lo = lo - 15, view_hi = hi + 10;   // visible bpm range
   const gates = make_gates(env.opts.gates, lo, hi);
@@ -112,12 +113,12 @@ function create(env) {
         }
       }
     },
-    render() {
-      draw_scene();
+    render(dt) {
+      draw_scene(dt);
       update_hud();
     },
-    resize: () => view.resize(),
-    dispose() {},
+    resize: () => kit.resize(),
+    dispose: () => kit.dispose(),
     result,
   };
 
@@ -131,131 +132,142 @@ function create(env) {
     env.sfx(kind);
   }
 
-  function draw_scene() {
-    const { ctx, w, h } = view;
-    const ins = env.insets();
-    const top = ins.top + 30;
-    const bottom = h - ins.bottom - 30;
-    const y_of = (bpm) => top + ((view_hi - bpm) / (view_hi - view_lo)) * (bottom - top);
-    const ppm = clamp(w / 260, 1.4, 5);   // meters -> pixels: ~260 m visible ahead
-    const px = w * 0.22;
-    const sx = (x) => px + (x - st.x) * ppm;
+  // ---- 3d: a pedal-powered plane flying over the low-poly valley, gates as frames at bpm heights ----
+  const vis = 2.5;
+  const kit = create_kit(env.canvas, { theme: env.opts.scenery, posts: false });
+  const alt_lo = 6, alt_hi = 46;   // meters above the road for view_lo .. view_hi bpm
+  const y_of = (bpm) => alt_lo + ((clamp(bpm, view_lo, view_hi) - view_lo) / (view_hi - view_lo)) * (alt_hi - alt_lo);
+  const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, ...extra });
 
-    sky(ctx, w, h, '#3d7fd1', '#cfe8fa');
-    clouds(ctx, w, h * 0.9, st.x * 0.6, 'rgba(255,255,255,0.7)');
-    hills(ctx, w, h, st.x * 0.3, Math.min(160, h * 0.2), '#8fb98a', 0);
-    hills(ctx, w, h, st.x * 0.8, Math.min(90, h * 0.12), '#6d9c64', 2);
+  // plane: faceted fuselage, wide wing, tail, spinning prop, pilot under a glass canopy
+  const plane = new THREE.Group();
+  const body_mat = mat('#ffd400'), wing_mat = mat('#ffb300'), dark = mat('#2b2f38');
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.18, 3.2, 7), body_mat);
+  fuse.rotation.x = Math.PI / 2;
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 7), body_mat);
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.z = -1.9;
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.1, 0.9), wing_mat);
+  wing.position.set(0, 0.25, -0.3);
+  const tail_h = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.5), wing_mat);
+  tail_h.position.set(0, 0.1, 1.45);
+  const tail_v = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.6), wing_mat);
+  tail_v.position.set(0, 0.5, 1.45);
+  const prop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.05), dark);
+  prop.position.z = -2.2;
+  const pilot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), mat('#e53935'));
+  pilot.position.set(0, 0.45, -0.4);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), mat('#90caf9', { transparent: true, opacity: 0.55 }));
+  canopy.position.set(0, 0.2, -0.4);
+  canopy.scale.z = 1.6;
+  plane.add(fuse, nose, wing, tail_h, tail_v, prop, pilot, canopy);
+  plane.traverse((o) => { o.castShadow = true; });
+  kit.scene.add(plane);
 
-    // bpm grid
-    ctx.font = '600 12px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    for (let b = Math.ceil(view_lo / 10) * 10; b <= view_hi; b += 10) {
-      const y = y_of(b);
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(34, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(String(b), 4, y + 4);
-    }
-
-    // gates: two poles with an opening of +-5 bpm around the target
-    for (const g of gates) {
-      const gx = sx(g.x);
-      if (gx < -40 || gx > w + 40) continue;
-      const open_top = y_of(g.hr + good_bpm), open_bot = y_of(g.hr - good_bpm);
-      const col = g.result === 'perfect' ? '#7ee08a' : g.result === 'good' ? '#ffd54f' : g.result === 'miss' ? '#ef5350' : '#ff7043';
-      ctx.fillStyle = col;
-      round_rect(ctx, gx - 7, top - 20, 14, open_top - (top - 20), 6);
-      ctx.fill();
-      round_rect(ctx, gx - 7, open_bot, 14, bottom + 20 - open_bot, 6);
-      ctx.fill();
-      // perfect band
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(gx - 7, y_of(g.hr + perfect_bpm), 14, y_of(g.hr - perfect_bpm) - y_of(g.hr + perfect_bpm));
-      label(ctx, `${g.hr}`, gx + 12, (open_top + open_bot) / 2, 16, '#fff', 'left');
-    }
-
-    // flight path
-    if (st.trail.length > 1) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      st.trail.forEach(([x, a], i) => {
-        if (a === null) return;
-        const p = [sx(x), y_of(a)];
-        if (i === 0) ctx.moveTo(...p); else ctx.lineTo(...p);
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // projection: where your current hr trend puts you at the next gate (max 30 s ahead)
-    const ng = gates[st.next];
-    if (ng && st.alt !== null && st.v > 0.5) {
-      const eta = Math.min(30, (ng.x - st.x) / st.v);
-      const proj = clamp(st.alt + st.slope * eta, view_lo, view_hi);
-      const gx = sx(ng.x);
-      const hit = Math.abs(proj - ng.hr) <= good_bpm;
-      ctx.strokeStyle = hit ? 'rgba(126,224,138,0.9)' : 'rgba(255,138,128,0.9)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([3, 5]);
-      ctx.beginPath();
-      ctx.moveTo(px, y_of(clamp(st.alt, view_lo, view_hi)));
-      ctx.lineTo(gx, y_of(proj));
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(gx, y_of(proj), 7, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // plane (only when there's an hr)
-    if (st.alt !== null) draw_plane(ctx, px, y_of(clamp(st.alt, view_lo, view_hi)), clamp(h * 0.035, 18, 30));
-    else label(ctx, 'No heart rate', w / 2, h / 2, 24, '#ff8a80');
+  // bpm number on a small board
+  function bpm_texture(text) {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 96;
+    const x = c.getContext('2d');
+    x.fillStyle = 'rgba(20,24,30,0.85)';
+    x.fillRect(0, 0, 256, 96);
+    x.fillStyle = '#fff';
+    x.font = '900 64px system-ui, sans-serif';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(text, 128, 52);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
   }
 
-  function draw_plane(ctx, x, y, s) {
-    ctx.save();
-    ctx.translate(x, y);
-    // body
-    ctx.fillStyle = '#ffd400';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, s * 1.6, s * 0.45, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // wing + tail
-    ctx.fillStyle = '#ffb300';
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.3, 0);
-    ctx.lineTo(s * 0.4, 0);
-    ctx.lineTo(-s * 0.6, s * 1.1);
-    ctx.lineTo(-s * 1.0, s * 1.1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-s * 1.3, 0);
-    ctx.lineTo(-s * 1.7, -s * 0.9);
-    ctx.lineTo(-s * 1.4, -s * 0.9);
-    ctx.lineTo(-s * 0.9, 0);
-    ctx.closePath();
-    ctx.fill();
-    // cockpit window + pilot helmet
-    ctx.fillStyle = '#90caf9';
-    ctx.beginPath();
-    ctx.ellipse(s * 0.5, -s * 0.25, s * 0.45, s * 0.28, 0, Math.PI, Math.PI * 2);
-    ctx.fill();
-    // propeller spins with your cadence
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 3;
-    const r = s * 0.8 * Math.abs(Math.cos(st.prop));
-    ctx.beginPath();
-    ctx.moveTo(s * 1.65, -r);
-    ctx.lineTo(s * 1.65, r);
-    ctx.stroke();
-    ctx.restore();
+  // gates: a frame across the valley; the opening is target +-5 bpm, the inner band is perfect (+-2)
+  const gate_w = 14;
+  const gate_models = gates.map((g) => {
+    const grp = new THREE.Group();
+    const m = mat('#ff7043');
+    const y1 = y_of(g.hr - good_bpm), y2 = y_of(g.hr + good_bpm);
+    const post = (x, ya, yb) => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.6, yb - ya, 0.6), m);
+      p.position.set(x, (ya + yb) / 2, 0);
+      p.castShadow = true;
+      grp.add(p);
+    };
+    for (const x of [-gate_w / 2, gate_w / 2]) { post(x, 0, y1); post(x, y2, alt_hi + 8); }
+    for (const y of [y1, y2]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(gate_w + 0.6, 0.5, 0.5), m);
+      bar.position.y = y;
+      bar.castShadow = true;
+      grp.add(bar);
+    }
+    const band = new THREE.Mesh(new THREE.PlaneGeometry(gate_w, y_of(g.hr + perfect_bpm) - y_of(g.hr - perfect_bpm)),
+      new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+    band.position.y = y_of(g.hr);
+    grp.add(band);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.3), new THREE.MeshBasicMaterial({ map: bpm_texture(String(g.hr)) }));
+    sign.position.set(gate_w / 2 + 2.4, (y1 + y2) / 2, 0);
+    grp.add(sign);
+    const z = -g.x * vis;
+    grp.position.set(kit.road_x(z), kit.road_y(z), z);
+    kit.scene.add(grp);
+    return { grp, mat: m };
+  });
+
+  // dashed trail of your flight + projection line to the next gate
+  const line_geo = (n) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    return g;
+  };
+  const trail = new THREE.Line(line_geo(400), new THREE.LineDashedMaterial({ color: '#ffffff', dashSize: 2, gapSize: 2, transparent: true, opacity: 0.8 }));
+  trail.frustumCulled = false;
+  const proj = new THREE.Line(line_geo(2), new THREE.LineDashedMaterial({ color: '#7ee08a', dashSize: 1.5, gapSize: 1.5 }));
+  proj.frustumCulled = false;
+  kit.scene.add(trail, proj);
+
+  function draw_scene(dt) {
+    const z = -st.x * vis;
+    const alt = st.alt === null ? null : y_of(st.alt);
+    const y = (alt ?? alt_lo) + kit.road_y(z);
+    // nose follows the hr trend: climbing / diving
+    plane.position.set(kit.road_x(z), y, z);
+    plane.rotation.set(clamp(st.slope * 0.25, -0.35, 0.35), 0, Math.sin(st.time * 0.7) * 0.05);
+    prop.rotation.z = st.prop;
+    plane.visible = alt !== null;
+    gate_models.forEach((gm, i) => {
+      const r = gates[i].result;
+      gm.mat.color.set(r === 'perfect' ? '#7ee08a' : r === 'good' ? '#ffd54f' : r === 'miss' ? '#ef5350' : '#ff7043');
+    });
+    // trail
+    const tp = trail.geometry.attributes.position;
+    let n = 0;
+    for (const [x, a] of st.trail) {
+      if (a === null) continue;
+      const tz = -x * vis;
+      tp.setXYZ(n++, kit.road_x(tz), y_of(a) + kit.road_y(tz), tz);
+    }
+    trail.geometry.setDrawRange(0, n);
+    tp.needsUpdate = true;
+    trail.computeLineDistances();
+    // projection: where your current hr trend puts you at the next gate (max 30 s ahead)
+    const ng = gates[st.next];
+    proj.visible = false;
+    if (ng && st.alt !== null && st.v > 0.5) {
+      const eta = Math.min(30, (ng.x - st.x) / st.v);
+      const target = clamp(st.alt + st.slope * eta, view_lo, view_hi);
+      const gz = -ng.x * vis;
+      const pp = proj.geometry.attributes.position;
+      pp.setXYZ(0, plane.position.x, plane.position.y, plane.position.z);
+      pp.setXYZ(1, kit.road_x(gz), y_of(target) + kit.road_y(gz), gz);
+      pp.needsUpdate = true;
+      proj.computeLineDistances();
+      proj.material.color.set(Math.abs(target - ng.hr) <= good_bpm ? '#7ee08a' : '#ff8a80');
+      proj.visible = true;
+    }
+    const speed = st.v * vis;
+    kit.chase({ z, y, back: 11, height: 2.5, look_ahead: 30, look_y: -1, speed, smooth: 3 }, dt);
+    kit.frame(dt, { focus_z: z, speed });
   }
 
   function update_hud() {

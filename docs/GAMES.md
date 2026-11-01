@@ -33,13 +33,23 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 - Visual speed: the scenery moves 2.5× faster than the physics (`vis_scale` in `js/world.js`); speed, watts and times are unchanged. Riders keep their real gaps to the player so the pack looks natural. Wind streaks scale with speed; riders between the camera and you fade out.
 - Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
 
+### 3D look (all games)
+Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, { theme, road_w, lanes, road_x(z), road_y(z), surface(z), camps, posts, paint_road })`. Games place riders (`place_rider`), steer the camera (`chase`) and call `frame()` each render. Every game has a **Scenery** option (meadow / valley / night).
+- Crossroads: the road forks in a clearing with 3 signposted trails; your pick bends the road into that trail (and its surface: asphalt, gravel, dirt).
+- Summit: the road really climbs (distance ×1.6, height ×2.2 on screen); grade boards, KOM arch, translucent ghost; profile chart as an overlay.
+- Pulse Pilot: a low-poly plane flies over the valley through gate frames at bpm heights; dashed flight trail + projection line.
+- Spin Beat: a wide road with rpm lanes painted on it; glowing note tiles; the rider steers across with your cadence.
+- Escape: the camera rides ahead looking back; a dark storm wall with rain and lightning; the world darkens as it closes in; shelter huts.
+- Sprint Cup: START / FINISH arches per round, cheering crowd at the line, rival beside you; duel bars as an overlay.
+- Workout: you ride through the scenery (speed from the physics); the interval chart is a translucent panel on top.
+
 ### 🔀 Crossroads
 - Each stage has 3 paths: easy (55–72% FTP), medium (75–92%) and hard (95–120%).
 - Points follow effort, but each path's exchange rate is randomised ±35%, so you have to compare.
 - Scoring: path points × share of the stage with your 3 s average ≥ 95% of the target × streak multiplier.
 - A clean stage (≥ 90% on target) adds +0.1 to the multiplier, up to ×1.5. A missed stage resets it.
 - Mystery path (25% of stages): watts hidden until you commit, pays 1.5×.
-- Pick nothing in 15 s and you get the easiest path.
+- Pick nothing in 15 s (or reach the fork without choosing) and you get the easiest path.
 
 ### ⛰️ Summit
 - 4 climbs are defined as `[length, grade]` segments.
@@ -89,8 +99,10 @@ js/sensors.js     shared sensor state + connect + rider profile (FTP, max HR)
 js/ble.js         Web Bluetooth: FTMS indoor bike data, heart rate, FTMS control point (grade, erg power)
 js/physics.js     cycling physics (rolling, gravity, drag); same for everyone
 js/util.js        formatting, seeded random, safe localStorage
-js/draw2d.js      2D canvas helpers (sky, hills, rider sprite, labels)
-js/world.js       Three.js world for Race
+js/draw2d.js      2D canvas helpers (overlay layer for charts / bars, labels)
+js/kit3d.js       shared low-poly 3d kit: terrain/road chunks (road can curve + climb), props, mountains,
+                  lights + colour grade, campfires, wind, riders with body language, chase camera, arches, signs, trails
+js/world.js       Race world on the kit (course + pack)
 js/race_model.js  Race model: bots, nitro, drafting, standings
 js/ride_log.js    per-second ride samples -> results chart + stats (all games)
 js/games/*.js     one module per game

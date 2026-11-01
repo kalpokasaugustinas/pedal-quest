@@ -1,8 +1,9 @@
 // summit: time-trial up a climb. the trainer's resistance follows the gradient (ftms simulation mode)
 // and a ghost of your best run rides along
-import { setup_2d, sky, hills, clouds, draw_rider, label, round_rect } from '../draw2d.js?v=18';
-import { step_speed } from '../physics.js?v=18';
-import { clamp, fmt_time, load, store } from '../util.js?v=18';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { step_speed } from '../physics.js?v=19';
+import { clamp, fmt_time, load, store } from '../util.js?v=19';
 
 // climbs as [length m, grade %] segments
 const climbs = {
@@ -66,6 +67,7 @@ export default {
   options: [
     { key: 'climb', label: 'Climb', wide: true, choices: Object.entries(climbs).map(([id, c]) => [id, `${c.name}<small>${(c.length / 1000).toFixed(1)} km · ${c.avg.toFixed(1)}% avg · max ${c.max}%</small>`]), def: 'pine' },
     { key: 'feel', label: 'Trainer resistance', choices: [[0, 'Off'], [0.5, '50%'], [1, '100%']], def: 0.5 },
+    scenery_option('meadow'),
   ],
   setup_html: (o) => {
     const best = load(`pq_ghost_summit_${o.climb}`, null);
@@ -77,8 +79,23 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
   const c = climbs[env.opts.climb];
+  // 3d: the road really climbs. distance drawn 1.6x, height 2.2x, so 5% looks like a proper hill
+  const vis_d = 1.6, vis_e = 2.2;
+  const kit = create_kit(env.canvas, {
+    theme: env.opts.scenery,
+    road_y: (z) => elev_at(c, Math.min(-z / vis_d, c.length + 400)) * vis_e,
+  });
+  const me = kit.add_rider('#ffd400');
+  const ghost_model = kit.add_rider('#b0bec5');
+  kit.add_arch(-c.length * vis_d, 'KOM', '#c62828');
+  // grade boards at every change of gradient
+  for (let i = 0; i < c.segs.length; i++) {
+    const g = c.segs[i][1];
+    kit.add_board(-c.pts[i].x * vis_d - 2, `${g > 0 ? '▲' : '▼'} ${g}%`, i % 2 ? -1 : 1, grade_color(g), '#ffffff');
+  }
+  const view = overlay_2d(env.overlay);   // profile chart + big grade number on top of the 3d view
+  let watts_now = 0;
   const feel = env.opts.feel;
   const ghost = load(`pq_ghost_summit_${env.opts.climb}`, null);
   const st = { x: 0, v: 0, time: 0, crank: 0, energy: 0, trace: [0], finish: null, sent_grade: null, last_send: -10 };
@@ -120,6 +137,7 @@ function create(env) {
     done: false,
     speed: () => st.v,
     update(dt, input) {
+      watts_now = game.done ? 0 : input.watts;
       const grade = grade_at(c, st.x);
       st.v = step_speed(st.v, game.done ? 0 : input.watts, dt, st.finish !== null ? 0 : grade);
       st.crank += (input.cadence / 60) * 2 * Math.PI * dt;
@@ -145,79 +163,34 @@ function create(env) {
       }
       sync_trainer();
     },
-    render() {
+    render(dt) {
+      const z = -st.x * vis_d;
+      kit.place_rider(me, { z, x: -0.6, watts: watts_now, v: st.v, crank: st.crank, dist: st.x * vis_d, ref: env.profile.ftp }, dt);
+      const gx = ghost_x(st.time);
+      ghost_model.group.visible = gx !== null;
+      if (gx !== null) {
+        const gz = -gx * vis_d;
+        kit.place_rider(ghost_model, { z: gz, x: 0.6, watts: 200, v: 4, crank: st.time * 9, dist: gx * vis_d, ref: 200, fade: 0.4 }, dt);
+      }
+      const speed = st.v * vis_d;
+      kit.chase({ z, speed }, dt);
+      kit.frame(dt, { focus_z: z, speed });
       draw_scene();
       update_hud();
     },
-    resize: () => view.resize(),
+    resize: () => { kit.resize(); view.resize(); },
     dispose() {
       if (feel && env.trainer.available) env.trainer.set_grade(0);   // never leave the trainer on a hill
+      kit.dispose();
     },
     result,
   };
 
+  // 2d overlay: climb profile chart + big gradient number (the world itself is 3d)
   function draw_scene() {
     const { ctx, w, h } = view;
     const ins = env.insets();
-    const ex = 3;                           // vertical exaggeration so 5% looks like a hill
-    const ppm = clamp(w / 60, 6, 16);       // meters on screen
-    const cx = w * 0.4;
-    const base_y = h - ins.bottom - Math.max(60, h * 0.12);
-    const e0 = elev_at(c, st.x);
-    const sy = (x) => base_y - (elev_at(c, x) - e0) * ppm * ex;
-
-    sky(ctx, w, h, '#5d93d6', '#eaf2fb');
-    clouds(ctx, w, h * 0.6, st.x * 2);
-    // distant mountains with snow caps
-    hills(ctx, w, base_y - 40, st.x * 0.8, Math.min(220, h * 0.3), '#9fb3c8', 1);
-    hills(ctx, w, base_y - 10, st.x * 2, Math.min(130, h * 0.18), '#7d9a78', 3);
-
-    // terrain: filled polygon of the road profile around the rider
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    for (let px = 0; px <= w + 8; px += 8) {
-      const x = st.x + (px - cx) / ppm;
-      ctx.lineTo(px, sy(x));
-    }
-    ctx.lineTo(w, h);
-    ctx.closePath();
-    ctx.fillStyle = '#5f8f4a';
-    ctx.fill();
-    // road surface coloured by grade
-    ctx.lineWidth = 10;
-    for (let px = 0; px <= w; px += 8) {
-      const x = st.x + (px - cx) / ppm;
-      ctx.strokeStyle = x > c.length || x < 0 ? '#555' : grade_color(grade_at(c, x));
-      ctx.beginPath();
-      ctx.moveTo(px, sy(x) + 4);
-      ctx.lineTo(px + 8, sy(x + 8 / ppm) + 4);
-      ctx.stroke();
-    }
-
-    // summit banner
-    const fx = cx + (c.length - st.x) * ppm;
-    if (fx < w + 40) {
-      const fy = sy(c.length);
-      ctx.fillStyle = '#ddd';
-      ctx.fillRect(fx - 2, fy - 70, 4, 70);
-      ctx.fillStyle = '#d32f2f';
-      ctx.fillRect(fx, fy - 70, 46, 26);
-      ctx.fillStyle = '#fff';
-      ctx.font = '700 12px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('KOM', fx + 8, fy - 52);
-    }
-
-    // ghost and rider, tilted to the visual slope
-    const s = clamp(h * 0.06, 32, 54);
-    const tilt_at = (x) => Math.atan((grade_at(c, x) / 100) * ex);
-    const gx = ghost_x(st.time);
-    if (gx !== null) {
-      const gpx = cx + (gx - st.x) * ppm;
-      if (gpx > -60 && gpx < w + 60) draw_rider(ctx, gpx, sy(gx), s, { color: '#b0bec5', crank: st.time * 9, wheel: gx / 0.34, tilt: tilt_at(gx), alpha: 0.45 });
-    }
-    draw_rider(ctx, cx, sy(st.x), s, { color: '#ffd400', crank: st.crank, wheel: st.x / 0.34, tilt: tilt_at(st.x) });
-
+    view.clear();
     // big gradient number
     const g = grade_at(c, st.x);
     const profile_h = Math.min(90, h * 0.12);

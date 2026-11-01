@@ -1,7 +1,8 @@
 // spin beat: a rhythm game for your legs. target cadence blocks scroll down a highway,
 // keep your cadence inside them to score; hitting in a row builds a combo multiplier
-import { setup_2d, round_rect, label } from '../draw2d.js?v=18';
-import { clamp, seeded } from '../util.js?v=18';
+import * as THREE from 'three';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { clamp, seeded } from '../util.js?v=19';
 
 // tracks are generated from a fixed seed, so the same track is the same every time (fair leaderboards)
 const tracks = {
@@ -63,6 +64,7 @@ export default {
   options: [
     { key: 'track', label: 'Track', wide: true, choices: Object.entries(tracks).map(([id, t]) => [id, `${t.name}<small>${t.min} min${t.ladder ? ' · 70→120→70' : ` · ${Math.min(...t.rpms)}–${t.bursts ? 120 : Math.max(...t.rpms)} rpm`}</small>`]), def: 'groove' },
     { key: 'metronome', label: 'Metronome', choices: [[1, 'On'], [0, 'Off']], def: 1 },
+    scenery_option('night'),
   ],
   board: (o) => ({ key: `spin_${o.track}`, label: `Top scores · ${tracks[o.track].name}`, lower: false, fmt: (s) => `${s} pts` }),
   create,
@@ -70,7 +72,6 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
   const track = tracks[env.opts.track];
   const notes = make_notes(track);
   const total = notes.reduce((s, n) => s + n.dur, 0);
@@ -145,93 +146,74 @@ function create(env) {
       while (st.trail.length && st.time - st.trail[0][0] > 4) st.trail.shift();
     },
     render(dt, input) {
-      draw_scene(input);
+      draw_scene(input, dt);
       update_hud(input);
     },
-    resize: () => view.resize(),
-    dispose() { audio?.close().catch(() => {}); },
+    resize: () => kit.resize(),
+    dispose() { audio?.close().catch(() => {}); kit.dispose(); },
     result,
   };
 
-  function draw_scene(input) {
-    const { ctx, w, h } = view;
-    const ins = env.insets();
-    const pad = 28;
-    const x_of = (rpm) => pad + ((rpm - rpm_min) / (rpm_max - rpm_min)) * (w - pad * 2);
-    const now_y = h - ins.bottom - 40;
-    const pps = (now_y - ins.top) / 10;   // pixels per second: ~10 s of track visible
-    const y_of = (t) => now_y - (t - st.time) * pps;
+  // ---- 3d: a wide cadence highway. lanes = rpm, glowing note tiles come at you, the rider steers with cadence ----
+  const flow = 14;                 // visual m/s the track scrolls (time-based, independent of your speed)
+  const road_w = 16;
+  const rx = (rpm) => -road_w / 2 + 1 + ((clamp(rpm, rpm_min, rpm_max) - rpm_min) / (rpm_max - rpm_min)) * (road_w - 2);
+  const kit = create_kit(env.canvas, {
+    theme: env.opts.scenery, road_w, lanes: 1, camps: false,
+    // rpm guide lines + numbers painted on the asphalt
+    paint_road(g, w, h) {
+      g.textAlign = 'center';
+      for (let r = 60; r <= 130; r += 10) {
+        const x = ((rx(r) + road_w / 2) / road_w) * w;
+        g.fillStyle = 'rgba(255,255,255,0.16)';
+        g.fillRect(x - 1, 0, 2, h);
+        if (r % 20) continue;   // numbers every 20 rpm, squashed: the texture is stretched 2x along the road
+        g.save();
+        g.translate(x, h * 0.1);
+        g.scale(1, 0.5);
+        g.font = '700 12px system-ui, sans-serif';
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        g.fillText(String(r), 0, 0);
+        g.restore();
+      }
+    },
+  });
+  const me = kit.add_rider('#ffd400');
+  const tile_mats = [];
+  // note tiles: outer = good window (translucent), inner = perfect window (bright)
+  for (const n of notes) {
+    const hue = (280 - ((n.rpm - 60) / 70) * 200) / 360;   // colour by cadence: slow = purple, fast = orange
+    const len = n.dur * flow - 0.6;
+    const z = -(n.t * flow) - 0.3 - len / 2;
+    const make = (half_rpm, height, opacity, emissive) => {
+      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, 0.85, 0.5), emissive: new THREE.Color().setHSL(hue, 0.95, 0.4), emissiveIntensity: emissive, transparent: true, opacity, roughness: 0.6 });
+      const w = rx(n.rpm + half_rpm) - rx(n.rpm - half_rpm);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, len), m);
+      mesh.position.set(kit.road_x(z) + rx(n.rpm), kit.road_y(z) + height / 2 + 0.02, z);
+      kit.scene.add(mesh);
+      return m;
+    };
+    const outer = make(good_rpm, 0.08, 0.45, 0.15);
+    const inner = make(perfect_rpm, 0.16, 0.95, 0.3);
+    tile_mats.push({ n, outer, inner });
+  }
+  let rider_x = rx(85), crank = 0, watts_now = 0;
 
-    // background: dark stage with a subtle pulse on each beat
-    ctx.fillStyle = '#0d1220';
-    ctx.fillRect(0, 0, w, h);
+  function draw_scene(input, dt) {
+    const z = -st.time * flow;
+    crank += (input.cadence / 60) * 2 * Math.PI * dt;
+    watts_now = input.watts;
+    rider_x += (rx(input.cadence) - rider_x) * Math.min(1, dt * 6);
+    kit.place_rider(me, { z, x: rider_x, watts: watts_now, v: flow / 2.5, crank, dist: -z, ref: env.profile.ftp }, dt);
+    // the tile you're on pulses with the metronome beat
     const pulse = Math.max(0, 1 - st.beat * 4);
-    ctx.fillStyle = `rgba(120,80,255,${0.08 * pulse})`;
-    ctx.fillRect(0, 0, w, h);
-
-    // cadence grid
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    for (let r = 60; r <= 130; r += 10) {
-      const x = x_of(r);
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, ins.top);
-      ctx.lineTo(x, now_y + 10);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.fillText(String(r), x, now_y + 26);
+    for (const t of tile_mats) {
+      const active = st.time >= t.n.t && st.time < t.n.t + t.n.dur;
+      t.inner.emissiveIntensity = active ? 0.45 + 0.8 * pulse : 0.3;
+      t.outer.opacity = active ? 0.6 : 0.45;
     }
-
-    // note blocks: outer = good window, inner = perfect window (clipped just below the now line)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, w, now_y + 12);
-    ctx.clip();
-    for (const n of notes) {
-      const y1 = y_of(n.t + n.dur), y2 = y_of(n.t);
-      if (y2 < ins.top - 20 || y1 > now_y + 40) continue;
-      const hue = 280 - ((n.rpm - 60) / 70) * 200;   // colour by cadence: slow = purple, fast = orange
-      const active = st.time >= n.t && st.time < n.t + n.dur;
-      ctx.fillStyle = `hsla(${hue}, 85%, 60%, ${active ? 0.35 : 0.22})`;
-      round_rect(ctx, x_of(n.rpm - good_rpm), y1 + 2, x_of(n.rpm + good_rpm) - x_of(n.rpm - good_rpm), y2 - y1 - 4, 8);
-      ctx.fill();
-      ctx.fillStyle = `hsla(${hue}, 90%, 62%, ${active ? 0.95 : 0.7})`;
-      round_rect(ctx, x_of(n.rpm - perfect_rpm), y1 + 2, x_of(n.rpm + perfect_rpm) - x_of(n.rpm - perfect_rpm), y2 - y1 - 4, 6);
-      ctx.fill();
-      if (y2 - y1 > 24) label(ctx, `${n.rpm}`, x_of(n.rpm), Math.max(y1 + 16, Math.min(y2 - 14, ins.top + 20)), 14, '#fff');
-    }
-    ctx.restore();
-
-    // now line
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(pad - 10, now_y);
-    ctx.lineTo(w - pad + 10, now_y);
-    ctx.stroke();
-
-    // your cadence trail (past 4 s, drawn below the now line) and cursor
-    ctx.strokeStyle = 'rgba(255,212,0,0.5)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    st.trail.forEach(([t, rpm], i) => {
-      const p = [x_of(clamp(rpm, rpm_min, rpm_max)), now_y + (st.time - t) * pps * 0.25];
-      if (i === 0) ctx.moveTo(...p); else ctx.lineTo(...p);
-    });
-    ctx.stroke();
-    const cx = x_of(clamp(input.cadence, rpm_min, rpm_max));
-    const col = st.last_hit === 'perfect' ? '#7ee08a' : st.last_hit === 'good' ? '#ffd54f' : '#ff5252';
-    ctx.fillStyle = col;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    ctx.arc(cx, now_y, 13, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    if (st.mult > 1) label(ctx, `×${st.mult.toFixed(1)}`, w - pad, ins.top + 30, 30, '#ffd54f', 'right');
+    kit.chase({ z, x: 0, back: 9, height: 5.5, look_ahead: 26, look_y: 0, speed: flow }, dt);
+    kit.frame(dt, { focus_z: z, speed: flow });
   }
 
   function update_hud(input) {

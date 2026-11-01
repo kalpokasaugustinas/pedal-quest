@@ -1,7 +1,9 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
 // optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { setup_2d, round_rect, label } from '../draw2d.js?v=18';
-import { clamp, fmt_clock } from '../util.js?v=18';
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=19';
+import { step_speed } from '../physics.js?v=19';
+import { clamp, fmt_clock } from '../util.js?v=19';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -65,6 +67,7 @@ export default {
     { key: 'plan', label: 'Workout', wide: true, choices: Object.entries(workouts).map(([id, w]) => [id, `${w.name}<small>${w.test ? w.desc : `${w.min} min · ${w.desc}`}</small>`]), def: 'quick' },
     { key: 'intensity', label: 'Intensity (not used in the ramp test)', choices: [[0.9, '90%'], [1, '100%'], [1.05, '105%']], def: 1 },
     { key: 'erg', label: 'ERG mode (trainer holds the power)', choices: [[0, 'Off'], [1, 'On']], def: 0 },
+    scenery_option('meadow'),
   ],
   setup_html: (o, profile) => {
     const w = workouts[o.plan];
@@ -84,7 +87,12 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const view = setup_2d(env.canvas);
+  // 3d ride through the scenery (speed from the shared physics); chart on a 2d layer on top
+  const vis = 2.5;
+  const kit = create_kit(env.canvas, { theme: env.opts.scenery });
+  const me = kit.add_rider('#ffd400');
+  const view = overlay_2d(env.overlay);
+  const ride = { x: 0, v: 0, crank: 0, watts: 0 };
   const plan = workouts[env.opts.plan];
   const ftp = env.profile.ftp;
   const erg = !!env.opts.erg;
@@ -124,8 +132,12 @@ function create(env) {
 
   const game = {
     done: false,
-    speed: () => null,
+    speed: () => ride.v,
     update(dt, input) {
+      ride.v = step_speed(ride.v, game.done ? 0 : input.watts, dt);
+      ride.x += ride.v * dt;
+      ride.crank += (input.cadence / 60) * 2 * Math.PI * dt;
+      ride.watts = game.done ? 0 : input.watts;
       if (game.done) return;
       st.time += dt;
 
@@ -192,23 +204,31 @@ function create(env) {
       }
     },
     render(dt, input) {
+      const z = -ride.x * vis;
+      const speed = ride.v * vis;
+      kit.place_rider(me, { z, x: 0, watts: ride.watts, v: ride.v, crank: ride.crank, dist: ride.x * vis, ref: ftp }, dt);
+      kit.chase({ z, speed }, dt);
+      kit.frame(dt, { focus_z: z, speed });
       draw_scene();
       update_hud(input);
     },
-    resize: () => view.resize(),
+    resize: () => { kit.resize(); view.resize(); },
     // leave erg: back to a flat-road simulation so the trainer doesn't stay locked to a power
-    dispose() { if (erg) env.trainer.set_grade(0); },
+    dispose() { if (erg) env.trainer.set_grade(0); kit.dispose(); },
     result,
   };
 
   function draw_scene() {
     const { ctx, w, h } = view;
     const ins = env.insets();
-    const top = ins.top + 96, bottom = h - ins.bottom - 22;   // space above the blocks for the big interval clock
-    const left = 16, right = w - 16;
+    const panel_top = ins.top + 6, panel_h = Math.min(h * 0.42, 330);
+    const top = panel_top + 84, bottom = panel_top + panel_h - 22;   // space above the blocks for the big interval clock
+    const left = 22, right = w - 22;
 
-    ctx.fillStyle = '#0f1720';
-    ctx.fillRect(0, 0, w, h);
+    view.clear();
+    ctx.fillStyle = 'rgba(12,18,26,0.62)';
+    round_rect(ctx, 10, panel_top, w - 20, panel_h, 14);
+    ctx.fill();
 
     // visible window: the whole workout, or for the ramp test 0..(now + 3 min)
     const span = is_test ? Math.max(600, st.time + 180) : total;
@@ -293,8 +313,8 @@ function create(env) {
     const s = seg_at(st.time);
     if (s) {
       const left_s = s.t + s.dur - st.time;
-      label(ctx, fmt_clock(Math.ceil(left_s)), w / 2, ins.top + 36, 40, left_s <= 5 ? '#ffd54f' : '#fff');
-      label(ctx, s.name, w / 2, ins.top + 68, 16, 'rgba(255,255,255,.7)');
+      label(ctx, fmt_clock(Math.ceil(left_s)), w / 2, panel_top + 32, 40, left_s <= 5 ? '#ffd54f' : '#fff');
+      label(ctx, s.name, w / 2, panel_top + 64, 16, 'rgba(255,255,255,.75)');
     }
   }
 

@@ -18,6 +18,16 @@ export function setup_2d(canvas) {
   return view;
 }
 
+// transparent 2d layer over a 3d view (charts, bars): a canvas appended to `container`, cleared each frame
+export function overlay_2d(container) {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'overlay-canvas';
+  container.prepend(canvas);   // behind the html hud items in the overlay
+  const view = setup_2d(canvas);
+  view.clear = () => view.ctx.clearRect(0, 0, view.w, view.h);
+  return view;
+}
+
 export function sky(ctx, w, h, top, bottom) {
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, top);

@@ -1,7 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=18';
-import { create_world, themes } from '../world.js?v=18';
-import { fmt_time, ordinal } from '../util.js?v=18';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=19';
+import { create_world } from '../world.js?v=19';
+import { scenery_option } from '../kit3d.js?v=19';
+import { fmt_time, ordinal } from '../util.js?v=19';
 
 export default {
   id: 'race',
@@ -19,7 +20,7 @@ export default {
   options: [
     { key: 'km', label: 'Race distance', choices: [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], def: 2 },
     { key: 'base_watts', label: 'Rival strength', type: 'stepper', min: 50, max: 500, step: 10, unit: 'W', def: 150 },
-    { key: 'scenery', label: 'Scenery', choices: Object.entries(themes).map(([id, t]) => [id, t.name]), def: 'meadow' },
+    scenery_option('meadow'),
   ],
   setup_html: (o) => `<ul class="rivals">${bot_lineup(o.base_watts).reverse()
     .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name}<span class="w">~${b.avg_watts} W avg</span></li>`).join('')}</ul>`,
@@ -40,9 +41,7 @@ function create(env) {
         <div class="hud-sub"><span id="h-time"></span> · <span id="h-left"></span> <span id="h-draft" class="draft hidden"></span></div>
       </div>
     </div>`;
-  // mood layers above the 3d view: warm soft-light tint + soft vignette (calm, filmic look)
-  env.overlay.innerHTML = '<div class="mood-tint"></div><div class="mood-vignette"></div><div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
-  env.canvas.classList.add('soft-grade');
+  env.overlay.innerHTML = '<div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
   env.bottom.innerHTML = `
     <div id="nitro" class="nitro">
       <span class="nitro-label">NITRO</span>

@@ -272,3 +272,13 @@ tr.sub-row td { padding-top: 0; font-size: 12px; color: var(--muted); font-weigh
 .game-canvas.soft-grade { filter: saturate(0.88) contrast(0.94) brightness(1.03); }
 .mood-tint { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,214,170,.22), rgba(255,190,150,.12) 60%, rgba(120,110,170,.18)); mix-blend-mode: soft-light; }
 .mood-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 85% 75% at 50% 45%, rgba(0,0,0,0) 55%, rgba(18,22,40,.38) 100%); }
+
+/* 2d layer over a 3d game view (charts, duel bars) */
+.overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* crossroads: choice cards docked at the bottom, one column per direction (left / straight / right) */
+.choice.dock { top: auto; transform: none; background: rgba(10,15,20,.8); padding: 10px; }
+.choice.dock .choice-paths { grid-template-columns: repeat(3, 1fr); }
+.choice.dock .path { grid-template-columns: 1fr; gap: 2px; padding: 10px 6px; border-left: 0; border-top: 6px solid var(--c); text-align: center; }
+.choice.dock .path-name { font-size: 12px; }
+.path-dir { font-size: 20px; line-height: 1; }

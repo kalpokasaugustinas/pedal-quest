@@ -1,6 +1,6 @@
 // ride log: one sample per second of game time (watts, hr, cadence) for the results chart + ride stats
 // shared by every game through the shell, so the games don't need to record anything themselves
-import { load, store } from './util.js?v=18';
+import { load, store } from './util.js?v=19';
 
 let samples = [];     // [{ w, hr, rpm }] one per second
 let acc = null;       // running sums for the current second
