@@ -1,9 +1,10 @@
-// 3d world with three.js in a low-poly, flat-shaded style: faceted hills, mountains, trees, rocks,
-// soft shadows, fog, wind streaks. three scenery themes (meadow, valley, night).
+// 3d world with three.js in a low-poly, flat-shaded style (think faceted landscape art): big faceted mountains
+// with strong side light, tall layered pines with warm trunks, saturated grass, lit clouds, campfires with glow.
+// three scenery themes (meadow, valley, night).
 // race coordinates: rider x (meters along the course). the scenery is drawn vis_scale times faster than the
 // physics (the world flies by), while riders keep their real gaps to the player so the pack looks natural
 import * as THREE from 'three';
-import { seeded } from './util.js?v=15';
+import { seeded } from './util.js?v=16';
 
 export const vis_scale = 2.5;              // visual speed multiplier (speed numbers and physics are unchanged)
 const lane_w = 1.1;                        // meters per lane
@@ -14,34 +15,37 @@ const lane_x = (lane) => (lane - (lane_count - 1) / 2) * lane_w;
 const chunk_len = 120;                     // terrain chunk length (visual meters)
 const chunk_count = 9;                     // chunks alive at once: 1 behind the camera, 8 ahead
 
-// ---- themes: colour palettes + light + tree mix, inspired by low-poly landscape art ----
+// ---- themes: colour palettes, light and props. strong key light + low ambient = contrasty facets ----
 export const themes = {
   meadow: {
     name: 'Sunny meadow',
-    sky: ['#5aa9e6', '#d8eef6'], fog: '#cfe6ee', fog_range: [60, 650],
-    hemi: ['#d6ecff', '#6f8f3a', 1.4], sun: ['#fff1d2', 2.6], sun_dir: [-30, 45, 20],
-    grass: ['#8cc63f', '#7db83a', '#9bcc4f', '#a8c94a', '#86bd45'], high: ['#b9a26f', '#a88d62'],
-    mountain: ['#a68a6d', '#937759', '#bba083', '#7f6650'], snow: null,
-    round: ['#7cc144', '#8bcB4a', '#6fb33d', '#9ad15a'], pine: ['#4f9a3c', '#3f8a35'], trunk: '#7a4a2a', rock: ['#9e9a92', '#8a857c'],
-    mix: { round: 0.65, pine: 0.2, rock: 0.15 }, asphalt: '#5b5e66', clouds: '#ffffff', stars: false,
+    sky: ['#3f9be0', '#bfe3f5'], fog: '#bfe0ee', fog_range: [80, 700],
+    hemi: ['#bfe0ff', '#2f5a1c', 0.55], key: ['#fff0d0', 3.6], key_dir: [-60, 55, 25],
+    grass: ['#5fa62c', '#529a27', '#6db535', '#468c22', '#78bb3c'], high: ['#7f9a38', '#94844a'],
+    mountain: ['#b08a68', '#9a7556', '#c9a582', '#86664c'], snow: '#f4f1ea', snow_line: 0.82,
+    round: ['#55a52e', '#62b236', '#4a9628', '#70bb3e'], pine: ['#2f8530', '#287a2b', '#379238'],
+    trunk: '#a8622f', rock: ['#a4a4a8', '#8e8f96'], mix: { round: 0.55, pine: 0.3, rock: 0.15 },
+    asphalt: '#5d6068', cloud: '#ffffff', cloud_glow: 0.25, stars: false, camps: 0.25,
   },
   valley: {
     name: 'Misty valley',
-    sky: ['#b9cfae', '#eef0d6'], fog: '#dfe6c9', fog_range: [40, 520],
-    hemi: ['#f0f4dc', '#4f7a4a', 1.5], sun: ['#fff6dc', 2.0], sun_dir: [25, 40, 10],
-    grass: ['#5f9e4f', '#57944a', '#6aa858', '#76ad5c', '#4f8c45'], high: ['#3f8f7a', '#357d69'],
-    mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#46907c'], snow: null,
-    round: ['#5aa35a', '#4f9650'], pine: ['#2e6b55', '#28604c', '#357a5f'], trunk: '#5b3b26', rock: ['#7d8a80', '#6d786f'],
-    mix: { round: 0.15, pine: 0.65, rock: 0.2 }, asphalt: '#5a5550', clouds: '#f4f6e8', stars: false,
+    sky: ['#a9c79f', '#eef0d4'], fog: '#d8e2c2', fog_range: [50, 560],
+    hemi: ['#f0f4dc', '#2f5a3a', 0.65], key: ['#fff4d8', 3.0], key_dir: [55, 45, 20],
+    grass: ['#4c9a3c', '#418d35', '#58a646', '#3a8030', '#62ad4c'], high: ['#2f7f6a', '#286f5c'],
+    mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#286a58'], snow: null, snow_line: 1,
+    round: ['#5aa35a', '#4f9650'], pine: ['#2e7a58', '#28704f', '#358763'],
+    trunk: '#8a5230', rock: ['#7d8a80', '#6d786f'], mix: { round: 0.12, pine: 0.7, rock: 0.18 },
+    asphalt: '#5e5852', cloud: '#f6f7ea', cloud_glow: 0.3, stars: false, camps: 0.2,
   },
   night: {
     name: 'Starry night',
-    sky: ['#0b1634', '#2a4a7c'], fog: '#1d3159', fog_range: [40, 520],
-    hemi: ['#6f8fd0', '#1d3a2a', 1.3], sun: ['#b8cfff', 1.6], sun_dir: [20, 50, -30],
-    grass: ['#2f7d3a', '#38894a', '#2a6d35', '#3f9a4c', '#2c7540'], high: ['#3a4c6e', '#435780'],
-    mountain: ['#46577a', '#56688e', '#3a4a6a', '#61739a'], snow: '#dfe8f5',
-    round: ['#3f8f45', '#2f7d3a'], pine: ['#2e7d32', '#25692b', '#36883a'], trunk: '#5a3420', rock: ['#5b6478', '#4d5568'],
-    mix: { round: 0.1, pine: 0.75, rock: 0.15 }, asphalt: '#2f3240', clouds: '#9fb0d6', stars: true,
+    sky: ['#081638', '#1e3a78'], fog: '#17305f', fog_range: [60, 620],
+    hemi: ['#3e5fae', '#0c2414', 0.4], key: ['#cfdcff', 3.4], key_dir: [-55, 60, 20],
+    grass: ['#2f9a3a', '#37a542', '#288c34', '#40b04a', '#24802f'], high: ['#22702f', '#34548a'],
+    mountain: ['#3a5590', '#4a68a8', '#2c4478', '#5a7ac0'], snow: '#dfe9fb', snow_line: 0.78,
+    round: ['#3f9f45', '#34903b'], pine: ['#2f9a3c', '#27883a', '#3aab45', '#2a7f35'],
+    trunk: '#b8622a', rock: ['#5e6f96', '#4f5f86', '#6b7da6'], mix: { round: 0.05, pine: 0.8, rock: 0.15 },
+    asphalt: '#2d3142', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55,
   },
 };
 
@@ -85,36 +89,51 @@ const smoothstep = (a, b, x) => {
 function height_at(x, z) {
   const d = Math.abs(x) - (road_edge + 1.5);
   if (d <= 0) return -0.05;
-  const ramp = smoothstep(0, 45, d);
-  const n = vnoise(x / 55, z / 55) * 0.75 + vnoise(x / 18 + 31, z / 18) * 0.25;
-  return -0.05 + n * (4 + d * 0.22) * ramp;
+  const ramp = smoothstep(0, 40, d);
+  const n = vnoise(x / 50, z / 50) * 0.7 + vnoise(x / 16 + 31, z / 16) * 0.3;
+  return -0.05 + n * (5 + d * 0.3) * ramp;
 }
 
 // random colour from a palette with a small brightness jitter (keeps facets distinct)
 const tmp_color = new THREE.Color();
 function palette_color(list, r, out = tmp_color) {
   out.set(list[Math.floor(r * list.length) % list.length]);
-  out.offsetHSL(0, 0, (r * 7 % 1 - 0.5) * 0.06);
+  out.offsetHSL(0, ((r * 13) % 1 - 0.5) * 0.06, ((r * 7) % 1 - 0.5) * 0.11);
   return out;
 }
 
 function flat_mat(color, extra = {}) {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1, metalness: 0, ...extra });
+  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.95, metalness: 0, ...extra });
 }
 
-// jitter vertices of a geometry for a hand-made faceted look (seeded)
-function jitter(geom, amount, rnd) {
+// jitter vertices of a geometry for a hand-made faceted look (seeded). shared positions move together
+function jitter(geom, amount, rnd, keep_base = false) {
   const p = geom.attributes.position;
-  // merge identical positions first, so faces stay connected after jittering
+  geom.computeBoundingBox();
+  const min_y = geom.boundingBox.min.y;
   const seen = new Map();
   for (let i = 0; i < p.count; i++) {
     const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
-    if (!seen.has(key)) seen.set(key, [(rnd() - 0.5) * amount, (rnd() - 0.5) * amount, (rnd() - 0.5) * amount]);
+    if (!seen.has(key)) {
+      const base = keep_base && Math.abs(p.getY(i) - min_y) < 1e-3;
+      seen.set(key, [(rnd() - 0.5) * amount, base ? 0 : (rnd() - 0.5) * amount, (rnd() - 0.5) * amount]);
+    }
     const [dx, dy, dz] = seen.get(key);
     p.setXYZ(i, p.getX(i) + dx, p.getY(i) + dy, p.getZ(i) + dz);
   }
   geom.computeVertexNormals();
   return geom;
+}
+
+// merge simple geometries into one (non-indexed), so a multi-part prop is one instanced mesh
+function merge(geoms) {
+  const parts = geoms.map((g) => (g.index ? g.toNonIndexed() : g));
+  const pos = [];
+  for (const g of parts) pos.push(...g.attributes.position.array);
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.computeVertexNormals();
+  return out;
 }
 
 function text_texture(text, bg, fg, w = 512, h = 128) {
@@ -144,34 +163,33 @@ function dispose_scene(scene) {
 
 // x columns of the terrain grid: fine near the road, coarse far away
 const xs = (() => {
-  const right = [road_edge - 0.05, road_edge + 1.5, road_edge + 5, 12, 18, 26, 36, 50, 66, 86, 110, 140, 180, 230, 300, 400, 550];
+  const right = [road_edge - 0.05, road_edge + 1.5, road_edge + 3, road_edge + 5, 9.5, 12, 14.5, 17, 20, 23.5, 27.5, 32, 38, 45, 54, 65, 78, 94, 115, 140, 175, 220, 280, 360, 460, 600];
   return [...right.map((x) => -x).reverse(), ...right];
 })();
-const z_step = 12;
+const z_step = 6;
 
 function build_chunk_geometry(geom, z0, theme) {
-  // z0 = start (visual z, negative = ahead). rows every z_step, global row index keeps seams identical
   const rows = Math.round(chunk_len / z_step);
   const row0 = Math.round(-z0 / z_step);
   const pos = [], col = [];
+  const mid = xs.length / 2;
   const vtx = (ci, ri) => {
     const gx = xs[ci], gr = row0 + ri;
     // jitter interior columns sideways and every row along z (hash of global indices: seams match)
-    const edge_col = ci === xs.length / 2 - 1 || ci === xs.length / 2;
-    const jx = edge_col ? 0 : (hash2(ci, gr) - 0.5) * Math.min(14, Math.abs(gx) * 0.12);
-    const jz = (hash2(ci + 101, gr) - 0.5) * z_step * 0.6;
+    const edge_col = ci === mid - 1 || ci === mid;
+    const jx = edge_col ? 0 : (hash2(ci, gr) - 0.5) * Math.min(16, Math.abs(gx) * 0.14);
+    const jz = (hash2(ci + 101, gr) - 0.5) * z_step * 0.7;
     const x = gx + jx, z = -gr * z_step + jz;
     return [x, height_at(x, z), z];
   };
   for (let ri = 0; ri < rows; ri++) {
     for (let ci = 0; ci < xs.length - 1; ci++) {
-      if (ci === xs.length / 2 - 1) continue;   // the road strip has no terrain
+      if (ci === mid - 1) continue;   // the road strip has no terrain
       const a = vtx(ci, ri), b = vtx(ci + 1, ri), c = vtx(ci, ri + 1), d = vtx(ci + 1, ri + 1);
       for (const tri of [[a, b, c], [b, d, c]]) {   // counter-clockwise seen from above
         const cy = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
         const r = hash2(Math.round(tri[0][0] * 10 + tri[1][2]), Math.round(tri[2][2] * 10 + cy * 7));
-        // higher ground drifts towards the "high" palette (dry grass, rock, teal slopes)
-        const list = cy > 18 + r * 10 ? theme.high : theme.grass;
+        const list = cy > 22 + r * 14 ? theme.high : theme.grass;
         palette_color(list, r);
         for (const p of tri) {
           pos.push(...p);
@@ -189,34 +207,44 @@ function build_chunk_geometry(geom, z0, theme) {
 // ---- instanced props: trees, rocks, roadside posts ----
 
 function make_props(scene, theme) {
-  const per_chunk = 70;
+  const per_chunk = 130;
   const n = per_chunk * chunk_count;
   const rnd = seeded(7);
-  const mk = (geom, color, count = n) => {
+  const mk = (geom, color, count = n, shadow = true) => {
     const m = new THREE.InstancedMesh(geom, flat_mat(color), count);
-    m.castShadow = true;
+    m.castShadow = shadow;
     m.receiveShadow = true;
     m.frustumCulled = false;   // instances move around; bounds would be stale
     scene.add(m);
     return m;
   };
-  // round tree: faceted crown on a short trunk (image-1 style)
-  const crown = jitter(new THREE.IcosahedronGeometry(1.7, 0), 0.6, rnd).translate(0, 3.6, 0);
-  const trunk = new THREE.CylinderGeometry(0.22, 0.34, 2.4, 5).translate(0, 1.2, 0);
-  // pine: two stacked cones (image-4 style)
-  const pine_a = jitter(new THREE.ConeGeometry(1.5, 3.2, 6), 0.25, rnd).translate(0, 2.6, 0);
-  const pine_b = jitter(new THREE.ConeGeometry(1.05, 2.4, 6), 0.2, rnd).translate(0, 4.4, 0);
-  const rock = jitter(new THREE.DodecahedronGeometry(1, 0), 0.5, rnd).translate(0, 0.4, 0);
+  // round tree: two faceted blobs on a trunk
+  const crown = merge([
+    jitter(new THREE.IcosahedronGeometry(1.8, 0), 0.7, rnd).translate(0, 3.8, 0),
+    jitter(new THREE.IcosahedronGeometry(1.2, 0), 0.5, rnd).translate(0.7, 5.0, 0.3),
+  ]);
+  const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.6, 5).translate(0, 1.3, 0);
+  // pine: three stacked, slightly drooping cones (the classic low-poly pine)
+  const pine = merge([
+    jitter(new THREE.ConeGeometry(1.7, 2.6, 7, 1), 0.35, rnd, true).translate(0, 2.4, 0),
+    jitter(new THREE.ConeGeometry(1.35, 2.3, 7, 1), 0.3, rnd, true).translate(0, 3.7, 0),
+    jitter(new THREE.ConeGeometry(0.95, 2.1, 6, 1), 0.25, rnd, true).translate(0, 4.9, 0),
+  ]);
+  const pine_trunk = new THREE.CylinderGeometry(0.22, 0.3, 1.6, 5).translate(0, 0.8, 0);
+  const rock = jitter(new THREE.DodecahedronGeometry(1, 0), 0.55, rnd).scale(1.2, 0.75, 1).translate(0, 0.35, 0);
+  // roadside post with a reflector band
   const post = new THREE.BoxGeometry(0.12, 1.0, 0.12).translate(0, 0.5, 0);
   const posts_per_chunk = Math.ceil(chunk_len / 25) * 2 + 2;
+  const tuft = merge([0, 2.1, 4.2].map((a) => new THREE.ConeGeometry(0.09, 0.45, 3).translate(Math.cos(a) * 0.12, 0.2, Math.sin(a) * 0.12)));
+  const tufts_per_chunk = 260;
   const props = {
+    tufts_per_chunk, tuft: mk(tuft, '#ffffff', tufts_per_chunk * chunk_count, false),
     per_chunk, posts_per_chunk,
     crown: mk(crown, '#ffffff'), trunk: mk(trunk, theme.trunk),
-    pine_a: mk(pine_a, '#ffffff'), pine_b: mk(pine_b, '#ffffff'), pine_trunk: mk(trunk, theme.trunk),
+    pine: mk(pine, '#ffffff'), pine_trunk: mk(pine_trunk, theme.trunk),
     rock: mk(rock, '#ffffff'),
-    post: mk(post, '#f4f4f4', posts_per_chunk * chunk_count),
+    post: mk(post, '#f4f4f4', posts_per_chunk * chunk_count, false),
   };
-  props.post.castShadow = false;
   return props;
 }
 
@@ -231,33 +259,42 @@ const vpos = new THREE.Vector3();
 function fill_props(props, slot, chunk_i, z0, theme) {
   const rnd = seeded(chunk_i * 7919 + 13);
   const base = slot * props.per_chunk;
-  const set = (mesh, i, x, y, z, s, rot, color) => {
+  const set = (mesh, i, x, y, z, s, sy, rot, color) => {
     quat.setFromAxisAngle(up, rot);
-    mesh.setMatrixAt(i, m4.compose(vpos.set(x, y, z), quat, scl.set(s, s * (0.85 + rnd() * 0.3), s)));
+    mesh.setMatrixAt(i, m4.compose(vpos.set(x, y, z), quat, scl.set(s, s * sy, s)));
     if (color) mesh.setColorAt(i, color);
   };
   for (let k = 0; k < props.per_chunk; k++) {
     const i = base + k;
-    // hide every type at this index, then show the chosen one
-    for (const m of [props.crown, props.trunk, props.pine_a, props.pine_b, props.pine_trunk, props.rock]) m.setMatrixAt(i, hidden);
+    for (const m of [props.crown, props.trunk, props.pine, props.pine_trunk, props.rock]) m.setMatrixAt(i, hidden);
     const side = rnd() < 0.5 ? -1 : 1;
-    const x = side * (road_edge + 3 + rnd() ** 1.6 * 260);
+    // most trees line the road (a forest corridor), the rest scatter over the hills
+    const near = rnd() < 0.6;
+    const x = side * (road_edge + 4 + (near ? rnd() * 40 : 40 + rnd() ** 1.3 * 260));
     const z = z0 - rnd() * chunk_len;
-    const y = height_at(x, z) - 0.1;
-    const s = (0.8 + rnd() * 0.7) * (1 + Math.abs(x) / 160);   // bigger far away: reads as forest
+    const y = height_at(x, z) - 0.15;
+    const s = (1.0 + rnd() * 0.9) * (1 + Math.abs(x) / 220);
+    const sy = 0.9 + rnd() * 0.6;   // some pines are much taller
     const rot = rnd() * 6.28;
     const kind = rnd();
     if (kind < theme.mix.round) {
-      set(props.crown, i, x, y, z, s, rot, palette_color(theme.round, rnd()));
-      set(props.trunk, i, x, y, z, s, rot);
+      set(props.crown, i, x, y, z, s, sy, rot, palette_color(theme.round, rnd()));
+      set(props.trunk, i, x, y, z, s, sy, rot);
     } else if (kind < theme.mix.round + theme.mix.pine) {
-      const c = palette_color(theme.pine, rnd());
-      set(props.pine_a, i, x, y, z, s, rot, c);
-      set(props.pine_b, i, x, y, z, s, rot, c);
-      set(props.pine_trunk, i, x, y, z, s * 0.8, rot);
+      set(props.pine, i, x, y, z, s * 1.15, sy * 1.25, rot, palette_color(theme.pine, rnd()));
+      set(props.pine_trunk, i, x, y, z, s * 1.15, 1, rot);
     } else {
-      set(props.rock, i, x, y, z, s * (0.6 + rnd()), rot, palette_color(theme.rock, rnd()));
+      set(props.rock, i, x, y, z, s * (0.5 + rnd() * 0.9), 1, rot, palette_color(theme.rock, rnd()));
     }
+  }
+  // grass tufts close to the road: small detail that reads as texture at speed
+  const tb = slot * props.tufts_per_chunk;
+  for (let k2 = 0; k2 < props.tufts_per_chunk; k2++) {
+    const side = rnd() < 0.5 ? -1 : 1;
+    const x = side * (road_edge + 0.4 + rnd() ** 1.5 * 30);
+    const z = z0 - rnd() * chunk_len;
+    set(props.tuft, tb + k2, x, height_at(x, z) - 0.05, z, 0.8 + rnd() * 1.4, 0.7 + rnd(), rnd() * 6.28,
+      palette_color(theme.grass, rnd()).offsetHSL(0, 0.05, -0.08));
   }
   // white roadside posts every 25 m: strong speed cue
   const pb = slot * props.posts_per_chunk;
@@ -275,50 +312,135 @@ function fill_props(props, slot, chunk_i, z0, theme) {
   }
 }
 
-// ---- backdrop: faceted mountain ring, clouds, stars ----
+// ---- campfires with tents: warm glow on the ground, flickering flames, 2 real point lights ----
+
+const glow_tex = () => canvas_texture(128, 128, (g, w) => {
+  const grad = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  grad.addColorStop(0, 'rgba(255,190,90,0.95)');
+  grad.addColorStop(0.35, 'rgba(255,140,40,0.45)');
+  grad.addColorStop(1, 'rgba(255,120,30,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, w);
+});
+
+function make_camps(scene, theme) {
+  const tex = glow_tex();
+  const glow_mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  const flame_mat = new THREE.MeshBasicMaterial({ color: '#ffb02e', fog: false });
+  const core_mat = new THREE.MeshBasicMaterial({ color: '#fff3a0', fog: false });
+  const log_mat = flat_mat('#6b3a1e');
+  const tent_mats = ['#e8792e', '#3f6fd0', '#d84a3a'].map((c) => flat_mat(c));
+  const stone_mat = flat_mat(theme.rock[0]);
+  const rnd = seeded(99);
+  const camps = Array.from({ length: chunk_count }, () => {
+    const g = new THREE.Group();
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), glow_mat);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.15;
+    g.add(glow);
+    for (const a of [0.5, -0.5, 1.6]) {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.1, 5), log_mat);
+      log.rotation.set(Math.PI / 2 - 0.25, a, 0);
+      log.position.y = 0.15;
+      log.castShadow = true;
+      g.add(log);
+    }
+    for (let s = 0; s < 7; s++) {
+      const st = new THREE.Mesh(jitter(new THREE.DodecahedronGeometry(0.18, 0), 0.08, rnd), stone_mat);
+      st.position.set(Math.cos((s / 7) * 6.28) * 0.75, 0.08, Math.sin((s / 7) * 6.28) * 0.75);
+      g.add(st);
+    }
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.1, 5), flame_mat);
+    flame.position.y = 0.6;
+    const core = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 5), core_mat);
+    core.position.y = 0.45;
+    g.add(flame, core);
+    // a-frame tent: 4-sided pyramid stretched into a ridge tent
+    const tent = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.7, 4), tent_mats[Math.floor(rnd() * 3)]);
+    tent.scale.set(1, 1, 1.5);
+    tent.rotation.y = Math.PI / 4;
+    tent.position.set(3.2, 0.85, -1.5);
+    tent.castShadow = true;
+    tent.receiveShadow = true;
+    g.add(tent);
+    g.visible = false;
+    scene.add(g);
+    return { group: g, flame, core, light_pos: new THREE.Vector3() };
+  });
+  // two warm point lights are moved to the nearest visible fires each frame (fixed count = no shader rebuilds)
+  const lights = [0, 1].map(() => {
+    const l = new THREE.PointLight('#ff9a3c', 0, 26, 1.6);
+    scene.add(l);
+    return l;
+  });
+  return { camps, lights };
+}
+
+function place_camp(camps, theme, slot, chunk_i, z0) {
+  const c = camps.camps[slot];
+  const rnd = seeded(chunk_i * 104729 + 5);
+  c.group.visible = rnd() < theme.camps;
+  if (!c.group.visible) return;
+  const side = rnd() < 0.5 ? -1 : 1;
+  const x = side * (road_edge + 7 + rnd() * 5);
+  const z = z0 - 15 - rnd() * (chunk_len - 30);
+  c.group.position.set(x, height_at(x, z), z);
+  c.group.rotation.y = side < 0 ? 0 : Math.PI;   // tent on the far side of the fire
+}
+
+// ---- backdrop: big faceted mountains, lit clouds, stars ----
 
 function make_backdrop(scene, theme) {
   const group = new THREE.Group();
   const rnd = seeded(42);
   const fog = new THREE.Color(theme.fog);
-  // mountains ignore scene fog (they're beyond it) and get a fixed haze mixed into their colours instead
+  // mountains are lit by the key light (strong facets) but skip scene fog; a light haze is baked in by distance
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, fog: false });
-  for (let i = 0; i < 22; i++) {
-    const a = (i / 22) * Math.PI * 2 + rnd() * 0.2;
-    const r = 760 + rnd() * 260;
-    const hgt = 140 + rnd() * 220;
-    const g = jitter(new THREE.ConeGeometry(130 + rnd() * 120, hgt, 7, 3), 30, rnd).toNonIndexed();
+  const ring = [
+    ...Array.from({ length: 14 }, (_, i) => ({ a: (i / 14) * Math.PI * 2, r: 430 + rnd() * 120, h: 260 + rnd() * 220, w: 150 + rnd() * 80 })),
+    ...Array.from({ length: 16 }, (_, i) => ({ a: (i / 16 + 0.03) * Math.PI * 2, r: 720 + rnd() * 200, h: 300 + rnd() * 260, w: 220 + rnd() * 120 })),
+  ];
+  for (const m of ring) {
+    const ahead = Math.abs(Math.atan2(Math.sin(m.a + Math.PI / 2), Math.cos(m.a + Math.PI / 2)));   // angle from straight ahead
+    if (m.r < 600 && ahead < 0.45) m.r += 380;
+    // a mountain = a main peak + a shoulder peak, both jittered for crisp facets
+    const main = jitter(new THREE.ConeGeometry(m.w, m.h, 7, 4), m.w * 0.22, rnd, true);
+    const sh_h = m.h * (0.55 + rnd() * 0.2);
+    const shoulder = jitter(new THREE.ConeGeometry(m.w * 0.7, sh_h, 6, 3), m.w * 0.18, rnd, true)
+      .translate(m.w * 0.55, (sh_h - m.h) / 2, m.w * 0.15);
+    const g = merge([main, shoulder]);
     const p = g.attributes.position;
     const col = [];
     for (let t = 0; t < p.count; t += 3) {
-      const cy = (p.getY(t) + p.getY(t + 1) + p.getY(t + 2)) / 3 / hgt + 0.5;   // 0 bottom .. 1 top
+      const cy = (p.getY(t) + p.getY(t + 1) + p.getY(t + 2)) / 3 / m.h + 0.5;   // 0 bottom .. 1 top
       palette_color(theme.mountain, rnd());
-      if (theme.snow && cy > 0.72) tmp_color.set(theme.snow);
-      tmp_color.lerp(fog, 0.15 + (r - 760) / 1300);   // farther = hazier
+      if (theme.snow && cy > theme.snow_line - rnd() * 0.06) tmp_color.set(theme.snow);
+      tmp_color.lerp(fog, Math.min(0.5, (m.r - 400) / 1600));   // farther = hazier
       for (let j = 0; j < 3; j++) col.push(tmp_color.r, tmp_color.g, tmp_color.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.computeVertexNormals();
-    const m = new THREE.Mesh(g, mat);
-    m.position.set(Math.cos(a) * r, hgt / 2 - 25, Math.sin(a) * r);
-    m.rotation.y = rnd() * 6.28;
-    group.add(m);
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.position.set(Math.cos(m.a) * m.r, m.h / 2 - 30, Math.sin(m.a) * m.r);
+    mesh.rotation.y = rnd() * 6.28;
+    group.add(mesh);
   }
   scene.add(group);
 
-  // low-poly clouds: clusters of flattened icosahedrons
+  // big faceted clouds: clusters of squashed icosahedrons, lit plus a soft glow
   const clouds = new THREE.Group();
-  const cloud_mat = new THREE.MeshStandardMaterial({ color: theme.clouds, flatShading: true, roughness: 1, fog: false, emissive: theme.clouds, emissiveIntensity: 0.35 });
-  for (let i = 0; i < 9; i++) {
-    const c = new THREE.Group();
-    for (let j = 0; j < 4; j++) {
-      const puff = new THREE.Mesh(jitter(new THREE.IcosahedronGeometry(14 + rnd() * 10, 0), 6, rnd), cloud_mat);
-      puff.position.set(j * 16 - 24, rnd() * 6, rnd() * 10);
-      puff.scale.y = 0.55;
-      c.add(puff);
+  const cloud_mat = new THREE.MeshStandardMaterial({ color: theme.cloud, flatShading: true, roughness: 1, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow });
+  for (let i = 0; i < 10; i++) {
+    const parts = [];
+    const n = 4 + Math.floor(rnd() * 3);
+    for (let j = 0; j < n; j++) {
+      const r = 22 + rnd() * 20 - Math.abs(j - n / 2) * 4;
+      parts.push(jitter(new THREE.IcosahedronGeometry(r, 0), r * 0.35, rnd).scale(1.2, 0.45, 0.8).translate(j * 26 - n * 13, rnd() * 6, rnd() * 12));
     }
-    const a = rnd() * Math.PI * 2;
-    c.position.set(Math.cos(a) * (300 + rnd() * 300), 110 + rnd() * 70, Math.sin(a) * (300 + rnd() * 300) - 200);
+    const c = new THREE.Mesh(merge(parts), cloud_mat);
+    const a = -Math.PI / 2 + (rnd() - 0.5) * 2.6;   // mostly ahead of the riders
+    const r = 420 + rnd() * 380;
+    c.position.set(Math.cos(a) * r, 190 + rnd() * 140, Math.sin(a) * r);
+    c.rotation.y = rnd() * 0.6 - 0.3;
     clouds.add(c);
   }
   scene.add(clouds);
@@ -326,16 +448,16 @@ function make_backdrop(scene, theme) {
   let stars = null;
   if (theme.stars) {
     const pts = [];
-    for (let i = 0; i < 500; i++) {
-      const a = rnd() * Math.PI * 2, e = 0.08 + rnd() * 1.3;
-      pts.push(Math.cos(a) * Math.cos(e) * 1400, Math.sin(e) * 1400, Math.sin(a) * Math.cos(e) * 1400);
+    for (let i = 0; i < 600; i++) {
+      const a = rnd() * Math.PI * 2, e = 0.15 + rnd() * 1.3;
+      pts.push(Math.cos(a) * Math.cos(e) * 1800, Math.sin(e) * 1800, Math.sin(a) * Math.cos(e) * 1800);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    stars = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false }));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 2.2, sizeAttenuation: false, fog: false }));
     scene.add(stars);
-    const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(30, 1), new THREE.MeshBasicMaterial({ color: '#f4f1de', fog: false }));
-    moon.position.set(400, 520, -1100);
+    const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(38, 1), new THREE.MeshBasicMaterial({ color: '#f6f2dc', fog: false }));
+    moon.position.set(-700, 700, -1300);
     stars.add(moon);
   }
   return { group, clouds, stars };
@@ -348,7 +470,7 @@ function road_texture(theme) {
     g.fillStyle = theme.asphalt;
     g.fillRect(0, 0, w, h);
     for (let i = 0; i < 1500; i++) {
-      g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.08)';
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.07)';
       g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
     const ppm = w / road_w;
@@ -357,7 +479,7 @@ function road_texture(theme) {
       const x = (0.5 + i * lane_w) * ppm - line_w / 2;
       const edge = i === 0 || i === lane_count;
       g.fillStyle = edge ? '#f2f2f2' : 'rgba(255,255,255,0.6)';
-      g.fillRect(x, 0, line_w, edge ? h : h / 2);   // dashes: half a tile line, half gap
+      g.fillRect(x, 0, line_w, edge ? h : h / 2);
     }
   });
 }
@@ -366,7 +488,7 @@ function build_course(scene, race, theme) {
   const vis_len = (race.distance_m + 400) * vis_scale;
   const tex = road_texture(theme);
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(1, vis_len / 8);   // one tile = 8 visual meters
+  tex.repeat.set(1, vis_len / 8);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const road = new THREE.Mesh(new THREE.PlaneGeometry(road_w, vis_len), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
   road.rotation.x = -Math.PI / 2;
@@ -379,7 +501,6 @@ function build_course(scene, race, theme) {
   start.position.set(0, 0.01, 0);
   scene.add(start);
 
-  // finish: checkered strip + low-poly arch with banner
   const fz = -race.distance_m * vis_scale;
   const checker = canvas_texture(64, 64, (g) => {
     g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64);
@@ -407,7 +528,6 @@ function build_course(scene, race, theme) {
   banner.castShadow = true;
   scene.add(banner);
 
-  // distance boards every 500 m
   for (let m = 500; m < race.distance_m; m += 500) {
     const board = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.7), new THREE.MeshBasicMaterial({ map: text_texture(`${m / 1000} km`, '#ffffff', '#1b1b1b', 256, 96) }));
     board.position.set(road_edge + 1.8, 1.8, -m * vis_scale);
@@ -418,23 +538,16 @@ function build_course(scene, race, theme) {
   }
 }
 
-// ---- riders (low-poly, flat shaded) ----
+// ---- riders: chunky low-poly cyclist on a road bike ----
 
-const shared_mats = {
-  frame: flat_mat('#e6e6e6'),
-  tire: flat_mat('#1b1b1b'),
-  skin: flat_mat('#f1c27d'),
-  shorts: flat_mat('#26262c'),
-  crank: flat_mat('#8d8d8d'),
-};
-
-// unit cylinder stretched between two points (frame tubes, limbs)
-const unit_cyl = new THREE.CylinderGeometry(1, 1, 1, 6);
+// unit prism stretched between two points (tubes, limbs). 5 sides = visible facets
+const unit_cyl = new THREE.CylinderGeometry(1, 1, 1, 5);
 const y_axis = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3();
-function make_bar(material, radius) {
+function make_bar(material, radius, radius_z = radius) {
   const m = new THREE.Mesh(unit_cyl, material);
   m.userData.radius = radius;
+  m.userData.radius_z = radius_z;
   m.castShadow = true;
   return m;
 }
@@ -442,23 +555,29 @@ function place_bar(mesh, a, b) {
   tmp.subVectors(b, a);
   const len = tmp.length();
   mesh.position.addVectors(a, b).multiplyScalar(0.5);
-  mesh.scale.set(mesh.userData.radius, len, mesh.userData.radius);
+  mesh.scale.set(mesh.userData.radius, len, mesh.userData.radius_z);
   mesh.quaternion.setFromUnitVectors(y_axis, tmp.normalize());
 }
 
 // side-view coordinates (forward f, up u, sideways s) -> rider-local 3d point
 const v = (f, u, s = 0) => new THREE.Vector3(s, u, -f);
-const wheel_r = 0.34;
-const geo = { bb: [-0.05, 0.3], hip: [-0.22, 1.0] };
+const wheel_r = 0.35;
+const geo = { bb: [-0.03, 0.3], hip: [-0.24, 1.0], shoulder: [0.24, 1.36], hand: [0.47, 1.0] };
 
 function make_wheel(mats) {
   const w = new THREE.Group();
-  const tire = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.02, 0.03, 5, 14), mats.tire);
+  const tire = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.025, 0.035, 4, 12), mats.tire);
   tire.rotation.y = Math.PI / 2;
   tire.castShadow = true;
-  w.add(tire);
-  for (const rot of [0, Math.PI / 2]) {
-    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.012, wheel_r * 2 - 0.05, 0.03), mats.crank);
+  // deep carbon-style rim in the rider's colour
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.085, 0.045, 3, 12), mats.accent);
+  rim.rotation.y = Math.PI / 2;
+  rim.scale.set(1, 1, 0.5);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6), mats.metal);
+  hub.rotation.z = Math.PI / 2;
+  w.add(tire, rim, hub);
+  for (const rot of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.01, wheel_r * 2 - 0.16, 0.025), mats.metal);
     spoke.rotation.x = rot;
     w.add(spoke);
   }
@@ -467,63 +586,118 @@ function make_wheel(mats) {
 
 function make_rider(color) {
   const g = new THREE.Group();
-  const jersey = flat_mat(color);
-  // own copies of the shared materials, so this rider can fade out when it's close to the camera
-  const mats = { jersey };
-  for (const [k, m] of Object.entries(shared_mats)) mats[k] = m.clone();
-  const add_bar = (mat, radius, a, b) => {
-    const m = make_bar(mat, radius);
+  const c = new THREE.Color(color);
+  // own materials per rider, so a rider can fade out near the camera
+  const mats = {
+    jersey: flat_mat(color),
+    accent: flat_mat(c.clone().offsetHSL(0, 0, -0.18)),
+    frame: flat_mat('#f2f2f2'),
+    tire: flat_mat('#17171a'),
+    skin: flat_mat('#e9b27f'),
+    shorts: flat_mat('#1f2027'),
+    metal: flat_mat('#9aa0a8'),
+    white: flat_mat('#ffffff'),
+    shoe: flat_mat('#f5f5f5'),
+  };
+  const add_bar = (mat, r, a, b, rz) => {
+    const m = make_bar(mat, r, rz);
     if (a) place_bar(m, a, b);
     g.add(m);
     return m;
   };
 
-  const wheels = [-0.5, 0.52].map((f) => {
+  const wheels = [-0.52, 0.52].map((f) => {
     const w = make_wheel(mats);
     w.position.copy(v(f, wheel_r));
     g.add(w);
     return w;
   });
 
-  const p = { rear: v(-0.5, 0.34), bb: v(...geo.bb), seat: v(-0.22, 0.92), bar: v(0.42, 0.98), front: v(0.52, 0.34) };
+  // frame: chunky tubes, top tube sloping, fork + stem in the accent colour
+  const p = { rear: v(-0.52, 0.35), bb: v(...geo.bb), seat: v(-0.2, 0.86), head: v(0.38, 0.86), head_low: v(0.42, 0.68), front: v(0.52, 0.35) };
   const f = mats.frame;
-  add_bar(f, 0.022, p.rear, p.bb);
-  add_bar(f, 0.024, p.bb, p.seat);
+  add_bar(f, 0.024, p.rear, p.bb);
+  add_bar(f, 0.03, p.bb, p.seat);
   add_bar(f, 0.02, p.seat, p.rear);
-  add_bar(f, 0.024, p.seat, p.bar);
-  add_bar(f, 0.027, p.bb, p.bar);
-  add_bar(f, 0.022, p.bar, p.front);
-  add_bar(f, 0.018, v(0.42, 0.98, -0.2), v(0.42, 0.98, 0.2));
+  add_bar(f, 0.03, p.seat, p.head);
+  add_bar(f, 0.038, p.bb, p.head_low);
+  add_bar(mats.accent, 0.035, p.head_low, v(0.4, 0.94));          // head tube
+  add_bar(mats.accent, 0.022, p.head_low, p.front);                // fork
+  add_bar(mats.accent, 0.022, v(0.4, 0.94), v(0.47, 0.98));        // stem
+  add_bar(mats.tire, 0.018, v(0.47, 0.98, -0.21), v(0.47, 0.98, 0.21));   // handlebar
+  for (const s of [-1, 1]) add_bar(mats.tire, 0.018, v(0.47, 0.98, s * 0.21), v(0.55, 0.88, s * 0.21));   // drops
+  add_bar(mats.metal, 0.016, p.seat, v(-0.24, 0.98));              // seat post
+  const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.28), mats.tire);
+  saddle.position.copy(v(-0.22, 1.0));
+  g.add(saddle);
 
-  // torso: a faceted box-ish body, arms, head + helmet (low segment counts = visible facets)
-  add_bar(jersey, 0.16, v(-0.22, 1.0), v(0.22, 1.4));
-  for (const s of [-1, 1]) add_bar(jersey, 0.05, v(0.2, 1.38, s * 0.17), v(0.42, 0.99, s * 0.2));
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 0), mats.skin);
-  head.position.copy(v(0.36, 1.56));
+  // body: tapered, flat-sided torso leaning forward, with a white stripe and a race number on the back
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 6), mats.jersey);
+  torso.position.copy(v(0.02, 1.2));
+  torso.rotation.x = -1.05;   // lean forward
+  torso.scale.set(1.15, 1, 0.8);
+  torso.castShadow = true;
+  g.add(torso);
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.175, 0.07, 6), mats.white);
+  stripe.position.copy(v(0.06, 1.23));
+  stripe.rotation.x = -1.05;
+  stripe.scale.set(1.16, 1, 0.81);
+  g.add(stripe);
+  const hips = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), mats.shorts);
+  hips.position.copy(v(...geo.hip));
+  hips.scale.set(1.15, 0.8, 1);
+  g.add(hips);
+
+  // arms: upper arm + forearm with a fixed elbow bend, gloves on the hoods
+  for (const s of [-1, 1]) {
+    const sh = v(geo.shoulder[0], geo.shoulder[1], s * 0.19), el = v(0.36, 1.16, s * 0.22), hd = v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2);
+    add_bar(mats.jersey, 0.055, sh, el);
+    add_bar(mats.skin, 0.042, el, hd);
+    const glove = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), mats.tire);
+    glove.position.copy(hd);
+    g.add(glove);
+  }
+
+  // head: skin, faceted aero helmet in the rider colour with a dark visor
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), mats.skin);
+  head.position.copy(v(0.36, 1.5));
   head.castShadow = true;
   g.add(head);
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.15, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), jersey);
-  helmet.position.copy(v(0.35, 1.58));
-  helmet.scale.set(1, 0.9, 1.25);
+  const helmet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), mats.jersey);
+  helmet.position.copy(v(0.33, 1.56));
+  helmet.scale.set(0.95, 0.7, 1.35);
   helmet.castShadow = true;
   g.add(helmet);
+  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.3), mats.white);
+  vent.position.copy(v(0.32, 1.66));
+  g.add(vent);
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), mats.tire);
+  visor.position.copy(v(0.46, 1.5));
+  g.add(visor);
 
   // nitro flame behind the rear wheel, visible only while boosting
   const flame = new THREE.Mesh(
-    new THREE.ConeGeometry(0.15, 0.9, 6),
+    new THREE.ConeGeometry(0.16, 1.0, 5),
     new THREE.MeshBasicMaterial({ color: '#ff8a00', transparent: true, opacity: 0.9, depthWrite: false }),
   );
   flame.rotation.x = Math.PI / 2;
-  flame.position.copy(v(-1.0, 0.32));
+  flame.position.copy(v(-1.05, 0.34));
   flame.visible = false;
   g.add(flame);
 
-  const legs = [-1, 1].map((s) => ({
-    side: s * 0.11,
-    thigh: add_bar(mats.shorts, 0.07),
-    shin: add_bar(mats.shorts, 0.052),
-    crank: add_bar(mats.crank, 0.016),
-  }));
+  // legs: thigh + calf posed from the crank angle every frame, shoe on the pedal
+  const legs = [-1, 1].map((s) => {
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.24), mats.shoe);
+    shoe.castShadow = true;
+    g.add(shoe);
+    return {
+      side: s * 0.12,
+      thigh: add_bar(mats.shorts, 0.075, null, null, 0.07),
+      shin: add_bar(mats.skin, 0.05),
+      crank: add_bar(mats.metal, 0.016),
+      shoe,
+    };
+  });
   return { group: g, wheels, legs, flame, mats: Object.values(mats), faded: false };
 }
 
@@ -541,8 +715,9 @@ function pose_leg(leg, angle) {
   const kx = hx + ux * half - uy * bend, ky = hy + uy * half + ux * bend;
   const s = leg.side;
   place_bar(leg.thigh, v(hx, hy, s), v(kx, ky, s));
-  place_bar(leg.shin, v(kx, ky, s), v(fx, fy, s));
+  place_bar(leg.shin, v(kx, ky, s), v(fx, fy + 0.03, s));
   place_bar(leg.crank, v(bx, by, s), v(fx, fy, s));
+  leg.shoe.position.copy(v(fx + 0.03, fy + 0.02, s * 1.15));
 }
 
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
@@ -556,7 +731,6 @@ function make_wind(scene) {
   const lines = new THREE.LineSegments(g, mat);
   lines.frustumCulled = false;
   scene.add(lines);
-  const pts = Array.from({ length: n }, () => spawn({}, true));
 
   // random spot in a box around the road ahead of the camera (not right in front of the rider)
   function spawn(p, anywhere = false) {
@@ -567,6 +741,7 @@ function make_wind(scene) {
     p.z = anywhere ? -Math.random() * 70 : -55 - Math.random() * 20;
     return p;
   }
+  const pts = Array.from({ length: n }, () => spawn({}, true));
 
   return {
     update(dt, cam_z, cam_x, vis_speed, boost) {
@@ -580,7 +755,7 @@ function make_wind(scene) {
         pos[o + 3] = cam_x + p.x; pos[o + 4] = p.y; pos[o + 5] = cam_z + p.z - len;
       }
       g.attributes.position.needsUpdate = true;
-      mat.opacity = Math.min(0.55, Math.max(0, (vis_speed - 6) / 45)) + (boost ? 0.3 : 0);
+      mat.opacity = Math.min(0.5, Math.max(0, (vis_speed - 6) / 50)) + (boost ? 0.3 : 0);
     },
   };
 }
@@ -597,29 +772,32 @@ export function create_world(canvas, race, theme_id = 'meadow') {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // deeper, filmic colours with soft highlights
+  renderer.toneMappingExposure = 1.15;
 
   const scene = new THREE.Scene();
   scene.background = canvas_texture(4, 256, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, theme.sky[0]);
-    grad.addColorStop(0.75, theme.sky[1]);
+    grad.addColorStop(0.7, theme.sky[1]);
     grad.addColorStop(1, theme.fog);
     g.fillStyle = grad;
     g.fillRect(0, 0, w, h);
   });
   scene.fog = new THREE.Fog(theme.fog, ...theme.fog_range);
   scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], theme.hemi[2]));
-  const sun = new THREE.DirectionalLight(theme.sun[0], theme.sun[1]);
+  // key light from the side: lit facets vs shaded facets is the whole low-poly look
+  const sun = new THREE.DirectionalLight(theme.key[0], theme.key[1]);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 160 });
+  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 200 });
   sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = 0.03;
+  sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
-  const sun_off = new THREE.Vector3(...theme.sun_dir);
+  const sun_off = new THREE.Vector3(...theme.key_dir);
 
   // far ground under everything (beyond the terrain grid), same colour as the fog
-  const base = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshBasicMaterial({ color: theme.fog }));
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshBasicMaterial({ color: theme.fog }));
   base.rotation.x = -Math.PI / 2;
   base.position.y = -1;
   scene.add(base);
@@ -627,6 +805,7 @@ export function create_world(canvas, race, theme_id = 'meadow') {
   build_course(scene, race, theme);
   const backdrop = make_backdrop(scene, theme);
   const props = make_props(scene, theme);
+  const camps = make_camps(scene, theme);
   const terrain_mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 });
   const chunks = Array.from({ length: chunk_count }, (_, slot) => {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), terrain_mat);
@@ -642,7 +821,7 @@ export function create_world(canvas, race, theme_id = 'meadow') {
     return { r, model };
   });
 
-  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2600);
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 3000);
   let base_fov = 60;
   let portrait = false;
   let t_total = 0;
@@ -673,6 +852,25 @@ export function create_world(canvas, race, theme_id = 'meadow') {
       c.mesh.geometry = new THREE.BufferGeometry();
       build_chunk_geometry(c.mesh.geometry, z0, theme);
       fill_props(props, c.slot, i, z0, theme);
+      place_camp(camps, theme, c.slot, i, z0);
+    }
+  }
+
+  // campfires: flicker, and give the two warm lights to the nearest fires in front of the camera
+  function update_camps(cam_z) {
+    const lit = camps.camps
+      .filter((c) => c.group.visible && c.group.position.z < cam_z + 10 && c.group.position.z > cam_z - 140)
+      .sort((a, b) => b.group.position.z - a.group.position.z);
+    camps.lights.forEach((l, i) => {
+      const c = lit[i];
+      l.intensity = c ? 55 * (0.85 + Math.random() * 0.3) : 0;
+      if (c) l.position.set(c.group.position.x, c.group.position.y + 1.4, c.group.position.z);
+    });
+    for (const c of camps.camps) {
+      if (!c.group.visible) continue;
+      const f = 0.85 + Math.random() * 0.35;
+      c.flame.scale.set(f, 0.8 + Math.random() * 0.5, f);
+      c.core.scale.set(1, 0.8 + Math.random() * 0.4, 1);
     }
   }
 
@@ -695,10 +893,10 @@ export function create_world(canvas, race, theme_id = 'meadow') {
       for (const w of model.wheels) w.rotation.x = (r.x * vis_scale) / wheel_r;
       model.legs.forEach((leg, i) => pose_leg(leg, r.crank + i * Math.PI));
       // riders between the camera and the player fade out, so they never block the view
-      const near = Math.max(0, Math.min(1, (cam_z - model.group.position.z - 1.5) / 3));
+      const near = Math.max(0, Math.min(1, (cam_z - model.group.position.z - 1.5) / 3.5));
       const fade = !r.is_player && near < 1;
       if (fade || model.faded) {
-        for (const m of model.mats) { m.transparent = fade; m.opacity = fade ? 0.15 + 0.85 * near : 1; m.depthWrite = !fade; }
+        for (const m of model.mats) { m.transparent = fade; m.opacity = fade ? 0.05 + 0.95 * near * near : 1; m.depthWrite = !fade; }
         model.faded = fade;
       }
       model.flame.visible = r.nitro.boost_left > 0;
@@ -709,21 +907,22 @@ export function create_world(canvas, race, theme_id = 'meadow') {
     const pz = rider_z(p);
     const cx = (riders[0].model.lx ?? lane_x(p.lane)) * 0.5;
     const vis_speed = p.v * vis_scale;
-    const shake = Math.min(1, vis_speed / 30) * (boost ? 0.04 : 0.015);
-    camera.position.set(cx + Math.sin(t_total * 31) * shake, height + Math.sin(t_total * 23) * shake, pz + back);
-    camera.lookAt(cx, portrait ? 0.6 : -0.5, pz - (portrait ? 12 : 9));
+    const shake = Math.min(1, vis_speed / 30) * (boost ? 0.04 : 0.012);
+    camera.position.set(cx + Math.sin(t_total * 31) * shake, height + Math.sin(t_total * 23) * shake, cam_z);
+    camera.lookAt(cx, portrait ? 0.7 : -0.4, pz - (portrait ? 12 : 9));
     const target_fov = base_fov + (boost ? 14 : 0) + Math.min(6, vis_speed / 8);
     camera.fov += (target_fov - camera.fov) * Math.min(1, dt * 4);
     camera.updateProjectionMatrix();
 
-    update_chunks(camera.position.z);
-    wind.update(dt, camera.position.z, cx, vis_speed, boost);
-    // backdrop and sun follow the camera (infinitely far away)
-    backdrop.group.position.z = camera.position.z;
-    backdrop.clouds.position.z = camera.position.z * 0.97;   // a little parallax
-    if (backdrop.stars) backdrop.stars.position.z = camera.position.z;
-    base.position.z = camera.position.z;
-    sun.target.position.set(0, 0, pz - 8);
+    update_chunks(cam_z);
+    update_camps(cam_z);
+    wind.update(dt, cam_z, cx, vis_speed, boost);
+    // backdrop follows the camera (it's far away); clouds drift sideways slowly
+    backdrop.group.position.z = cam_z;
+    backdrop.clouds.position.set(Math.sin(t_total * 0.01) * 60, 0, cam_z);
+    if (backdrop.stars) backdrop.stars.position.z = cam_z;
+    base.position.z = cam_z;
+    sun.target.position.set(0, 0, pz - 10);
     sun.position.copy(sun.target.position).add(sun_off);
     renderer.render(scene, camera);
   }

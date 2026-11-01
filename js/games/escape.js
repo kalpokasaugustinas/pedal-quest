@@ -1,8 +1,8 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
-import { setup_2d, sky, hills, draw_rider, label, mix } from '../draw2d.js?v=15';
-import { step_speed } from '../physics.js?v=15';
-import { clamp, fmt_clock } from '../util.js?v=15';
+import { setup_2d, sky, hills, draw_rider, label, mix } from '../draw2d.js?v=16';
+import { step_speed } from '../physics.js?v=16';
+import { clamp, fmt_clock } from '../util.js?v=16';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km

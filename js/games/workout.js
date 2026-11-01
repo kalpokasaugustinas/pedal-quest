@@ -1,7 +1,7 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
 // optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { setup_2d, round_rect, label } from '../draw2d.js?v=15';
-import { clamp, fmt_clock } from '../util.js?v=15';
+import { setup_2d, round_rect, label } from '../draw2d.js?v=16';
+import { clamp, fmt_clock } from '../util.js?v=16';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
