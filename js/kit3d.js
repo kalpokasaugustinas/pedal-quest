@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=25';
+import { seeded } from './util.js?v=26';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -1180,10 +1180,12 @@ export function create_kit(canvas, opts = {}) {
       const x = road_x(z) + gx + jx;
       return [x, ground(x, z), z];
     };
+    // every grid point once (each is shared by up to 4 cells): ground() is the expensive part of a chunk
+    const grid = Array.from({ length: rows + 1 }, (_, ri) => xs.map((_, ci) => vtx(ci, ri)));
     for (let ri = 0; ri < rows; ri++) {
       for (let ci = 0; ci < xs.length - 1; ci++) {
         if (ci === mid - 1) continue;   // the road strip has no terrain
-        const a = vtx(ci, ri), b = vtx(ci + 1, ri), c = vtx(ci, ri + 1), d = vtx(ci + 1, ri + 1);
+        const a = grid[ri][ci], b = grid[ri][ci + 1], c = grid[ri + 1][ci], d = grid[ri + 1][ci + 1];
         for (const tri of [[a, b, c], [b, d, c]]) {   // counter-clockwise seen from above
           const cy = (tri[0][1] + tri[1][1] + tri[2][1]) / 3 - road_y(tri[0][2]);
           const r = hash2(Math.round(tri[0][0] * 10 + tri[1][2]), Math.round(tri[2][2] * 10 + cy * 7));
@@ -1483,15 +1485,48 @@ export function create_kit(canvas, opts = {}) {
     place_wild(c.slot, i, z0);
   }
 
-  // keep the chunk window around the camera: chunk i covers visual z in [-(i+1)L, -iL]
-  function update_chunks(cam_z, behind = 1) {
+  // keep the chunk window around the camera: chunk i covers visual z in [-(i+1)L, -iL].
+  // a chunk takes ~15 ms to build, so after the first frame at most one is built per frame (nearest first):
+  // two in one frame would be a visible hitch
+  function update_chunks(cam_z, behind = 1, max_builds = 1) {
     const first = Math.floor(-cam_z / chunk_len) - behind;
     const wanted = new Set(Array.from({ length: chunk_count }, (_, k) => first + k));
     const free = chunks.filter((c) => !wanted.has(c.index));
+    let built = 0;
     for (const i of wanted) {
       if (chunks.some((c) => c.index === i)) continue;
+      if (built++ >= max_builds) break;
       build_chunk(free.pop(), i);
     }
+  }
+
+  // shader warm-up: the gpu compiles a program the first time a kind of object is drawn, a freeze of up to
+  // a few hundred ms on a phone. pooled objects (animals, hikers, campfires, nitro flames) start hidden and
+  // rivers / houses / road marks appear later, so the first one of each used to stutter early in the ride.
+  // one throwaway render into a 1x1 target with everything visible and unculled compiles them all (shadows too)
+  let warmed = false;
+  function warm_up() {
+    const changed = [];
+    const probe = new THREE.Group();
+    const box = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+    for (const m of [water_mat, rail_mat, house_mat, mark_mat('#ffffff', 0.9), flat_mat('#ffffff')]) probe.add(new THREE.Mesh(box, m));
+    probe.position.copy(camera.position);
+    scene.add(probe);
+    scene.traverse((o) => {
+      if (!o.visible || o.frustumCulled) changed.push([o, o.visible, o.frustumCulled]);
+      o.visible = true;
+      o.frustumCulled = false;
+    });
+    const rt = new THREE.WebGLRenderTarget(1, 1);
+    try {
+      renderer.setRenderTarget(rt);
+      renderer.render(scene, camera);
+    } catch { /* warm-up is only an optimisation */ }
+    renderer.setRenderTarget(null);
+    rt.dispose();
+    for (const [o, vis, cull] of changed) { o.visible = vis; o.frustumCulled = cull; }
+    scene.remove(probe);
+    box.dispose();
   }
 
   // campfires: flicker, and give the two warm lights to the nearest fires in front of the camera
@@ -2026,7 +2061,8 @@ export function create_kit(canvas, opts = {}) {
   function frame(dt, f) {
     t_total += dt;
     const cz = camera.position.z, cx = camera.position.x;
-    update_chunks(f.look_back ? cz : Math.min(cz, f.focus_z + 10), f.look_back ? 5 : 1);
+    update_chunks(f.look_back ? cz : Math.min(cz, f.focus_z + 10), f.look_back ? 5 : 1, warmed ? 1 : Infinity);
+    if (!warmed) { warmed = true; warm_up(); }
     update_camps(cz);
     update_wild(dt, cz);
     precip?.update(dt, cx, camera.position.y, cz, f.speed ?? 0);

@@ -1,9 +1,9 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=25';
-import { create_kit, scenery_option } from '../kit3d.js?v=25';
-import { step_speed } from '../physics.js?v=25';
-import { clamp, fmt_clock, load, store } from '../util.js?v=25';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=26';
+import { create_kit, scenery_option } from '../kit3d.js?v=26';
+import { step_speed } from '../physics.js?v=26';
+import { clamp, fmt_clock, load, store } from '../util.js?v=26';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
