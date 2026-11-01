@@ -34,6 +34,8 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 - Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
 
 ### 3D look (all games)
+Effects: ~1.2 km of terrain ahead, shadows over ~140 m around the action (no pop-in), fast wind streaks that swirl in small spirals, and tyre dust (gravel / dirt) or smoke (asphalt) when a rider pushes 2× FTP, a big cloud at 3× FTP (bots: 2× / 3× their average).
+
 Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, { theme, road_w, lanes, road_x(z), road_y(z), surface(z), camps, posts, paint_road })`. Games place riders (`place_rider`), steer the camera (`chase`) and call `frame()` each render. Every game has a **Scenery** option (meadow / valley / night).
 - Crossroads: the road forks in a clearing with 3 signposted trails; your pick bends the road into that trail (and its surface: asphalt, gravel, dirt).
 - Summit: the road really climbs (distance ×1.6, height ×2.2 on screen); grade boards, KOM arch, translucent ghost; profile chart as an overlay.

@@ -1,9 +1,9 @@
 // pulse pilot: your heart rate is your altitude. fly a pedal-powered plane through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=19';
-import { step_speed } from '../physics.js?v=19';
-import { clamp, rand } from '../util.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=20';
+import { step_speed } from '../physics.js?v=20';
+import { clamp, rand } from '../util.js?v=20';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect

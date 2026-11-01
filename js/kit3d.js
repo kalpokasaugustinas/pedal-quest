@@ -3,16 +3,16 @@
 // warm trunks, calm colours, lit clouds, campfires, wind streaks, and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=19';
+import { seeded } from './util.js?v=20';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
-const chunk_count = 9;                     // chunks alive at once: 1 behind the camera, 8 ahead
+const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
 
 // ---- themes: colour palettes, light and props. strong key light + low ambient = contrasty facets ----
 export const themes = {
   meadow: {
     name: 'Sunny meadow',
-    sky: ['#3f9be0', '#bfe3f5'], fog: '#bfe0ee', fog_range: [80, 700],
+    sky: ['#3f9be0', '#bfe3f5'], fog: '#bfe0ee', fog_range: [90, 900],
     hemi: ['#d8e8f4', '#4a6a3a', 1.0], key: ['#ffe9cc', 2.7], key_dir: [-60, 55, 25],
     grass: ['#5fa62c', '#529a27', '#6db535', '#468c22', '#78bb3c'], high: ['#7f9a38', '#94844a'],
     mountain: ['#b08a68', '#9a7556', '#c9a582', '#86664c'], snow: '#f4f1ea', snow_line: 0.82,
@@ -22,7 +22,7 @@ export const themes = {
   },
   valley: {
     name: 'Misty valley',
-    sky: ['#a9c79f', '#eef0d4'], fog: '#d8e2c2', fog_range: [50, 560],
+    sky: ['#a9c79f', '#eef0d4'], fog: '#d8e2c2', fog_range: [60, 720],
     hemi: ['#f0f2e0', '#40644a', 1.05], key: ['#fff0d6', 2.4], key_dir: [55, 45, 20],
     grass: ['#4c9a3c', '#418d35', '#58a646', '#3a8030', '#62ad4c'], high: ['#2f7f6a', '#286f5c'],
     mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#286a58'], snow: null, snow_line: 1,
@@ -32,7 +32,7 @@ export const themes = {
   },
   night: {
     name: 'Starry night',
-    sky: ['#081638', '#1e3a78'], fog: '#17305f', fog_range: [60, 620],
+    sky: ['#081638', '#1e3a78'], fog: '#17305f', fog_range: [70, 800],
     hemi: ['#5470b4', '#1a3428', 0.75], key: ['#d6e0ff', 2.7], key_dir: [-55, 60, 20],
     grass: ['#2f9a3a', '#37a542', '#288c34', '#40b04a', '#24802f'], high: ['#22702f', '#34548a'],
     mountain: ['#3a5590', '#4a68a8', '#2c4478', '#5a7ac0'], snow: '#dfe9fb', snow_line: 0.78,
@@ -591,7 +591,7 @@ function animate_rider(model, r, dt, ref_watts, boost) {
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
 
 function make_wind(scene) {
-  const n = 160;
+  const n = 190;
   const pos = new Float32Array(n * 6);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -599,35 +599,45 @@ function make_wind(scene) {
   const lines = new THREE.LineSegments(g, mat);
   lines.frustumCulled = false;
   scene.add(lines);
+  let clock = 0;
 
-  // random spot in a box around the road ahead of the camera (not right in front of the rider)
+  // random spot in a box around the road ahead of the camera (not right in front of the rider),
+  // with its own spiral: radius, turn rate, phase and speed factor
   function spawn(p, anywhere = false) {
     do {
-      p.x = (Math.random() - 0.5) * 18;
-      p.y = 0.2 + Math.random() * 3.6;
-    } while (Math.abs(p.x) < 1.3 && p.y < 2.4);
-    p.z = anywhere ? -Math.random() * 70 : -55 - Math.random() * 20;
+      p.x = (Math.random() - 0.5) * 20;
+      p.y = 0.3 + Math.random() * 3.8;
+    } while (Math.abs(p.x) < 1.4 && p.y < 2.5);
+    p.z = anywhere ? -Math.random() * 80 : -60 - Math.random() * 25;
+    p.r = 0.2 + Math.random() * 1.2;                    // swirl radius
+    p.w = (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 5);   // turn rate (rad/s), either direction
+    p.ph = Math.random() * 6.28;
+    p.k = 1.7 + Math.random() * 0.9;                    // faster than the ground: air rush
     return p;
   }
   const pts = Array.from({ length: n }, () => spawn({}, true));
 
   return {
     update(dt, cam_z, cam_x, vis_speed, boost) {
-      const len = Math.min(5, 0.25 + vis_speed * 0.09) * (boost ? 1.6 : 1);
+      clock += dt;
+      const len = Math.min(7, 0.4 + vis_speed * 0.12) * (boost ? 1.6 : 1);
       for (let i = 0; i < n; i++) {
         const p = pts[i];
-        p.z += vis_speed * (boost ? 1.5 : 1.15) * dt;   // a bit faster than the ground: air rush
+        const v = vis_speed * p.k * (boost ? 1.4 : 1);
+        p.z += v * dt;
         if (p.z > 3) spawn(p);
+        // head now, tail where the particle was a moment ago: the streak curves along the spiral
+        const tail_t = clock - len / Math.max(v, 1);
+        const a1 = p.w * clock + p.ph, a0 = p.w * tail_t + p.ph;
         const o = i * 6;
-        pos[o] = cam_x + p.x; pos[o + 1] = p.y; pos[o + 2] = cam_z + p.z;
-        pos[o + 3] = cam_x + p.x; pos[o + 4] = p.y; pos[o + 5] = cam_z + p.z - len;
+        pos[o] = cam_x + p.x + Math.cos(a1) * p.r; pos[o + 1] = p.y + Math.sin(a1) * p.r * 0.7; pos[o + 2] = cam_z + p.z;
+        pos[o + 3] = cam_x + p.x + Math.cos(a0) * p.r; pos[o + 4] = p.y + Math.sin(a0) * p.r * 0.7; pos[o + 5] = cam_z + p.z - len;
       }
       g.attributes.position.needsUpdate = true;
-      mat.opacity = Math.min(0.5, Math.max(0, (vis_speed - 6) / 50)) + (boost ? 0.3 : 0);
+      mat.opacity = Math.min(0.55, Math.max(0, (vis_speed - 5) / 40)) + (boost ? 0.3 : 0);
     },
   };
 }
-
 
 // ---- the kit: one low-poly world around a (possibly curving, climbing) road ----
 //
@@ -682,7 +692,7 @@ export function create_kit(canvas, opts = {}) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.radius = 4;
-  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 260 });
+  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 500 });
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
@@ -969,6 +979,52 @@ export function create_kit(canvas, opts = {}) {
 
   const wind = make_wind(scene);
 
+  const dust_n = 500;
+  const dust = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0),
+    new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1, transparent: true, opacity: 0.6, depthWrite: false }), dust_n);
+  dust.frustumCulled = false;
+  scene.add(dust);
+  for (let i = 0; i < dust_n; i++) dust.setMatrixAt(i, hidden);
+  const puffs = Array.from({ length: dust_n }, () => ({ life: 0, age: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 0, spin: 0 }));
+  let next_puff = 0;
+  const dust_color = new THREE.Color();
+
+  // one puff at a wheel; level 1 = 2x ftp (dust), level 2 = 3x ftp (big cloud)
+  function spawn_puff(x, y, z, level, color) {
+    const idx = next_puff;
+    const p = puffs[idx];
+    next_puff = (next_puff + 1) % dust_n;
+    p.x = x + (Math.random() - 0.5) * 0.3;
+    p.y = y + 0.08;
+    p.z = z;
+    p.vx = (Math.random() - 0.5) * (level > 1 ? 2.4 : 1.4);
+    p.vy = 0.4 + Math.random() * (level > 1 ? 1.6 : 0.9);
+    p.vz = 1 + Math.random() * 2;   // kicked backwards
+    p.size = (level > 1 ? 0.3 : 0.16) * (0.7 + Math.random() * 0.6);
+    p.life = (level > 1 ? 1.1 : 0.7) + Math.random() * 0.6;
+    p.age = 0;
+    p.spin = Math.random() * 6.28;
+    dust.setColorAt(idx, dust_color.set(color).offsetHSL(0, 0, (Math.random() - 0.5) * 0.08));
+  }
+
+  function update_dust(dt) {
+    for (let i = 0; i < dust_n; i++) {
+      const p = puffs[i];
+      if (p.age >= p.life) continue;
+      p.age += dt;
+      if (p.age >= p.life) { dust.setMatrixAt(i, hidden); continue; }
+      const drag = Math.pow(0.25, dt);
+      p.vx *= drag; p.vz *= drag; p.vy *= Math.pow(0.6, dt);
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      const t = p.age / p.life;
+      const sc = p.size * (1 + 2.6 * t) * (1 - t * t * t);   // billows out, then dissolves
+      quat.setFromAxisAngle(up, p.spin + t * 2);
+      dust.setMatrixAt(i, m4.compose(vpos.set(p.x, p.y, p.z), quat, scl.set(sc, sc * 0.8, sc)));
+    }
+    dust.instanceMatrix.needsUpdate = true;
+    if (dust.instanceColor) dust.instanceColor.needsUpdate = true;
+  }
+
   // ---- camera ----
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 3200);
@@ -1038,6 +1094,20 @@ export function create_kit(canvas, opts = {}) {
     model.group.rotation.x = pitch(s.z);
     for (const w of model.wheels) w.rotation.x = (s.dist ?? -s.z) / wheel_r;
     animate_rider(model, s, dt, s.ref, !!s.boost);
+    // tyre dust (gravel / dirt) or smoke (asphalt) when pushing 2x ftp; a big cloud at 3x
+    const effort = (s.watts ?? 0) / Math.max(s.ref || 150, 50);
+    if (effort >= 2 && dt > 0) {
+      const level = effort >= 3 ? 2 : 1;
+      model.dust_acc = (model.dust_acc ?? 0) + (level > 1 ? 80 : 30) * Math.min(dt, 0.1);
+      const yaw = model.group.rotation.y;
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const color = surface(s.z) === 'asphalt' ? '#d8d8d8' : '#c9b38c';
+      while (model.dust_acc >= 1) {
+        model.dust_acc -= 1;
+        const wheel = Math.random() < 0.7 ? -0.52 : 0.52;   // mostly the rear wheel
+        spawn_puff(x + fx * wheel, model.group.position.y, s.z + fz * wheel, level, color);
+      }
+    }
     model.flame.visible = !!s.boost;
     if (model.flame.visible) model.flame.scale.set(1, 0.8 + Math.random() * 0.6, 1);
     // riders between the camera and the target fade out, so they never block the view
@@ -1176,12 +1246,13 @@ export function create_kit(canvas, opts = {}) {
     update_chunks(f.look_back ? cz : Math.min(cz, f.focus_z + 10), f.look_back ? 5 : 1);
     update_camps(cz);
     wind.update(dt, cz, cx, f.speed ?? 0, !!f.boost);
+    update_dust(dt);
     backdrop.group.position.set(cx, road_y(cz), cz);
     backdrop.clouds.position.set(cx + Math.sin(t_total * 0.01) * 60, road_y(cz), cz);
     if (backdrop.stars) backdrop.stars.position.set(cx, 0, cz);
     base.position.set(cx, road_y(cz) - 1.5, cz);
     const fz = f.focus_z;
-    sun.target.position.set(road_x(fz - 10), road_y(fz - 10), fz - 10);
+    sun.target.position.set(road_x(fz - 45), road_y(fz - 45), fz - 45);
     sun.position.copy(sun.target.position).add(sun_off);
     renderer.render(scene, camera);
   }

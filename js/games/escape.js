@@ -1,9 +1,9 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=19';
-import { step_speed } from '../physics.js?v=19';
-import { clamp, fmt_clock } from '../util.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=20';
+import { step_speed } from '../physics.js?v=20';
+import { clamp, fmt_clock } from '../util.js?v=20';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km

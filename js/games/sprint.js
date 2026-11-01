@@ -1,10 +1,10 @@
 // sprint cup: knockout drag-race tournament. three standing-start sprints (quarter, semi, final) against
 // one rival each, with a recovery ride between rounds. lose a round and you're out
 import * as THREE from 'three';
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=19';
-import { create_kit, scenery_option } from '../kit3d.js?v=19';
-import { step_speed } from '../physics.js?v=19';
-import { clamp, fmt_time, fmt_clock } from '../util.js?v=19';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=20';
+import { create_kit, scenery_option } from '../kit3d.js?v=20';
+import { step_speed } from '../physics.js?v=20';
+import { clamp, fmt_time, fmt_clock } from '../util.js?v=20';
 
 const rounds = [
   { name: 'Quarterfinal', rival: 'Rocket Rosa', color: '#e53935', strength: 0.9 },

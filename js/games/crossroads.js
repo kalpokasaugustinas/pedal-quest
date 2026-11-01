@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, scenery_option } from '../kit3d.js?v=19';
-import { step_speed } from '../physics.js?v=19';
-import { rand, clamp, fmt_clock } from '../util.js?v=19';
+import { create_kit, scenery_option } from '../kit3d.js?v=20';
+import { step_speed } from '../physics.js?v=20';
+import { rand, clamp, fmt_clock } from '../util.js?v=20';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
