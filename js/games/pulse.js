@@ -1,9 +1,9 @@
 // pulse pilot: your heart rate is your altitude. fly a winged bicycle through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=24';
-import { step_speed } from '../physics.js?v=24';
-import { clamp, rand } from '../util.js?v=24';
+import { create_kit, scenery_option } from '../kit3d.js?v=25';
+import { step_speed } from '../physics.js?v=25';
+import { clamp, rand } from '../util.js?v=25';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect
@@ -141,7 +141,7 @@ function create(env) {
   const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, ...extra });
 
   // flying bike: you pedal a winged bicycle; the wings flap once per pedal revolution
-  const flyer = kit.add_rider('#ffd400');
+  const flyer = kit.add_rider(env.look);
   const wing_mat = mat('#ffb300'), rib_mat = mat('#8d6e63');
   const wings = [-1, 1].map((side) => {
     const pivot = new THREE.Group();

@@ -1,9 +1,12 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
-// optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { overlay_2d, round_rect, label } from '../draw2d.js?v=24';
-import { create_kit, scenery_option } from '../kit3d.js?v=24';
-import { step_speed } from '../physics.js?v=24';
-import { clamp, fmt_clock } from '../util.js?v=24';
+// optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp.
+// it rides like a solo spin with other riders around: on a hard interval there is someone ahead to reel in,
+// on a recovery someone rolls past you. nothing official, they just make the intervals feel like a ride.
+// the plan is painted on the road ahead (zone colour) with a board at each interval; only a thin strip on screen
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=25';
+import { create_kit, scenery_option } from '../kit3d.js?v=25';
+import { step_speed, steady_speed } from '../physics.js?v=25';
+import { clamp, fmt_clock } from '../util.js?v=25';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -60,6 +63,8 @@ export default {
   how: [
     'Each workout is a set of intervals at a share of your FTP (set it in your profile). Hold the target power.',
     'Within ±5% of target = ON TARGET, within ±10% = CLOSE. Your score is the % of the session you were on target.',
+    'The plan is painted on the road: the edge lines ahead take the colour of the next zone and a board marks where each interval starts. A thin strip at the top shows the whole session.',
+    'You are not alone out there: on hard intervals a rider rides ahead of you, hold your target and you will catch them. On recoveries someone rolls past. It is not a race, nothing to win or lose.',
     'ERG mode: the trainer sets the resistance so you hit the target at any cadence. Easier, but the score shows “ERG”.',
     'FTP Ramp Test: +20 W every minute until you can’t hold it. Your FTP estimate is 75% of your best 1-min power. You can save it to your profile.',
   ],
@@ -90,7 +95,7 @@ function create(env) {
   // 3d ride through the scenery (speed from the shared physics); chart on a 2d layer on top
   const vis = 2.5;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery });
-  const me = kit.add_rider('#ffd400');
+  const me = kit.add_rider(env.look);
   const view = overlay_2d(env.overlay);
   const ride = { x: 0, v: 0, crank: 0, watts: 0 };
   const plan = workouts[env.opts.plan];
@@ -107,6 +112,14 @@ function create(env) {
   } else {
     for (const s of plan.segs()) add({ dur: s.dur, w0: s.from * ftp * env.opts.intensity, w1: s.to * ftp * env.opts.intensity, name: s.name });
   }
+
+  // other riders out on the road: { name, color, x (m), v, watts, crank, model, lane, ahead (spawned ahead of you), passed }
+  const names = ['Lina', 'Tomas', 'Marta', 'Jonas', 'Eva', 'Paulius', 'Ieva', 'Karl', 'Sofia', 'Matas', 'Noah', 'Greta', 'Leo', 'Ona'];
+  const colors = ['#e53935', '#1e88e5', '#43a047', '#8e24aa', '#fb8c00', '#00897b', '#ec407a', '#6d4c41'];
+  const others = [];
+  let name_i = Math.floor(Math.random() * names.length), passed = 0, passed_by = 0, mark_t = 0;
+  const boards = new Map();   // segment -> roadside board
+  let v_smooth = 6;
 
   const st = {
     time: 0, on_s: 0, close_s: 0, last3: [], avg3: 0, trace: [], sec_acc: 0, sec_w: 0,
@@ -160,7 +173,9 @@ function create(env) {
         if (st.seg_i >= 0) env.sfx(s.w0 > segs[st.seg_i].w0 ? 'warn' : 'click');
         st.seg_i = i;
         if (is_test) st.peak_step = s.w0;
+        else spawn_for(s);
       }
+      update_others(dt);
       // erg: send the target on change (ramps: at most once per 2 s, in 5 w steps)
       if (erg && env.trainer.available) {
         const w = Math.round(target / 5) * 5;
@@ -207,6 +222,14 @@ function create(env) {
       const z = -ride.x * vis;
       const speed = ride.v * vis;
       kit.place_rider(me, { z, x: 0, watts: ride.watts, v: ride.v, crank: ride.crank, dist: ride.x * vis, ref: ftp }, dt);
+      // others keep their real gap to you (like the race pack)
+      for (const o of others) {
+        const oz = -(ride.x * vis + (o.x - ride.x));
+        kit.place_rider(o.model, { z: oz, x: o.lane, watts: o.watts, v: o.v, crank: o.crank, dist: o.x * vis, ref: o.watts, fade: kit.fade_for(oz, z) }, dt);
+      }
+      v_smooth += (ride.v - v_smooth) * Math.min(1, dt / 3);
+      mark_t -= dt;
+      if (mark_t <= 0 && !is_test) { mark_t = 0.25; paint_road(z); }
       kit.chase({ z, speed }, dt);
       kit.frame(dt, { focus_z: z, speed });
       draw_scene();
@@ -218,103 +241,131 @@ function create(env) {
     result,
   };
 
+  // a rider for this interval: hard = someone ahead you catch ~70% into it at target power,
+  // easy = someone behind who rolls past you. power is fixed, so the catch only happens if you hold the target
+  function spawn_for(s) {
+    const pct = Math.max(s.w0, s.w1) / ftp;
+    if (s.dur < 30 || others.length >= 4) return;
+    const target = (s.w0 + s.w1) / 2;
+    const name = names[name_i++ % names.length], color = colors[name_i % colors.length];
+    let o = null;
+    if (pct >= 0.85) {
+      const w = target * 0.8, gap = (steady_speed(target) - steady_speed(w)) * s.dur * 0.7;
+      o = { name, color, x: ride.x + Math.max(15, gap), v: steady_speed(w), watts: w, ahead: true };
+    } else if (pct < 0.7 && s.name !== 'Cool-down') {
+      const w = Math.max(target * 1.6, ftp * 0.75);
+      o = { name, color, x: ride.x - 30, v: steady_speed(w), watts: w, ahead: false };
+    } else if (s.name === 'Warm-up') {
+      const w = target * 0.75;
+      o = { name, color, x: ride.x + 60, v: steady_speed(w), watts: w, ahead: true };
+    }
+    if (!o) return;
+    Object.assign(o, { crank: Math.random() * 6, lane: others.length % 2 ? -1.1 : 1.1, passed: false, model: kit.add_rider(color) });
+    others.push(o);
+  }
+
+  // others ride their own steady power; count who you pass and who passes you, drop riders far away
+  function update_others(dt) {
+    for (const o of [...others]) {
+      o.v = step_speed(o.v, o.watts, dt);
+      o.x += o.v * dt;
+      o.crank += (88 / 60) * 2 * Math.PI * dt;
+      if (!o.passed && o.ahead && ride.x > o.x + 2) {
+        o.passed = true;
+        passed += 1;
+        env.big_text(`👋 Caught ${o.name}!`, 1400, 'callout');
+        env.sfx('good');
+      }
+      if (!o.passed && !o.ahead && o.x > ride.x + 2) {
+        o.passed = true;
+        passed_by += 1;
+        env.big_text(`${o.name} rolls past 👋`, 1300, 'callout');
+      }
+      if (o.x < ride.x - 120 || o.x > ride.x + 500) {
+        kit.remove_rider(o.model);
+        others.splice(others.indexOf(o), 1);
+      }
+    }
+  }
+
+  // zone colours on the road ahead + a board at each interval start. distance ahead = time to it x your speed,
+  // so the colour change reaches your wheel when the interval changes
+  function paint_road(rz) {
+    const vv = Math.max(v_smooth, 4) * vis;
+    const list = [];
+    for (const s of segs) {
+      const d0 = (s.t - st.time) * vv, d1 = (s.t + s.dur - st.time) * vv;
+      if (d1 < -20) continue;
+      if (d0 > 450) break;
+      list.push({ z0: rz - Math.max(-20, d0), z1: rz - Math.min(450, d1), color: zone_color(Math.max(s.w0, s.w1) / ftp) });
+      // board where the interval starts (moves a little with your speed)
+      if (d0 > 2 && d0 < 300) {
+        let b = boards.get(s);
+        const w = Math.round(s.w0) + (s.w1 !== s.w0 ? `→${Math.round(s.w1)}` : '');
+        if (!b) {
+          b = kit.add_board(rz - d0, `${s.name} · ${w} W`, 1, zone_color(Math.max(s.w0, s.w1) / ftp), '#111', 3.4);
+          boards.set(s, b);
+        }
+        const z = rz - d0, x = kit.road_x(z) + kit.road_edge + 1.8;
+        b.position.set(x, kit.ground(x, z), z);
+        b.rotation.y = kit.heading(z);
+      }
+    }
+    for (const [sg, b] of boards) {
+      if ((sg.t - st.time) * vv < -30) { kit.remove(b); boards.delete(sg); }
+    }
+    kit.set_marks(list);
+  }
+
+  // thin session strip under the top bar: blocks (height = power), past dimmed, your position, interval clock
   function draw_scene() {
-    const { ctx, w, h } = view;
+    const { ctx, w } = view;
     const ins = env.insets();
-    const panel_top = ins.top + 6, panel_h = Math.min(h * 0.42, 330);
-    const top = panel_top + 84, bottom = panel_top + panel_h - 22;   // space above the blocks for the big interval clock
-    const left = 22, right = w - 22;
-
+    const top = ins.top + 6, sh = 30, left = 14, right = w - 14;
     view.clear();
-    ctx.fillStyle = 'rgba(12,18,26,0.62)';
-    round_rect(ctx, 10, panel_top, w - 20, panel_h, 14);
+    ctx.fillStyle = 'rgba(12,18,26,0.55)';
+    round_rect(ctx, left - 4, top - 3, right - left + 8, sh + 6, 8);
     ctx.fill();
-
-    // visible window: the whole workout, or for the ramp test 0..(now + 3 min)
     const span = is_test ? Math.max(600, st.time + 180) : total;
-    const max_w = Math.max(...segs.filter((s) => s.t < span).map((s) => Math.max(s.w0, s.w1)), ftp) * 1.15;
+    const max_w = Math.max(...segs.filter((s) => s.t < span).map((s) => Math.max(s.w0, s.w1)), ftp) * 1.1;
     const x_of = (t) => left + (t / span) * (right - left);
-    const y_of = (wt) => bottom - (wt / max_w) * (bottom - top);
-
-    // ftp line
-    ctx.strokeStyle = 'rgba(255,212,0,.45)';
-    ctx.setLineDash([6, 6]);
+    const y_of = (wt) => top + sh - (wt / max_w) * sh;
+    for (const s of segs) {
+      if (s.t > span) break;
+      const x1 = x_of(s.t), x2 = x_of(Math.min(span, s.t + s.dur));
+      const past = s.t + s.dur <= st.time;
+      ctx.globalAlpha = past ? 0.35 : 0.9;
+      ctx.fillStyle = zone_color(Math.max(s.w0, s.w1) / ftp);
+      ctx.beginPath();
+      ctx.moveTo(x1 + 0.5, top + sh);
+      ctx.lineTo(x1 + 0.5, y_of(s.w0));
+      ctx.lineTo(x2 - 0.5, y_of(s.w1));
+      ctx.lineTo(x2 - 0.5, top + sh);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // ftp line + now marker
+    ctx.strokeStyle = 'rgba(255,212,0,.5)';
     ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(left, y_of(ftp));
     ctx.lineTo(right, y_of(ftp));
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,212,0,.7)';
-    ctx.textAlign = 'right';   // right end: the now line starts on the left
-    ctx.fillText(`FTP ${ftp} W`, right - 4, y_of(ftp) - 5);
-
-    // interval blocks: past ones dimmed, current one highlighted
-    for (const s of segs) {
-      if (s.t > span) break;
-      const x1 = x_of(s.t), x2 = x_of(Math.min(span, s.t + s.dur));
-      const past = s.t + s.dur <= st.time;
-      const now = st.time >= s.t && st.time < s.t + s.dur;
-      ctx.globalAlpha = past ? 0.35 : now ? 1 : 0.75;
-      ctx.fillStyle = zone_color(Math.max(s.w0, s.w1) / ftp);
-      ctx.beginPath();
-      ctx.moveTo(x1 + 0.5, bottom);
-      ctx.lineTo(x1 + 0.5, y_of(s.w0));
-      ctx.lineTo(x2 - 0.5, y_of(s.w1));
-      ctx.lineTo(x2 - 0.5, bottom);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // your power trace (1-s samples, smoothed over 5 s)
-    if (st.trace.length > 1) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      st.trace.forEach(([t], i) => {
-        const a = st.trace.slice(Math.max(0, i - 4), i + 1);
-        const v = a.reduce((s, x) => s + x[1], 0) / a.length;
-        const p = [x_of(t), y_of(clamp(v, 0, max_w))];
-        if (i === 0) ctx.moveTo(...p); else ctx.lineTo(...p);
-      });
-      ctx.stroke();
-    }
-
-    // now line + target marker
     const nx = x_of(st.time);
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(nx, top - 6);
-    ctx.lineTo(nx, bottom);
+    ctx.moveTo(nx, top - 3);
+    ctx.lineTo(nx, top + sh + 3);
     ctx.stroke();
-    const tgt = target_at(st.time);
-    if (tgt) {
-      const col = st.hit === 'on' ? '#7ee08a' : st.hit === 'close' ? '#ffd54f' : '#ff5252';
-      ctx.fillStyle = col;
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 14;
-      ctx.beginPath();
-      ctx.arc(nx, y_of(clamp(st.avg3, 0, max_w)), 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-
-    // time axis
-    ctx.fillStyle = 'rgba(255,255,255,.45)';
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    const step = span > 1500 ? 300 : 120;
-    for (let t = step; t < span; t += step) ctx.fillText(`${t / 60}m`, x_of(t), bottom + 13);
-
-    // big countdown of the current interval in the middle of the empty space above the blocks
+    // interval clock + name just under the strip
     const s = seg_at(st.time);
     if (s) {
       const left_s = s.t + s.dur - st.time;
-      label(ctx, fmt_clock(Math.ceil(left_s)), w / 2, panel_top + 32, 40, left_s <= 5 ? '#ffd54f' : '#fff');
-      label(ctx, s.name, w / 2, panel_top + 64, 16, 'rgba(255,255,255,.75)');
+      label(ctx, `${fmt_clock(Math.ceil(left_s))}  ·  ${s.name}`, w / 2, top + sh + 24, 20, left_s <= 5 ? '#ffd54f' : '#fff');
     }
   }
 
@@ -357,9 +408,10 @@ function create(env) {
     return {
       title: `${pct}% on target`,
       sub: `${plan.name} ${Math.round(env.opts.intensity * 100)}% · ${fmt_clock(done_s)} · ${rows} hard intervals${erg ? ' · ERG' : ''}`,
-      body: `<p class="result-note">On target ${fmt_clock(st.on_s)} · close ${fmt_clock(st.close_s)} · off ${fmt_clock(Math.max(0, done_s - st.on_s - st.close_s))}</p>`,
+      body: `<p class="result-note">On target ${fmt_clock(st.on_s)} · close ${fmt_clock(st.close_s)} · off ${fmt_clock(Math.max(0, done_s - st.on_s - st.close_s))}</p>
+        <p class="result-note">On the road: you caught ${passed} rider${passed === 1 ? '' : 's'}, ${passed_by} rolled past you.</p>`,
       score: pct,
-      flags: { pct, erg },
+      flags: { pct, erg, passed },
       note: `FTP ${ftp}${erg ? ' · ERG' : ''}`,
     };
   }

@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 24 · 2026-11-01 17:46</span>
+    <span id="version">build 25 · 2026-11-01 18:39</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -38,6 +38,7 @@
       <label>Max HR <input type="number" id="p-maxhr" inputmode="numeric" min="120" max="220"> bpm</label>
       <label>Weight <input type="number" id="p-weight" inputmode="numeric" min="35" max="150"> kg</label>
       <label class="toggle"><input type="checkbox" id="p-sound"> Sounds</label>
+      <label class="toggle"><input type="checkbox" id="p-music"> Music</label>
     </div>
     <p class="small">Every game reads these. FTP sizes targets and rivals, max HR sets heart rate zones, weight sets how fast your watts move you (speed, distance, climbing).</p>
   </div>
@@ -61,6 +62,13 @@
 
   <div class="panel"><div class="label" id="g-board-label">Top scores</div><ol id="g-board" class="board"></ol></div>
   <p class="small"><a href="test.html">Connection test page</a></p>
+</section>
+
+<!-- garage: level + pp, the cyclist on a turntable, unlockable look -->
+<section id="screen-garage" class="screen">
+  <div class="panel pp" id="garage-level"></div>
+  <canvas id="garage-canvas" class="garage-canvas"></canvas>
+  <div class="panel" id="garage-slots"></div>
 </section>
 
 <!-- stats tab: totals, records, best result per game, ride history, badges -->
@@ -102,6 +110,7 @@
   <h1 id="r-title"></h1>
   <p id="r-sub" class="tag"></p>
   <div id="r-body"></div>
+  <div id="r-pp"></div>
   <div id="r-daily"></div>
   <div id="r-badges"></div>
   <div id="r-ride"></div>
@@ -116,6 +125,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=24"></script>
+<script type="module" src="js/main.js?v=25"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=24';
-import { create_world } from '../world.js?v=24';
-import { scenery_option } from '../kit3d.js?v=24';
-import { fmt_time, ordinal } from '../util.js?v=24';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg, styles } from '../race_model.js?v=25';
+import { create_world } from '../world.js?v=25';
+import { scenery_option } from '../kit3d.js?v=25';
+import { fmt_time, ordinal } from '../util.js?v=25';
 
 export default {
   id: 'race',
@@ -16,6 +16,7 @@ export default {
     '30 s above the line fills the bar; below it the charge just waits. The target starts 20 s into the race, is at least 65% of your max HR (soft pedalling charges nothing) and resets to your current heart rate after 25 s below it.',
     'A full bar fires automatically: +80 W for 3 s, then a new target is set from your heart rate.',
     'Bots get nitro too, at half the rate of a rider who never fades.',
+    'Bots race smart but fair: each has a style (Attacker, Wheel sucker, Diesel, Chaser, Sprinter). They attack when you fade, follow your surges, chase when you break away and save energy on a wheel for the sprint. Every extra watt is paid back later, so their race average stays on target.',
     'Drafting: ride within 5 m behind anyone and your air drag drops by up to 30%. Bots draft too.',
   ],
   options: [
@@ -24,7 +25,7 @@ export default {
     scenery_option('meadow'),
   ],
   setup_html: (o) => `<ul class="rivals">${bot_lineup(o.base_watts).reverse()
-    .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name}<span class="w">~${b.avg_watts} W avg</span></li>`).join('')}</ul>`,
+    .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name} <small>${styles[b.style].label}</small><span class="w">~${b.avg_watts} W avg</span></li>`).join('')}</ul>`,
   board: (o) => ({ key: `race_${o.km}km`, label: `Best times · ${o.km} km`, lower: true, fmt: fmt_time }),
   create,
 };
@@ -32,7 +33,8 @@ export default {
 function create(env) {
   const $ = (id) => document.getElementById(id);
   const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts, max_hr: env.profile.max_hr });
-  const world = create_world(env.canvas, race, env.opts.scenery, env.profile.ftp);
+  race.player.color = env.look.jersey;   // your dot in the leaderboard = your jersey
+  const world = create_world(env.canvas, race, env.opts.scenery, env.profile.ftp, env.look);
 
   env.hud.innerHTML = `
     <div class="race-top">
@@ -63,6 +65,13 @@ function create(env) {
       }
       last_hr = input.hr;
       update_race(race, dt, input.watts, input.cadence, input.hr);
+      // tactics near you get a callout (the leaderboard shows the rest)
+      for (const e of race.events.splice(0)) {
+        if (Math.abs(e.rider.x - race.player.x) > 30) continue;
+        const text = { attack: `⚔️ ${e.rider.name} attacks!`, chase: `🎯 ${e.rider.name} chases`, follow: `🧲 ${e.rider.name} follows` }[e.kind];
+        env.big_text(text, 1400, 'callout');
+        if (e.kind === 'attack') env.sfx('warn');
+      }
       if (race.player.nitro.count > last_boosts) {
         last_boosts = race.player.nitro.count;
         env.big_text('NITRO!', 1200, 'hot');
@@ -97,7 +106,7 @@ function create(env) {
     $('leaderboard').innerHTML = order.map((r, i) => {
       const gap = Math.round(r.x - p.x);
       const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
-      const fire = r.nitro.boost_left > 0 ? ' 🔥' : '';
+      const fire = (r.nitro.boost_left > 0 ? ' 🔥' : '') + (r.tactic ? { attack: ' ⚔️', chase: ' 🎯', follow: ' 🧲' }[r.tactic.kind] : '');
       return `<li class="${r.is_player ? 'me' : ''}">${i + 1}. <span class="dot" style="background:${r.color}"></span>${r.name}${fire}<span class="gap">${gap_text}</span></li>`;
     }).join('');
 
@@ -131,7 +140,7 @@ function create(env) {
       sub: `${env.opts.km} km in ${fmt_time(p.finish_time)} · avg ${avg_watts(p)} W · nitro ×${p.nitro.count}`,
       body: `<table>${rows}</table>`,
       score: p.finish_time,
-      flags: { win: pos === 1, nitro: p.nitro.count },
+      flags: { win: pos === 1, pos, nitro: p.nitro.count },
       note: `${ordinal(pos)} vs ${env.opts.base_watts} W bots`,
     };
   }

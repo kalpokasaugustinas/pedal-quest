@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, scenery_option, curve_x } from '../kit3d.js?v=24';
-import { step_speed } from '../physics.js?v=24';
-import { rand, clamp, fmt_clock } from '../util.js?v=24';
+import { create_kit, scenery_option, curve_x } from '../kit3d.js?v=25';
+import { step_speed } from '../physics.js?v=25';
+import { rand, clamp, fmt_clock } from '../util.js?v=25';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -86,7 +86,7 @@ function create(env) {
     theme: env.opts.scenery, road_x, road_w: 2.6, lanes: 2,   // a single bike track with a centre dash
     surface: (z) => surfaces.filter((s) => z <= s.z).pop().surf,
   });
-  const me = kit.add_rider('#ffd400');
+  const me = kit.add_rider(env.look);
   let fork = null;   // { z, x, trails: [mesh], signs: [mesh] }
   const rider_z = () => -st.x * vis;
 

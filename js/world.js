@@ -1,7 +1,7 @@
 // race world: the shared low-poly kit + the race course (start line, finish arch, km boards) and the pack.
 // the scenery is drawn vis_scale times faster than the physics (the world flies by), while riders keep their
 // real gaps to the player so the pack looks natural
-import { create_kit } from './kit3d.js?v=24';
+import { create_kit } from './kit3d.js?v=25';
 
 export const vis_scale = 2.5;              // visual speed multiplier (speed numbers and physics are unchanged)
 const lane_count = 6;
@@ -9,12 +9,13 @@ const lane_w = 1.1;
 const lane_x = (lane) => (lane - (lane_count - 1) / 2) * lane_w;
 
 // build a fresh 3d world for this race; returns { render(dt), resize(), dispose() }
-export function create_world(canvas, race, theme_id = 'meadow', ftp = 200) {
+// look: the player's cyclist look (progress.js); bots ride in their team colour
+export function create_world(canvas, race, theme_id = 'meadow', ftp = 200, look = null) {
   const kit = create_kit(canvas, { theme: theme_id, road_w: lane_count * lane_w + 1, lanes: lane_count });
   kit.add_arch(-race.distance_m * vis_scale, 'FINISH');
   for (let m = 500; m < race.distance_m; m += 500) kit.add_board(-m * vis_scale, `${m / 1000} km`);
 
-  const riders = race.riders.map((r) => ({ r, model: kit.add_rider(r.color), lx: lane_x(r.lane) }));
+  const riders = race.riders.map((r) => ({ r, model: kit.add_rider(r.is_player && look ? look : r.color), lx: lane_x(r.lane) }));
   const p = race.player;
   // rider z: the player sits at its scaled position, others keep their real gap to the player
   const rider_z = (r) => -(p.x * vis_scale + (r.x - p.x));

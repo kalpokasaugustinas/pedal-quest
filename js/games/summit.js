@@ -1,9 +1,9 @@
 // summit: time-trial up a climb. the trainer's resistance follows the gradient (ftms simulation mode)
 // and a ghost of your best run rides along
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=24';
-import { create_kit, scenery_option } from '../kit3d.js?v=24';
-import { step_speed } from '../physics.js?v=24';
-import { clamp, fmt_time, load, store } from '../util.js?v=24';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=25';
+import { create_kit, scenery_option } from '../kit3d.js?v=25';
+import { step_speed } from '../physics.js?v=25';
+import { clamp, fmt_time, load, store } from '../util.js?v=25';
 
 // climbs as [length m, grade %] segments
 const climbs = {
@@ -86,7 +86,7 @@ function create(env) {
     theme: env.opts.scenery,
     road_y: (z) => elev_at(c, Math.min(-z / vis_d, c.length + 400)) * vis_e,
   });
-  const me = kit.add_rider('#ffd400');
+  const me = kit.add_rider(env.look);
   const ghost_model = kit.add_rider('#b0bec5');
   kit.add_arch(-c.length * vis_d, 'KOM', '#c62828');
   // grade boards at every change of gradient

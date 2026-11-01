@@ -1,23 +1,25 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=24';
-import { control } from './ble.js?v=24';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=24';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=24';
-import { stats_html } from './stats.js?v=24';
-import { set_rider_mass, steady_speed } from './physics.js?v=24';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=24';
-import * as ride_log from './ride_log.js?v=24';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=24';
-import * as daily from './daily.js?v=24';
-import race from './games/race.js?v=24';
-import crossroads from './games/crossroads.js?v=24';
-import summit from './games/summit.js?v=24';
-import pulse from './games/pulse.js?v=24';
-import spinbeat from './games/spinbeat.js?v=24';
-import escape from './games/escape.js?v=24';
-import sprint from './games/sprint.js?v=24';
-import workout from './games/workout.js?v=24';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=25';
+import { control } from './ble.js?v=25';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=25';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=25';
+import { stats_html } from './stats.js?v=25';
+import { set_rider_mass, steady_speed } from './physics.js?v=25';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=25';
+import * as ride_log from './ride_log.js?v=25';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=25';
+import * as daily from './daily.js?v=25';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=25';
+import { rider_preview, ambience } from './kit3d.js?v=25';
+import race from './games/race.js?v=25';
+import crossroads from './games/crossroads.js?v=25';
+import summit from './games/summit.js?v=25';
+import pulse from './games/pulse.js?v=25';
+import spinbeat from './games/spinbeat.js?v=25';
+import escape from './games/escape.js?v=25';
+import sprint from './games/sprint.js?v=25';
+import workout from './games/workout.js?v=25';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -68,15 +70,17 @@ function board_add(b, entry) {
   return { list, rank: list.indexOf(entry) };
 }
 
-// ---- top navigation: main games, an opened archived game, and the stats tab ----
+// ---- top navigation: main games, an opened archived game, the stats tab and the garage ----
 let current = games[0];
 let stats_view = false;
+let garage_view = false;
 
 function render_nav() {
   const shown = games.filter((g) => main_games.includes(g.id) || g === current);
   $('game-nav').innerHTML = shown
-    .map((g) => `<button data-id="${g.id}" class="${g === current && !stats_view ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
-    .join('') + `<button data-id="stats" class="${stats_view ? 'on' : ''}"><span class="nav-icon">📊</span>Stats</button>`;
+    .map((g) => `<button data-id="${g.id}" class="${g === current && !stats_view && !garage_view ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
+    .join('') + `<button data-id="stats" class="${stats_view ? 'on' : ''}"><span class="nav-icon">📊</span>Stats</button>`
+    + `<button data-id="garage" class="${garage_view ? 'on' : ''}"><span class="nav-icon">🎨</span>Garage</button>`;
   $('game-nav').querySelectorAll('button').forEach((b) => {
     b.onclick = () => { location.hash = b.dataset.id; };
   });
@@ -85,6 +89,14 @@ function render_nav() {
 
 function select_game(id) {
   stats_view = id === 'stats';
+  garage_view = id === 'garage';
+  if (!garage_view && preview) { preview.dispose(); preview = null; }   // stop the turntable
+  if (garage_view) {
+    render_nav();
+    render_garage();
+    show('screen-garage');
+    return;
+  }
   if (stats_view) {
     render_nav();
     render_stats();
@@ -111,6 +123,34 @@ function render_stats() {
   $('history').open = h_open;
 }
 
+// ---- garage: level, pp and the cyclist look (items unlock with levels) ----
+let preview = null;
+// small sample shown on each item button
+function swatch(slot, id) {
+  if (id === 'auto') return `<i style="background:${look().jersey}"></i>`;
+  if (id === 'rainbow') return '<i class="sw-rainbow"></i>';
+  if (id.startsWith('#')) return `<i style="background:${id}"></i>`;
+  return `<i class="sw-icon">${{ none: '∅', sparks: '✨', smoke: '💨', stars: '⭐', plain: '▬', hoops: '☰', stripes: '⫼', sash: '⟋', dots: '⁘', twotone: '◧', chevron: '⌄', checks: '▦' }[id] || '•'}</i>`;
+}
+function render_garage() {
+  const s = pp_state(), li = level_info(s.total), lk = look();
+  $('garage-level').innerHTML = `<div class="pp-head"><b>Level ${li.level}</b><span>${s.total} PP</span></div>
+    <div class="pp-bar"><div style="width:${Math.round((li.into / li.need) * 100)}%"></div></div>
+    <div class="small">${li.into} / ${li.need} PP to level ${li.level + 1}. Earn PP: 10 per km · +10 per finished game · win +50, 2nd +30, 3rd +20 ·
+    personal best +30 · daily challenge +40 · new badge +20 · workout ≥ 80% on target +20.</div>`;
+  $('garage-slots').innerHTML = Object.entries(catalog).map(([k, c]) => `<div class="label">${c.label}</div><div class="swatches">${
+    c.items.map(([id, name, lvl]) => {
+      const locked = lvl > li.level;
+      return `<button class="sw${lk[k] === id ? ' on' : ''}${locked ? ' locked' : ''}" data-slot="${k}" data-id="${id}" ${locked ? 'disabled' : ''}>${swatch(k, id)}<span>${locked ? `🔒 Lv ${lvl}` : name}</span></button>`;
+    }).join('')}</div>`).join('');
+  $('garage-slots').querySelectorAll('button.sw').forEach((b) => {
+    b.onclick = () => { set_look(b.dataset.slot, b.dataset.id); render_garage(); };
+  });
+  preview ??= rider_preview($('garage-canvas'));
+  preview.set(look());
+  render_rider_sum();
+}
+
 // ---- player: one rider per app (name can be changed), details shared by every game ----
 // (storage still supports several players per device; the ui uses the first one)
 if (active_player() !== players.list[0]) set_active_player(players.list[0].id);
@@ -129,7 +169,7 @@ $('player-name').onchange = () => {
 function render_rider_sum() {
   const dot = (ok) => (ok ? '<i class="dot-ok"></i>' : '<i class="dot-off"></i>');
   $('rider-sum').innerHTML = `<b>👤 ${active_player().name.replace(/</g, '&lt;')}</b>`
-    + `<span>FTP ${profile.ftp} W</span><span>${dot(sensors.trainer)}Trainer</span><span>${dot(sensors.hr_strap)}HR</span>`;
+    + `<span>Lv ${level_info(pp_state().total).level}</span><span>FTP ${profile.ftp} W</span><span>${dot(sensors.trainer)}Trainer</span><span>${dot(sensors.hr_strap)}HR</span>`;
 }
 // open until the trainer is connected; after that the rider bar stays folded (tap to open)
 $('rider').open = true;
@@ -140,7 +180,9 @@ function show_profile() {
   $('p-maxhr').value = profile.max_hr;
   $('p-weight').value = profile.weight;
   $('p-sound').checked = profile.sound;
+  $('p-music').checked = profile.music;
   set_sound(profile.sound);
+  set_music(profile.music);
 }
 
 
@@ -181,6 +223,11 @@ $('p-ftp').onchange = () => {
 $('p-weight').onchange = () => {
   profile.weight = clamp(Math.round(+$('p-weight').value || 75), 35, 150);
   $('p-weight').value = profile.weight;
+  save_profile();
+};
+$('p-music').onchange = () => {
+  profile.music = $('p-music').checked;
+  set_music(profile.music);
   save_profile();
 };
 $('p-sound').onchange = () => {
@@ -349,6 +396,7 @@ function start_game() {
     big_text: show_big_text,
     sfx,
     insets,
+    look: look(),
   });
   phase = 'countdown';
   phase_end = performance.now() + 3000;
@@ -379,6 +427,7 @@ function loop(ts) {
   const input = read_input(ts);
 
   if (paused) {
+    stop_ride();   // silence while paused
     instance.render(0, input);
     update_metrics(input);
     requestAnimationFrame(loop);
@@ -425,6 +474,8 @@ function loop(ts) {
   }
 
   instance.render(real_dt * warp, input);
+  // ride sound: wind with your speed, weather / water / crowd from the scenery, music on your cadence
+  update_ride(real_dt, { speed: instance?.speed?.() ?? 0, cadence: input.cadence, effort: input.watts / profile.ftp, ...ambience });
   update_metrics(input);
   requestAnimationFrame(loop);
 }
@@ -465,6 +516,7 @@ function save_run_stats() {
 window.addEventListener('resize', () => { if (phase !== 'idle') instance?.resize?.(); });
 
 function leave_play() {
+  stop_ride();
   save_run_stats();
   phase = 'idle';
   instance?.dispose?.();
@@ -479,6 +531,7 @@ function leave_play() {
 
 function finish_game() {
   const res = instance.result();
+  const ran = run ? { ...run } : { secs: 0, km: 0 };   // leave_play() files the run into the stats
   leave_play();
   const b = current.board(active_opts);
   let list = load(`pq_board_${b.key}`, []);
@@ -495,14 +548,21 @@ function finish_game() {
   $('btn-export').classList.toggle('hidden', ride_log.summary(profile.ftp).secs < 60);
   // daily challenge result (before badges, so streak badges see the new streak)
   $('r-daily').innerHTML = '';
+  let daily_new = false;
   if (daily_run && daily_run.game === current.id) {
     const d = daily.complete(daily_run, res.flags);
+    daily_new = d.ok && d.new_day;
     $('r-daily').innerHTML = `<div class="panel daily ${d.ok ? 'ok' : ''}"><div class="label">📅 Daily challenge</div>
       <b>${d.ok ? (d.new_day ? `Done! 🔥 Streak: ${d.streak} day${d.streak > 1 ? 's' : ''}` : 'Done again ✓') : `Not this time. Goal: ${daily_run.goal}`}</b></div>`;
   }
   const fresh = check_badges({ game: current.id, opts: active_opts, flags: res.flags, ride: ride_log.summary(profile.ftp), ftp: profile.ftp, main: main_games });
   $('r-badges').innerHTML = fresh_html(fresh);
   if (fresh.length) setTimeout(() => sfx('perfect'), 400);
+  // pedal points + level
+  const pp = award({ secs: ran.secs, km: ran.km, flags: res.flags, rank, daily_new, badges: fresh.length });
+  $('r-pp').innerHTML = award_html(pp);
+  if (pp && pp.after.level > pp.before.level) setTimeout(() => sfx('finish'), 900);
+  render_rider_sum();
   // optional result actions (e.g. the ramp test's "set my ftp"): buttons that change the profile
   for (const a of res.actions || []) {
     const btn = document.createElement('button');
@@ -597,6 +657,15 @@ for (const km of [1, 2, 5, 10]) {
   try { localStorage.removeItem(`pq_best_${km}`); } catch { /* storage blocked */ }
 }
 
+// one-time (build 25): every game's scenery becomes "surprise me", the new default
+if (!load('pq_mig_surprise', false)) {
+  for (const g of games) {
+    const o = load(`pq_opts_${g.id}`, null);
+    if (o?.scenery) { o.scenery = 'random'; store(`pq_opts_${g.id}`, o); }
+  }
+  store('pq_mig_surprise', true);
+}
+
 ride_log.backfill_totals();
 render_players();
 select_game(location.hash.slice(1));
@@ -608,6 +677,6 @@ init_cloud({
     reload_profile();
     show_profile();
     render_players();
-    if (stats_view) render_stats(); else render_setup();
+    if (stats_view) render_stats(); else if (garage_view) render_garage(); else render_setup();
   },
 });

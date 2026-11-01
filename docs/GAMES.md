@@ -35,14 +35,17 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 
 ### 🏁 Race
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
-- Bots: slow power wave, random surges, a final sprint, and nitro at 50% of a perfect player's rate.
+- Bots: each has a style (Red Rocket attacker, Blue Bolt wheel sucker, Green Machine diesel, Purple Pace chaser, Orange Flash sprinter). Tactics: attack when you fade next to them (your 10 s power < 85% of your 60 s power), follow your surges, chase when your gap grows, the odd test attack, ease off on a wheel (sitters). Energy budget: bank = avg W × time − energy spent. Cruising runs at 97% plus a slow wave and pays back any overdraft over ~90 s; tactics need credit (max 25 s × avg W of debt); the final sprint (from the style's kick point) spends exactly the bank. Simulated race averages land within 1% of the target. Tactics near you get a callout, the leaderboard shows ⚔️ attack / 🎯 chase / 🧲 follow. Nitro at 50% of a perfect player's rate.
 - Nitro: HR at or above a target line (`HR ≥ 152`), no upper limit, so chasing nitro never asks you to ease off. The line is set 1–3 bpm under your smoothed HR (15 s), first 20 s into the race (HR needs time to rise), again after every nitro, and reset to your current HR after 25 s below it. Floor 65% of max HR (soft pedalling charges nothing). 30 s above fills the bar; below it the charge waits (no drain). A full bar gives +80 W for 3 s. The skill: don't fade.
-- Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds drifting on the wind (and slowly coming closer as you ride; they fade at the edges of their box so wrapping never pops), boulder piles, wildlife and hikers (see below), campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: Sunny meadow, Misty valley, Starry night.
+- Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds drifting on the wind (and slowly coming closer as you ride; they fade at the edges of their box so wrapping never pops), boulder piles, wildlife and hikers (see below), campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: 🎲 Surprise me (default), Sunny meadow, Misty valley, Starry night (fixed themes = summer, clear, no landmarks).
 - Mood: calm, soft colours (every palette colour desaturated a bit), softer PCF shadows, a CSS grade on the canvas (saturate / contrast) plus a warm soft-light tint and a vignette layer.
 - Riders: low-poly cyclist (tapered torso with stripe, aero helmet with visor, shoes) on a road bike with deep rims in the rider colour. Body language from effort (`animate_rider` in `js/world.js`; reference = FTP for you, average watts for bots): coasting = sits up and rests; steady = small shoulder rock; hard / surging / nitro = out of the saddle, bike rocks side to side with each pedal stroke, head down, heavy breathing. Arms and legs follow via simple IK.
 - Wildlife (`make_wildlife` in `js/kit3d.js`, per terrain chunk, recycled with it): an elk or a doe + fawn in the woods (graze, look up, wander, never onto the road; 75% bolt away from the road when you come within 30 m), one or two hikers with backpacks walking their stretch of verge who wave once as you pass (headlamps at night), and a flock of birds in a V crossing the sky now and then (not at night). Odds per theme: `animals`, `hikers`, `birds`. `create_kit(..., { wildlife: false })` turns it off.
 - Visual speed: the scenery moves 2.5× faster than the physics (`vis_scale` in `js/world.js`); speed, watts and times are unchanged. Riders keep their real gaps to the player so the pack looks natural. Wind streaks scale with speed; riders between the camera and you fade out.
 - Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
+
+### Surprise me scenery (`roll_scenery` in `js/kit3d.js`)
+Each ride rolls: theme (meadow 40% / valley 35% / night 25%), season (summer 50 / autumn 30 / winter 20: leaf, grass and snow palettes), weather (clear 55 / rain 20 (snow in winter: falling streaks or flakes, greyer, nearer fog) / fog 25 (white-out fog, mountains and clouds fade)), a sunset ride (30% of day rides: over 8 min the light goes day → golden sunset → night, stars come out), water (70%: a river crosses the road every ~1.8 km with a bridge, lakes beside the road; ground carved by hash so chunks agree; frozen in winter), villages (65%: houses every ~2.5 km, and at a finish arch a flat square with houses and a crowd behind barriers that jumps and waves when you come close). A toast at the start says what was rolled. Test helper: `?roll=valley,autumn,rain,dusk,water,village`.
 
 ### 3D look (all games)
 Effects: ~1.2 km of terrain ahead, shadows over ~140 m around the action (no pop-in), fast wind streaks that swirl in small spirals, and tyre dust (gravel / dirt) or smoke (asphalt) when a rider pushes 2× FTP, a big cloud at 3× FTP (bots: 2× / 3× their average).
@@ -56,7 +59,7 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Spin Beat: a wide road with rpm lanes painted on it; glowing note tiles; the rider steers across with your cadence.
 - Escape: the camera rides ahead looking back; a dark storm wall with rain and lightning; the world darkens as it closes in; shelter huts.
 - Sprint Cup: one winding road; the camera pulls back during attacks and a rear-view mirror inset shows the attacker coming; duel bars as an overlay.
-- Workout: you ride through the scenery (speed from the physics); the interval chart is a translucent panel on top.
+- Workout: you ride through the scenery (speed from the physics); the plan is painted on the road (see Workout).
 
 ### 🔀 Crossroads
 - Each stage has 3 paths: easy (55–72% FTP), medium (75–92%) and hard (95–120%).
@@ -103,6 +106,8 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Plans: Quick Spin (15 min), Sweet Spot (30), VO2 30/30 (22), Pyramid (23), Over-Unders (31). Power = share of FTP × intensity (90 / 100 / 105%).
 - On target = 3 s average within ±5%; close = ±10% (counts half). Score = % of the session on target.
 - ERG mode: FTMS op 0x05 (set target power), sent on change, at most every 2 s, in 5 W steps. Quitting/finishing sends grade 0 to leave ERG.
+- On the road: edge lines + a faint road tint in the zone colour of each interval, placed at (interval start − now) × your smoothed speed, so the colour change reaches your wheel when the interval changes. A board (name + watts) stands where each interval starts. On screen only a thin session strip and the interval clock.
+- Group ride (not a race): hard intervals (≥ 85% FTP, ≥ 30 s) put a rider ahead at 80% of the target, placed so you catch them ~70% into the interval if you hold the target; recoveries send a rider past you; the warm-up has a slow rider to pass. Callouts when you catch someone or get passed; the result counts both.
 - FTP Ramp Test: 100 W, +20 W per minute. Ends after 5 s below 85% of the step (or under 50 rpm in ERG), not before 2 min. FTP = 75% of best 1-min power, rounded to 5 W. A results button saves it to the profile.
 
 ## Architecture
@@ -117,6 +122,8 @@ js/physics.js     cycling physics (rolling, gravity, drag); same for everyone
 js/util.js        formatting, seeded random, safe localStorage (per player), sync data helpers
 js/cloud.js       optional google sign-in + firestore sync of all players
 js/stats.js       stats tab
+js/progress.js    pedal points, levels, unlock catalog, cyclist look
+js/sfx.js         sound effects, ride ambience, cadence music (web audio, no files)
 js/draw2d.js      2D canvas helpers (overlay layer for charts / bars, labels)
 js/kit3d.js       shared low-poly 3d kit: terrain/road chunks (road can curve + climb), props, mountains,
                   lights + colour grade, campfires, wildlife + hikers + birds, wind, riders with body language, chase camera, arches, signs, trails
@@ -166,7 +173,9 @@ export default {
 
 ### Storage keys (localStorage)
 - Per player (plain key for the first player, `<key>@<id>` for others). Device-only: `pq_active_player`. Shared: `pq_players`.
-- `pq_profile`: FTP, max HR, weight
+- `pq_profile`: FTP, max HR, weight, sound, music
+- `pq_pp`: pedal points total + last award (first load backfills 10 per lifetime km + 20 per badge)
+- `pq_look`: chosen garage items per slot (locked items fall back to the default)
 - `pq_opts_<game>`: last options per game
 - `pq_board_<key>`: top 10 results per board
 - `pq_ghost_summit_<climb>`: best-run trace for the ghost
@@ -178,3 +187,8 @@ export default {
 - `pq_sprint_ghost_<attacks>`: Sprint Cup ghost (best + last run's attack efforts)
 - `pq_daily`: daily challenge streak (last day done, streak, best, total)
 - `pq_badges`: unlocked badges with dates, games played, climbs finished
+
+## Progression and sound
+- PP (pedal points, `js/progress.js`): 10 per km, +10 per finished game (rides ≥ 1 min), Race win +50 / 2nd +30 / 3rd +20, personal best +30 (top 3 on your board +10), workout ≥ 80% on target +20, daily challenge +40, new badge +20 each. Level n → n+1 needs 100 + 50 × (n − 1) PP.
+- 🎨 Garage tab: level, PP bar, the rider on a turntable (`rider_preview` in `js/kit3d.js`) and the unlock catalog (jersey colour, jersey pattern, pattern colour, frame, rims, helmet, shoes, nitro flame, nitro trail; items unlock from level 1 to 15). `make_rider` takes a colour or a full look; the player's look reaches every game as `env.look`.
+- Sound (`js/sfx.js`): effects, plus ride ambience while a game runs: wind (volume and brightness follow speed), rain, water near rivers / lakes, birds (day, clear), the finish crowd (`ambience` exported by `js/kit3d.js`). Music: a kick on every pedal stroke (tempo = cadence, 60–120), bass on the beat, a pad every 8 beats; hats join above 75% FTP, an arpeggio above 95%. Profile toggles: Sounds, Music.

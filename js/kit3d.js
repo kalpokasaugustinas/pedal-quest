@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=24';
+import { seeded } from './util.js?v=25';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -42,6 +42,104 @@ export const themes = {
     asphalt: '#3a3f56', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55, animals: 0.4, hikers: 0.25, birds: false,
   },
 };
+
+// ---- surprise me: every ride rolls a theme, a season, the weather, maybe a sunset ride, rivers, lakes, villages ----
+
+const pick = (list) => { let r = Math.random() * list.reduce((a, x) => a + x[1], 0); for (const [v, w] of list) { r -= w; if (r <= 0) return v; } return list[0][0]; };
+const shift = (list, h, sat, l) => list.map((c) => '#' + new THREE.Color(c).offsetHSL(h, sat, l).getHexString());
+
+// season on top of a theme: autumn = warm leaves and dry grass, winter = snow on the ground, trees and peaks
+function season_theme(base, season) {
+  const t = { ...base };
+  if (season === 'autumn') {
+    t.round = ['#d9772b', '#e3a83a', '#c4502a', '#e8c14a', '#b8862f'];
+    t.grass = shift(base.grass, -0.05, -0.12, 0.01);
+    t.high = ['#a07a3a', '#8a6a34'];
+    t.mix = { ...base.mix, round: Math.max(base.mix.round, 0.4), pine: Math.min(base.mix.pine, 0.45) };
+  }
+  if (season === 'winter') {
+    const night = base.stars;
+    t.grass = night ? ['#c9d6ec', '#bccbe4', '#d3def0', '#b4c4e0', '#c4d2ea'] : ['#eef3f7', '#e3ebf2', '#f5f8fb', '#dde6ee', '#e9eff5'];
+    t.high = night ? ['#d3def0', '#c4d2ea'] : ['#f4f7fa', '#dfe7ee'];
+    t.round = night ? ['#c4d2ea', '#b4c4e0'] : ['#e8eef2', '#d8e2ea'];
+    t.pine = ['#2f5e45', '#2a5640', '#356a4e'];
+    t.snow = night ? '#dfe9fb' : '#f4f6f8';
+    t.snow_line = 0.4;
+    if (!night) { t.fog = '#dfe8ee'; t.sky = ['#8fb3d1', '#e6eef4']; }
+    t.camps = Math.max(base.camps, 0.4);
+  }
+  return t;
+}
+
+// sunset palette (a day ride that turns into night) and the rain look
+const dusk_pal = { sky: ['#3a3f7a', '#f59e5b'], fog: '#e09a70', hemi: ['#ffc49a', '#3a3040', 0.8], key: ['#ffb070', 2.1], key_dir: [-80, 16, 10], cloud: '#ffc4a0' };
+
+export const surprise_id = 'random';
+// roll one ride. fixed theme ids give the old fixed look (summer, clear, no landmarks)
+export function roll_scenery(id) {
+  if (id !== surprise_id && themes[id]) return { id, theme: themes[id], season: 'summer', weather: 'clear', dusk: false, water: false, village: false, label: '' };
+  // test helper: ?roll=valley,autumn,rain,dusk,water,village forces a roll
+  const force = (new URLSearchParams(location.search).get('roll') || '').split(',').filter(Boolean);
+  const has = (k) => force.includes(k);
+  const tid = force.find((k) => themes[k]) || pick([['meadow', 4], ['valley', 3.5], ['night', 2.5]]);
+  const season = force.find((k) => ['summer', 'autumn', 'winter'].includes(k)) || pick([['summer', 5], ['autumn', 3], ['winter', 2]]);
+  const weather = force.find((k) => ['clear', 'rain', 'fog'].includes(k)) || pick([['clear', 5.5], ['rain', 2], ['fog', 2.5]]);
+  const dusk = force.length ? has('dusk') : tid !== 'night' && Math.random() < 0.3;
+  const water = force.length ? has('water') : Math.random() < 0.7, village = force.length ? has('village') : Math.random() < 0.65;
+  const label = [themes[tid].name, { summer: '☀️ Summer', autumn: '🍂 Autumn', winter: '❄️ Winter' }[season],
+    weather === 'rain' ? (season === 'winter' ? '🌨️ Snowfall' : '🌧️ Rain') : weather === 'fog' ? '🌫️ Fog' : '',
+    dusk ? '🌅 Sunset ride' : '', water ? '🌉 Rivers + lakes' : '', village ? '🏘️ Villages' : ''].filter(Boolean).join(' · ');
+  return { id: tid, theme: season_theme(themes[tid], season), season, weather, dusk, water, village, label };
+}
+
+// little house: walls, pitched roof, door, two windows (one merged mesh)
+const wall_cols = ['#f1e3c8', '#e8c9a0', '#d9e4ea', '#f4d6d0', '#e9e2b8', '#cfdcc0'];
+const roof_cols = ['#a8442f', '#5a4a44', '#7a3b2c', '#3e5468'];
+function house_geom(rnd, winter) {
+  const w = 5 + rnd() * 3, d = 4 + rnd() * 2, h = 3 + rnd() * 1.5;
+  const wall = wall_cols[Math.floor(rnd() * wall_cols.length)];
+  const roof = winter ? '#f2f5f8' : roof_cols[Math.floor(rnd() * roof_cols.length)];
+  return merge_painted([
+    paint(new THREE.BoxGeometry(w, h, d).translate(0, h / 2, 0), wall),
+    paint(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.4, 4).rotateY(Math.PI / 4).scale(w / Math.max(w, d), 1, d / Math.max(w, d)).translate(0, h + 1.2, 0), roof),
+    paint(new THREE.BoxGeometry(0.9, 1.8, 0.1).translate(0, 0.9, d / 2 + 0.03), '#6b4a2c'),
+    paint(new THREE.BoxGeometry(0.8, 0.8, 0.1).translate(-w * 0.3, h * 0.6, d / 2 + 0.03), '#ffe9a8'),
+    paint(new THREE.BoxGeometry(0.8, 0.8, 0.1).translate(w * 0.3, h * 0.6, d / 2 + 0.03), '#ffe9a8'),
+  ]);
+}
+
+// rain (streaks) or snow (flakes) falling in a box around the camera
+function make_precip(scene, snow) {
+  const n = snow ? 900 : 700;
+  const pos = new Float32Array(n * (snow ? 3 : 6));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const obj = snow
+    ? new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 0.12, transparent: true, opacity: 0.9, depthWrite: false }))
+    : new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#c8d4de', transparent: true, opacity: 0.45, depthWrite: false }));
+  obj.frustumCulled = false;
+  scene.add(obj);
+  const pts = Array.from({ length: n }, () => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 22, z: -Math.random() * 70 + 8, ph: Math.random() * 6.28 }));
+  return {
+    update(dt, cx, cy, cz, speed) {
+      const fall = snow ? 1.6 : 16;
+      pts.forEach((p, i) => {
+        p.y -= fall * dt;
+        p.z += speed * dt * 0.9;   // you ride into it
+        if (snow) p.x += Math.sin(p.ph + p.y * 0.5) * dt * 0.6;
+        if (p.y < 0 || p.z > 8) { p.y = 14 + Math.random() * 8; p.z = -Math.random() * 70; p.x = (Math.random() - 0.5) * 50; }
+        const x = cx + p.x, y = cy - 3 + p.y, z = cz + p.z;
+        if (snow) pos.set([x, y, z], i * 3);
+        else pos.set([x, y, z, x + 0.05, y + 0.7, z - 0.25], i * 6);
+      });
+      g.attributes.position.needsUpdate = true;
+    },
+  };
+}
+
+// what the scenery sounds like right now (main.js feeds it to sfx.js): rain, water (0-1, how close a river or
+// lake is), crowd (0-1, how close the finish crowd is), birds (daytime, clear weather)
+export const ambience = { rain: false, water: 0, crowd: 0, birds: false };
 
 let renderer = null;   // one renderer per canvas; each race builds a new scene
 
@@ -612,7 +710,7 @@ function make_wheel(mats) {
   tire.rotation.y = Math.PI / 2;
   tire.castShadow = true;
   // deep carbon-style rim in the rider's colour
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.085, 0.045, 3, 12), mats.accent);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.085, 0.045, 3, 12), mats.rim);
   rim.rotation.y = Math.PI / 2;
   rim.scale.set(1, 1, 0.5);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6), mats.metal);
@@ -626,21 +724,48 @@ function make_wheel(mats) {
   return w;
 }
 
-function make_rider(color) {
+// jersey print: pattern in a second colour on the jersey colour (cylinder uv: u around the body, v along it)
+function jersey_texture(base, pat, color) {
+  return canvas_texture(128, 128, (g, w, h) => {
+    g.fillStyle = base;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = color;
+    if (pat === 'hoops') for (let y = 8; y < h; y += 32) g.fillRect(0, y, w, 14);
+    if (pat === 'stripes') for (let x = 0; x < w; x += 21) g.fillRect(x, 0, 9, h);
+    if (pat === 'sash') { g.beginPath(); g.moveTo(0, 20); g.lineTo(0, 56); g.lineTo(w, 108); g.lineTo(w, 72); g.fill(); }
+    if (pat === 'dots') for (let y = 8; y < h; y += 22) for (let x = (y / 22) % 2 ? 11 : 0; x < w; x += 22) { g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill(); }
+    if (pat === 'twotone') g.fillRect(0, 0, w, h * 0.45);
+    if (pat === 'chevron') for (const y0 of [24, 70]) { g.beginPath(); g.moveTo(0, y0); g.lineTo(w / 2, y0 + 26); g.lineTo(w, y0); g.lineTo(w, y0 + 16); g.lineTo(w / 2, y0 + 42); g.lineTo(0, y0 + 16); g.fill(); }
+    if (pat === 'checks') for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 ? 16 : 0; x < w; x += 32) g.fillRect(x, y, 16, 16);
+    if (pat === 'rainbow') ['#1e88e5', '#e53935', '#212121', '#ffd400', '#43a047'].forEach((c, i) => { g.fillStyle = c; g.fillRect(0, 44 + i * 9, w, 9); });
+  });
+}
+const rainbow = (t) => new THREE.Color().setHSL((t * 0.6) % 1, 0.9, 0.6);
+
+// look: a jersey colour, or { jersey, pattern, pattern_color, frame, rim, helmet, shoe, flame, trail } (progress.js)
+function make_rider(look) {
+  const L = typeof look === 'string' ? { jersey: look } : look;
+  const color = L.jersey;
   const g = new THREE.Group();
   const c = new THREE.Color(color);
+  const accent = c.clone().offsetHSL(0, 0, -0.18);
+  const printed = L.pattern && L.pattern !== 'plain';
   // own materials per rider, so a rider can fade out near the camera
   const mats = {
     jersey: flat_mat(color),
-    accent: flat_mat(c.clone().offsetHSL(0, 0, -0.18)),
-    frame: flat_mat('#f2f2f2'),
+    print: printed ? flat_mat('#ffffff', { map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : null,
+    accent: flat_mat(accent),
+    rim: flat_mat(L.rim && L.rim !== 'auto' ? L.rim : accent),
+    helmet: flat_mat(L.helmet && L.helmet !== 'auto' ? L.helmet : color),
+    frame: flat_mat(L.frame || '#f2f2f2'),
     tire: flat_mat('#17171a'),
     skin: flat_mat('#e9b27f'),
     shorts: flat_mat('#1f2027'),
     metal: flat_mat('#9aa0a8'),
-    white: flat_mat('#ffffff'),
-    shoe: flat_mat('#f5f5f5'),
+    white: flat_mat(L.pattern_color || '#ffffff'),
+    shoe: flat_mat(L.shoe || '#f5f5f5'),
   };
+  if (!mats.print) delete mats.print;
   const add_bar = (mat, r, a, b, rz) => {
     const m = make_bar(mat, r, rz);
     if (a) place_bar(m, a, b);
@@ -677,7 +802,7 @@ function make_rider(color) {
   // parts are built in rider coordinates, then re-based on the hip pivot
   const body = new THREE.Group();
   const add_body = (mesh) => { mesh.castShadow = true; body.add(mesh); return mesh; };
-  const torso = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 8), mats.jersey));
+  const torso = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 8), mats.print || mats.jersey));
   torso.position.copy(v(0.02, 1.2));
   torso.rotation.x = -1.05;   // lean forward
   torso.scale.set(1.15, 1, 0.8);
@@ -685,13 +810,14 @@ function make_rider(color) {
   stripe.position.copy(v(0.06, 1.23));
   stripe.rotation.x = -1.05;
   stripe.scale.set(1.16, 1, 0.81);
+  stripe.visible = !mats.print;   // the chest band is the 'plain' pattern
   const hips = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), mats.shorts));
   hips.position.copy(v(...geo.hip));
   hips.scale.set(1.15, 0.8, 1);
   // head: skin, faceted aero helmet in the rider colour with a white vent and a dark visor
   const head = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), mats.skin));
   head.position.copy(v(0.36, 1.5));
-  const helmet = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 1), mats.jersey));
+  const helmet = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 1), mats.helmet));
   helmet.position.copy(v(0.33, 1.56));
   helmet.scale.set(0.95, 0.7, 1.35);
   const vent = add_body(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.3), mats.white));
@@ -720,7 +846,7 @@ function make_rider(color) {
   // nitro flame behind the rear wheel, visible only while boosting
   const flame = new THREE.Mesh(
     new THREE.ConeGeometry(0.16, 1.0, 6),
-    new THREE.MeshBasicMaterial({ color: '#ff8a00', transparent: true, opacity: 0.9, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: L.flame && L.flame !== 'rainbow' ? L.flame : '#ff8a00', transparent: true, opacity: 0.9, depthWrite: false }),
   );
   flame.rotation.x = Math.PI / 2;
   flame.position.copy(v(-1.05, 0.34));
@@ -744,7 +870,7 @@ function make_rider(color) {
   const root = new THREE.Group();
   root.add(g);
   return {
-    group: root, bike: g, body, arms, wheels, legs, flame, mats: Object.values(mats), faded: false,
+    group: root, bike: g, body, arms, wheels, legs, flame, mats: Object.values(mats), faded: false, look: L,
     // smoothed animation state
     anim: { effort: 0.6, stand: 0, coast: 0, strain: 0, prev_v: 0, accel: 0, t: Math.random() * 10 },
   };
@@ -888,7 +1014,24 @@ export function curve_x(z) {
 //
 // opts: { theme, road_w, lanes, road_x(z), road_y(z), surface(z) -> 'asphalt'|'gravel'|'dirt', camps, posts, wildlife }
 export function create_kit(canvas, opts = {}) {
-  const theme = themes[opts.theme] || themes.meadow;
+  const sc = roll_scenery(opts.theme || 'meadow');
+  const theme = { ...sc.theme };
+  // weather: rain = greyer, nearer fog, dimmer sun; fog = a short white-out fog
+  if (sc.weather === 'rain') {
+    const grey = sc.season === 'winter' ? '#d4dde4' : '#9aa4ad';
+    theme.fog = '#' + new THREE.Color(theme.fog).lerp(new THREE.Color(grey), 0.55).getHexString();
+    theme.sky = theme.sky.map((c) => '#' + new THREE.Color(c).lerp(new THREE.Color(grey), 0.6).getHexString());
+    theme.fog_range = [theme.fog_range[0] * 0.6, theme.fog_range[1] * 0.6];
+    theme.key = [theme.key[0], theme.key[1] * 0.55];
+    theme.cloud = '#a9b0b8';
+  }
+  if (sc.weather === 'fog') {
+    theme.fog = '#' + new THREE.Color(theme.fog).lerp(new THREE.Color(theme.stars ? '#2a3a5a' : '#e4e8ea'), 0.6).getHexString();
+    theme.sky = theme.sky.map((c) => '#' + new THREE.Color(c).lerp(new THREE.Color(theme.fog), 0.75).getHexString());
+    theme.fog_range = [15, 210];
+    theme.key = [theme.key[0], theme.key[1] * 0.7];
+  }
+  if (sc.dusk) theme.camps = Math.max(theme.camps, 0.45);
   const road_w = opts.road_w ?? 7.6;
   const lanes = opts.lanes ?? 6;
   const road_edge = road_w / 2;
@@ -917,15 +1060,22 @@ export function create_kit(canvas, opts = {}) {
   }
 
   const scene = new THREE.Scene();
-  scene.background = canvas_texture(4, 256, (g, w, h) => {
-    const grad = g.createLinearGradient(0, 0, 0, h);
-    // sky colours pulled towards the fog colour: a softer, hazier sky
-    grad.addColorStop(0, '#' + new THREE.Color(theme.sky[0]).lerp(new THREE.Color(theme.fog), 0.2).getHexString());
-    grad.addColorStop(0.7, '#' + new THREE.Color(theme.sky[1]).lerp(new THREE.Color(theme.fog), 0.3).getHexString());
-    grad.addColorStop(1, theme.fog);
+  // sky gradient pulled towards the fog colour (softer, hazier); redrawn during a sunset ride
+  const sky_cv = document.createElement('canvas');
+  sky_cv.width = 4;
+  sky_cv.height = 256;
+  function paint_sky(top, low, fog) {
+    const g = sky_cv.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#' + new THREE.Color(top).lerp(new THREE.Color(fog), 0.2).getHexString());
+    grad.addColorStop(0.7, '#' + new THREE.Color(low).lerp(new THREE.Color(fog), 0.3).getHexString());
+    grad.addColorStop(1, '#' + new THREE.Color(fog).getHexString());
     g.fillStyle = grad;
-    g.fillRect(0, 0, w, h);
-  });
+    g.fillRect(0, 0, 4, 256);
+  }
+  paint_sky(theme.sky[0], theme.sky[1], theme.fog);
+  scene.background = new THREE.CanvasTexture(sky_cv);
+  scene.background.colorSpace = THREE.SRGBColorSpace;
   scene.fog = new THREE.Fog(theme.fog, ...theme.fog_range);
   const hemi = new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], theme.hemi[2]);
   scene.add(hemi);
@@ -960,9 +1110,52 @@ export function create_kit(canvas, opts = {}) {
       ramp *= smoothstep(f.r * 0.6, f.r, dist);
     }
     const n = vnoise(x / 50, z / 50) * 0.7 + vnoise(x / 16 + 31, z / 16) * 0.3;
-    return ry - 0.05 + n * (5 + d * 0.3) * ramp;
+    const h = ry - 0.05 + n * (5 + d * 0.3) * ramp;
+    // rivers and lakes: the ground sinks to a bed under the water level
+    const w = wet(x, z);
+    return w > 0 ? h + (water_bed(x, z) - h) * w : h;
   }
-  const in_clearing = (x, z) => flat_zones.some((f) => Math.hypot(x - f.x, z - f.z) < f.r * 0.85);
+
+  // rivers cross the road every ~1.8 km (a bridge carries the road), lakes lie beside it now and then.
+  // both from hashes of their index, so every chunk agrees where the water is
+  const river_gap = 1800, lake_gap = 700;
+  function river(k) {
+    if (!sc.water || k < 1 || hash2(k, 11) > 0.75) return null;
+    const z = -(k * river_gap + (hash2(k, 7) - 0.5) * 600);
+    return { z, w: 14 + hash2(k, 9) * 22, level: road_y(z) - 1.3 };
+  }
+  function lake(j) {
+    if (!sc.water || j < 1 || hash2(j, 21) > 0.4) return null;
+    const z = -(j * lake_gap + lake_gap / 2), side = hash2(j, 22) < 0.5 ? -1 : 1;
+    const r = 28 + hash2(j, 23) * 40;
+    return { x: road_x(z) + side * (road_edge + r + 12 + hash2(j, 24) * 30), z, r, level: road_y(z) - 0.8 };
+  }
+  // how wet a spot is: 0 = dry land, 1 = river or lake bed (smooth banks in between)
+  function wet(x, z) {
+    if (!sc.water) return 0;
+    let w = 0;
+    const r = river(Math.round(-z / river_gap));
+    if (r) w = 1 - smoothstep(r.w * 0.3, r.w * 0.62, Math.abs(z - r.z));
+    const j = Math.floor(-z / lake_gap);
+    for (const l of [lake(j - 1), lake(j), lake(j + 1)]) if (l) w = Math.max(w, 1 - smoothstep(l.r * 0.75, l.r * 1.15, Math.hypot(x - l.x, z - l.z)));
+    return w;
+  }
+  function water_bed(x, z) {
+    const r = river(Math.round(-z / river_gap));
+    if (r && Math.abs(z - r.z) < r.w) return r.level - 2;
+    const j = Math.floor(-z / lake_gap);
+    for (const l of [lake(j - 1), lake(j), lake(j + 1)]) if (l && Math.hypot(x - l.x, z - l.z) < l.r * 1.3) return l.level - 2.5;
+    return road_y(z) - 3;
+  }
+  const in_clearing = (x, z) => flat_zones.some((f) => Math.hypot(x - f.x, z - f.z) < f.r * 0.85) || wet(x, z) > 0.15 || in_village(x, z);
+  // no trees where a village stands (same hash as update_villages)
+  function in_village(x, z) {
+    if (!sc.village) return false;
+    const k = Math.round(-z / 2500);
+    if (k < 1 || hash2(k, 31) > 0.7) return false;
+    const vz = -(k * 2500 + (hash2(k, 32) - 0.5) * 800);
+    return Math.abs(z - vz) < 55 && Math.abs(x - road_x(z)) < road_edge + 28;
+  }
 
   // x columns of the terrain grid, relative to the road centre: fine near the road, coarse far away
   const xs = (() => {
@@ -1429,6 +1622,36 @@ export function create_kit(canvas, opts = {}) {
     return model;
   }
 
+  function remove_rider(model) {
+    scene.remove(model.group);
+    model.mats.forEach((m) => { m.map?.dispose(); m.dispose(); });
+    const i = riders.indexOf(model);
+    if (i >= 0) riders.splice(i, 1);
+  }
+
+  // painted road marks (workout zones): coloured lines along both road edges + a faint tint across the road.
+  // list = [{ z0, z1 (z1 < z0), color }]; call again to replace them
+  const marks = new THREE.Group();
+  scene.add(marks);
+  const mark_mats = new Map();
+  const mark_mat = (color, opacity) => {
+    const key = color + opacity;
+    if (!mark_mats.has(key)) mark_mats.set(key, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    return mark_mats.get(key);
+  };
+  function set_marks(list) {
+    for (const m of marks.children) m.geometry.dispose();
+    marks.clear();
+    for (const k of list) {
+      if (k.z0 - k.z1 < 0.5) continue;
+      for (const side of [-1, 1]) {
+        const off = side * (road_edge - 0.3);
+        marks.add(new THREE.Mesh(ribbon(k.z0, k.z1, (z) => road_x(z) + off, (z) => road_y(z) + 0.02, 0.4, 2), mark_mat(k.color, 0.9)));
+      }
+      marks.add(new THREE.Mesh(ribbon(k.z0, k.z1, road_x, (z) => road_y(z) + 0.015, road_w - 1, 2), mark_mat(k.color, 0.16)));
+    }
+  }
+
   // place + animate a rider. s = { z, x (offset from road centre), watts, v, crank, ref, boost, fade, dist (for wheels) }
   function place_rider(model, s, dt) {
     const x = road_x(s.z) + (s.x ?? 0);
@@ -1452,7 +1675,22 @@ export function create_kit(canvas, opts = {}) {
       }
     }
     model.flame.visible = !!s.boost;
-    if (model.flame.visible) model.flame.scale.set(1, 0.8 + Math.random() * 0.6, 1);
+    if (model.flame.visible) {
+      model.flame.scale.set(1, 0.8 + Math.random() * 0.6, 1);
+      if (model.look.flame === 'rainbow') model.flame.material.color.copy(rainbow(t_total));
+      // nitro trail: puffs left behind the rear wheel in the chosen style
+      const trail = model.look.trail;
+      if (trail && trail !== 'none' && dt > 0) {
+        model.trail_acc = (model.trail_acc ?? 0) + 40 * Math.min(dt, 0.1);
+        const yaw = model.group.rotation.y;
+        while (model.trail_acc >= 1) {
+          model.trail_acc -= 1;
+          const col = trail === 'rainbow' ? '#' + rainbow(t_total + Math.random() * 0.2).getHexString()
+            : { sparks: Math.random() < 0.5 ? '#ffd54f' : '#ff8a00', smoke: '#9e9e9e', stars: Math.random() < 0.5 ? '#fff59d' : '#ffffff' }[trail];
+          spawn_puff(x + Math.sin(yaw) * 0.9, model.group.position.y + 0.25 + Math.random() * 0.5, s.z + Math.cos(yaw) * 0.9, trail === 'smoke' ? 2 : 1, col);
+        }
+      }
+    }
     // riders between the camera and the target fade out, so they never block the view
     const fade = s.fade ?? 1;
     const faded = fade < 0.999;
@@ -1503,6 +1741,7 @@ export function create_kit(canvas, opts = {}) {
     g.add(banner);
     g.position.set(road_x(z), road_y(z), z);
     g.rotation.y = heading(z);
+    if (sc.village && text === 'FINISH') add_crowd(z);
     return keep(g);
   }
 
@@ -1583,6 +1822,205 @@ export function create_kit(canvas, opts = {}) {
 
   // ---- frame ----
 
+  // ---- weather, sunset, water and villages ----
+
+  const precip = sc.weather === 'rain' ? make_precip(scene, sc.season === 'winter') : null;
+  if (sc.weather !== 'clear') {
+    // mountains disappear into the weather (they normally skip scene fog)
+    for (const m of backdrop.group.children) { m.material.fog = true; m.material.needsUpdate = true; }
+  }
+  if (sc.weather === 'fog') backdrop.clouds.visible = false;
+
+  // sunset ride: over dusk_s the light goes from day to a golden sunset to night (stars come out)
+  const dusk_s = 480;
+  const day = { sky: theme.sky, fog: theme.fog, hemi: theme.hemi, key: theme.key, key_dir: theme.key_dir, cloud: theme.cloud };
+  const night_t = themes.night;
+  let dusk_stars = null, dusk_clock = 0;
+  if (sc.dusk) {
+    const pts = [];
+    for (let i = 0; i < 500; i++) {
+      const a = Math.random() * Math.PI * 2, e = 0.2 + Math.random() * 1.2;
+      pts.push(Math.cos(a) * Math.cos(e) * 1800, Math.sin(e) * 1800, Math.sin(a) * Math.cos(e) * 1800);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    dusk_stars = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0 }));
+    scene.add(dusk_stars);
+  }
+  const ca = new THREE.Color(), cb = new THREE.Color();
+  const mix = (a, b, t) => '#' + ca.set(a).lerp(cb.set(b), t).getHexString();
+  function update_dusk(dt, cx, cz) {
+    dusk_clock += dt;
+    if (dusk_clock < 1) return;   // repaint once a second
+    const p = Math.min(1, t_total / dusk_s);
+    dusk_clock = 0;
+    const [a, b, t] = p < 0.5 ? [day, dusk_pal, p * 2] : [dusk_pal, { ...night_t, cloud: night_t.cloud }, (p - 0.5) * 2];
+    const fog = mix(a.fog, b.fog, t);
+    paint_sky(mix(a.sky[0], b.sky[0], t), mix(a.sky[1], b.sky[1], t), fog);
+    scene.background.needsUpdate = true;
+    scene.fog.color.set(fog);
+    base.material.color.set(fog);
+    hemi.color.set(mix(a.hemi[0], b.hemi[0], t));
+    hemi.groundColor.set(mix(a.hemi[1], b.hemi[1], t));
+    hemi.intensity = a.hemi[2] + (b.hemi[2] - a.hemi[2]) * t;
+    sun.color.set(mix(a.key[0], b.key[0], t));
+    sun.intensity = a.key[1] + (b.key[1] - a.key[1]) * t;
+    sun_off.set(...a.key_dir.map((v, i) => v + (b.key_dir[i] - v) * t));
+    for (const c of backdrop.clouds.children) { c.material.color.set(mix(a.cloud, b.cloud, t)); c.material.emissive.set(c.material.color); }
+    dusk_stars.material.opacity = smoothstep(0.6, 0.95, p);
+    dusk_stars.position.set(cx, 0, cz);
+  }
+
+  // water meshes for rivers / lakes near the camera (bridge rails over rivers), made when needed
+  const water_mat = new THREE.MeshStandardMaterial({
+    color: sc.season === 'winter' ? '#cfe3ee' : theme.stars ? '#1d3a6a' : '#3f86b8',
+    roughness: sc.season === 'winter' ? 0.6 : 0.15, metalness: 0.1, transparent: true, opacity: sc.season === 'winter' ? 0.95 : 0.85, flatShading: true,
+  });
+  const rail_mat = flat_mat('#8a6a48');
+  const waters = new Map();
+  function update_water(cz) {
+    ambience.water = 0;
+    if (!sc.water) return;
+    const want = new Set();
+    const k0 = Math.round(-cz / river_gap), j0 = Math.floor(-cz / lake_gap);
+    for (let k = k0 - 1; k <= k0 + 1; k++) {
+      const r = river(k);
+      if (!r || r.z > cz + 200 || r.z < cz - 1400) continue;
+      want.add('r' + k);
+      if (waters.has('r' + k)) continue;
+      const g = new THREE.Group();
+      const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1400, r.w * 0.9, 40, 2).rotateX(-Math.PI / 2), water_mat);
+      sheet.position.set(road_x(r.z), r.level, r.z);
+      g.add(sheet);
+      // bridge: rails and posts along both road edges over the water
+      const span = r.w * 0.75 + 4, yaw = heading(r.z), bx = road_x(r.z), by = road_y(r.z);
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, span), rail_mat);
+        rail.position.set(bx + side * (road_edge + 0.1), by + 1.0, r.z);
+        rail.rotation.y = yaw;
+        g.add(rail);
+        for (let q = -span / 2; q <= span / 2; q += 2.5) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.05, 0.14), rail_mat);
+          post.position.set(bx + side * (road_edge + 0.1), by + 0.5, r.z + q);
+          g.add(post);
+        }
+      }
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(road_w + 0.6, 0.5, span), flat_mat('#7d7468'));
+      deck.position.set(bx, by - 0.27, r.z);
+      deck.rotation.y = yaw;
+      g.add(deck);
+      scene.add(g);
+      waters.set('r' + k, g);
+    }
+    for (let j = j0 - 2; j <= j0 + 12; j++) {
+      const l = lake(j);
+      if (!l || l.z > cz + 200 || l.z < cz - 1400) continue;
+      want.add('l' + j);
+      if (waters.has('l' + j)) continue;
+      const m = new THREE.Mesh(new THREE.CircleGeometry(l.r * 1.02, 24).rotateX(-Math.PI / 2), water_mat);
+      m.position.set(l.x, l.level, l.z);
+      scene.add(m);
+      waters.set('l' + j, m);
+    }
+    for (const [, o] of waters) {
+      const p = o.children?.[0]?.position ?? o.position;   // river sheet or lake
+      const d = o.children?.length ? Math.abs(p.z - cz) : Math.hypot(p.x - camera.position.x, p.z - cz) - o.geometry.parameters.radius;
+      ambience.water = Math.max(ambience.water, 1 - smoothstep(15, 140, d));
+    }
+    for (const [k, o] of waters) {
+      if (want.has(k)) continue;
+      scene.remove(o);
+      o.traverse((c) => c.geometry?.dispose());
+      waters.delete(k);
+    }
+  }
+
+  // villages: a few houses by the road every ~2.5 km; a bigger one with a cheering crowd at a finish arch
+  const house_mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const village_gap = 2500;
+  const villages = new Map();
+  function add_houses(g, z_mid, len, count, rnd) {
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 ? -1 : 1;
+      const z = z_mid + (rnd() - 0.5) * len;
+      const x = road_x(z) + side * (road_edge + 9 + rnd() * 14);
+      if (wet(x, z) > 0.05) continue;
+      const h = new THREE.Mesh(house_geom(rnd, sc.season === 'winter'), house_mat);
+      h.castShadow = h.receiveShadow = true;
+      h.position.set(x, ground(x, z) - 0.2, z);
+      h.rotation.y = heading(z) + (side > 0 ? -Math.PI / 2 : Math.PI / 2) + (rnd() - 0.5) * 0.3;   // front door to the road
+      g.add(h);
+    }
+  }
+  function update_villages(cz) {
+    if (!sc.village) return;
+    const k0 = Math.round(-cz / village_gap);
+    for (let k = k0; k <= k0 + 1; k++) {
+      if (k < 1 || villages.has(k) || hash2(k, 31) > 0.7) continue;
+      const z = -(k * village_gap + (hash2(k, 32) - 0.5) * 800);
+      if (z < cz - 1300 || z > cz + 100) continue;
+      const g = new THREE.Group();
+      add_houses(g, z, 90, 5 + Math.floor(hash2(k, 33) * 5), seeded(k * 77 + 1));
+      scene.add(g);
+      villages.set(k, g);
+    }
+    for (const [k, g] of villages) {
+      if (Math.abs(k - k0) <= 1) continue;
+      scene.remove(g);
+      g.traverse((c) => c.geometry?.dispose());
+      villages.delete(k);
+    }
+  }
+
+  // finish crowd: spectators behind barriers on both sides; they jump and wave when you come close
+  const crowd = [];
+  function add_crowd(z) {
+    const rnd = seeded(Math.round(-z) + 5);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+    const g = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const fence = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 70), flat_mat('#e8e8e8'));
+      fence.position.set(road_x(z + 25) + side * (road_edge + 0.6), road_y(z + 25) + 0.45, z + 25);
+      fence.rotation.y = heading(z + 25);
+      g.add(fence);
+      for (let q = -10; q < 60; q += 1.7) {
+        if (rnd() < 0.25) continue;
+        const zz = z + q, x = road_x(zz) + side * (road_edge + 1.4 + rnd() * 1.2);
+        const h = make_hiker(mat, rnd, false);
+        h.root.visible = true;
+        h.root.position.set(x, ground(x, zz), zz);
+        h.root.rotation.y = heading(zz) + side * Math.PI / 2;   // face the road
+        h.base_y = h.root.position.y;
+        g.add(h.root);
+        crowd.push(h);
+      }
+    }
+    // a flat, tree-free square around the finish for the houses
+    flat_zones.push({ x: road_x(z - 30), z: z - 30, r: 75 });
+    invalidate(z + 60, z - 120);
+    add_houses(g, z - 40, 120, 8, rnd);
+    return keep(g);
+  }
+  function update_crowd(dt, cz) {
+    ambience.crowd = 1 - smoothstep(20, 160, Math.min(...crowd.map((h) => Math.abs(h.root.position.z - cz))));
+    for (const h of crowd) {
+      const near = Math.abs(h.root.position.z - cz) < 70;
+      h.phase += dt * (near ? 9 + (h.phase % 1) * 3 : 2);
+      h.root.position.y = h.base_y + (near ? Math.max(0, Math.sin(h.phase)) * 0.25 : 0);
+      h.arms.forEach((a, i) => { a.rotation.z = (i ? 1 : -1) * (near ? 2.6 + Math.sin(h.phase * 1.3 + i) * 0.4 : 0.15); a.rotation.x = 0; });
+    }
+  }
+
+  // what this ride rolled, shown for a few seconds at the start
+  if (sc.label && canvas.parentElement) {
+    const toast = document.createElement('div');
+    toast.className = 'scene-toast';
+    toast.textContent = '🎲 ' + sc.label;
+    canvas.parentElement.appendChild(toast);
+    mood_layers.push(toast);
+    setTimeout(() => toast.classList.add('gone'), 6000);
+  }
+
   // f = { focus_z (where the action is), speed (visual m/s for wind), boost, look_back (camera looks backwards) }
   let last_cz = 0;
   function frame(dt, f) {
@@ -1591,6 +2029,13 @@ export function create_kit(canvas, opts = {}) {
     update_chunks(f.look_back ? cz : Math.min(cz, f.focus_z + 10), f.look_back ? 5 : 1);
     update_camps(cz);
     update_wild(dt, cz);
+    precip?.update(dt, cx, camera.position.y, cz, f.speed ?? 0);
+    if (sc.dusk) update_dusk(dt, cx, cz);
+    update_water(cz);
+    update_villages(cz);
+    if (crowd.length) update_crowd(dt, cz); else ambience.crowd = 0;
+    ambience.rain = !!precip && sc.season !== 'winter';
+    ambience.birds = theme.birds && sc.weather === 'clear' && (!sc.dusk || t_total < dusk_s * 0.5);
     wild?.birds?.update(dt, cx, cz);
     wind.update(dt, cz, cx, f.speed ?? 0, !!f.boost);
     update_dust(dt);
@@ -1641,21 +2086,66 @@ export function create_kit(canvas, opts = {}) {
   function hide_mirror() { if (mirror_frame) mirror_frame.style.display = 'none'; }
 
   function dispose() {
+    Object.assign(ambience, { rain: false, water: 0, crowd: 0, birds: false });
     dispose_scene(scene);
     for (const d of mood_layers) d.remove();
     canvas.classList.remove('soft-grade');
   }
 
   return {
-    THREE, scene, camera, theme, hemi, sun, ground, road_x, road_y, heading, road_w, road_edge,
+    THREE, scene, camera, theme, scenery: sc, hemi, sun, ground, road_x, road_y, heading, road_w, road_edge,
     get portrait() { return portrait; },
     set_road_end(z) { road_end = z; },
     add_flat_zone(x, z, r) { flat_zones.push({ x, z, r }); },
     clear_flat_zones() { flat_zones.length = 0; },
-    add_rider, place_rider, fade_for, chase, add_arch, add_board, add_sign, add_trail, remove, invalidate,
+    add_rider, remove_rider, set_marks, place_rider, fade_for, chase, add_arch, add_board, add_sign, add_trail, remove, invalidate,
     frame, resize, dispose, hide_mirror, wild,
   };
 }
 
+// garage preview: the rider on a slowly turning disc, pedalling. returns { set(look), dispose() }
+export function rider_preview(canvas) {
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  r.toneMapping = THREE.ACESFilmicToneMapping;
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#e8f0ff', '#40503a', 1.2));
+  const sun = new THREE.DirectionalLight('#fff2dd', 2.4);
+  sun.position.set(-3, 5, 4);
+  scene.add(sun);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.12, 24), flat_mat('#2c3a48'));
+  disc.position.y = -0.06;
+  scene.add(disc);
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  cam.position.set(0, 1.5, 4.4);
+  cam.lookAt(0, 0.75, 0);
+  let model = null, raf = 0, last = performance.now(), crank = 0, alive = true;
+  function set(look) {
+    if (model) { scene.remove(model.group); model.mats.forEach((m) => { m.map?.dispose(); m.dispose(); }); }
+    model = make_rider(look);
+    model.flame.visible = true;   // show off the nitro flame
+    scene.add(model.group);
+  }
+  function tick(ts) {
+    if (!alive) return;
+    const dt = Math.min(0.05, (ts - last) / 1000);
+    last = ts;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    crank += dt * 9;
+    if (model) {
+      model.group.rotation.y += dt * 0.5;
+      for (const wh of model.wheels) wh.rotation.x -= dt * 7;
+      animate_rider(model, { watts: 180, v: 8, crank }, dt, 200, false);
+      if (model.look.flame === 'rainbow') model.flame.material.color.copy(rainbow(ts / 1000));
+      model.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+    }
+    r.render(scene, cam);
+    raf = requestAnimationFrame(tick);
+  }
+  raf = requestAnimationFrame(tick);
+  return { set, dispose() { alive = false; cancelAnimationFrame(raf); dispose_scene(scene); r.dispose(); } };
+}
+
 // shared "scenery" option for every 3d game
-export const scenery_option = (def = 'meadow') => ({ key: 'scenery', label: 'Scenery', choices: Object.entries(themes).map(([id, t]) => [id, t.name]), def });
+export const scenery_option = () => ({ key: 'scenery', label: 'Scenery', choices: [[surprise_id, '🎲 Surprise me'], ...Object.entries(themes).map(([id, t]) => [id, t.name])], def: surprise_id });
