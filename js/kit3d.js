@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=28';
+import { seeded } from './util.js?v=29';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -252,40 +252,31 @@ function dispose_scene(scene) {
 
 function make_props(scene, theme) {
   const per_chunk = 170;
-  const n = per_chunk * chunk_count;
   const rnd = seeded(7);
-  const mk = (geom, color, count = n, shadow = true) => {
-    const m = new THREE.InstancedMesh(geom, flat_mat(color), count);
-    m.castShadow = shadow;
-    m.receiveShadow = true;
-    m.frustumCulled = false;   // instances move around; bounds would be stale
-    scene.add(m);
-    return m;
-  };
   // round tree: two faceted blobs on a trunk
   const crown = merge([
     jitter(new THREE.IcosahedronGeometry(1.8, 1), 0.55, rnd).translate(0, 3.8, 0),
-    jitter(new THREE.IcosahedronGeometry(1.25, 1), 0.4, rnd).translate(0.8, 5.0, 0.3),
-    jitter(new THREE.IcosahedronGeometry(1.0, 1), 0.35, rnd).translate(-0.9, 4.5, -0.4),
+    jitter(new THREE.IcosahedronGeometry(1.25, 0), 0.4, rnd).translate(0.8, 5.0, 0.3),   // small blobs: coarser (cheap on phones)
+    jitter(new THREE.IcosahedronGeometry(1.0, 0), 0.35, rnd).translate(-0.9, 4.5, -0.4),
   ]);
   const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.6, 5).translate(0, 1.3, 0);
   // pine: three stacked, slightly drooping cones (the classic low-poly pine)
   const pine = merge([
-    jitter(new THREE.ConeGeometry(1.8, 2.6, 10, 2), 0.35, rnd, true).translate(0, 2.3, 0),
-    jitter(new THREE.ConeGeometry(1.45, 2.3, 9, 2), 0.3, rnd, true).translate(0, 3.5, 0),
-    jitter(new THREE.ConeGeometry(1.15, 2.1, 8, 2), 0.25, rnd, true).translate(0, 4.5, 0),
-    jitter(new THREE.ConeGeometry(0.8, 2.0, 7, 2), 0.2, rnd, true).translate(0, 5.5, 0),
+    jitter(new THREE.ConeGeometry(1.8, 2.6, 10, 1), 0.35, rnd, true).translate(0, 2.3, 0),
+    jitter(new THREE.ConeGeometry(1.45, 2.3, 9, 1), 0.3, rnd, true).translate(0, 3.5, 0),
+    jitter(new THREE.ConeGeometry(1.15, 2.1, 8, 1), 0.25, rnd, true).translate(0, 4.5, 0),
+    jitter(new THREE.ConeGeometry(0.8, 2.0, 7, 1), 0.2, rnd, true).translate(0, 5.5, 0),
   ]);
   const pine_trunk = new THREE.CylinderGeometry(0.22, 0.3, 1.6, 5).translate(0, 0.8, 0);
-  const rock = jitter(new THREE.DodecahedronGeometry(1, 1), 0.45, rnd).scale(1.2, 0.75, 1).translate(0, 0.35, 0);
+  const rock = jitter(new THREE.DodecahedronGeometry(1, 0), 0.45, rnd).scale(1.2, 0.75, 1).translate(0, 0.35, 0);
   // roadside post with a reflector band
   const post = new THREE.BoxGeometry(0.12, 1.0, 0.12).translate(0, 0.5, 0);
   const posts_per_chunk = Math.ceil(chunk_len / 25) * 2 + 2;
   const tuft = merge([0, 2.1, 4.2].map((a) => new THREE.ConeGeometry(0.09, 0.45, 3).translate(Math.cos(a) * 0.12, 0.2, Math.sin(a) * 0.12)));
   const tufts_per_chunk = 420;
   const bush = merge([
-    jitter(new THREE.IcosahedronGeometry(0.7, 1), 0.25, rnd).scale(1, 0.75, 1).translate(0, 0.45, 0),
-    jitter(new THREE.IcosahedronGeometry(0.5, 1), 0.2, rnd).scale(1, 0.75, 1).translate(0.55, 0.35, 0.2),
+    jitter(new THREE.IcosahedronGeometry(0.7, 0), 0.25, rnd).scale(1, 0.75, 1).translate(0, 0.45, 0),
+    jitter(new THREE.IcosahedronGeometry(0.5, 0), 0.2, rnd).scale(1, 0.75, 1).translate(0.55, 0.35, 0.2),
   ]);
   const bushes_per_chunk = 60;
   // boulder pile: two or three big rocks leaning together
@@ -295,17 +286,29 @@ function make_props(scene, theme) {
     jitter(new THREE.DodecahedronGeometry(0.6, 0), 0.25, rnd).translate(-1.1, 0.3, 0.8),
   ]);
   const boulders_per_chunk = 5;
-  const props = {
-    boulders_per_chunk, boulder: mk(boulder, '#ffffff', boulders_per_chunk * chunk_count),
-    bushes_per_chunk, bush: mk(bush, '#ffffff', bushes_per_chunk * chunk_count),
-    tufts_per_chunk, tuft: mk(tuft, '#ffffff', tufts_per_chunk * chunk_count, false),
-    per_chunk, posts_per_chunk,
-    crown: mk(crown, '#ffffff'), trunk: mk(trunk, theme.trunk),
-    pine: mk(pine, '#ffffff'), pine_trunk: mk(pine_trunk, theme.trunk),
-    rock: mk(rock, '#ffffff'),
-    post: mk(post, '#f4f4f4', posts_per_chunk * chunk_count, false),
+  // one instanced mesh per kind per chunk slot: only the instances a chunk uses are drawn (count), and a chunk
+  // out of view, out of the shadow camera or behind the mirror is skipped as a whole (bounding sphere culling).
+  // before this, every slot drew all three tree shapes (two shrunk to nothing): ~2.6 m triangles a frame
+  // kind: [geometry, colour, per chunk, casts shadow, per-instance colour]
+  const kinds = {
+    crown: [crown, '#ffffff', per_chunk, true, true], trunk: [trunk, theme.trunk, per_chunk, true, false],
+    pine: [pine, '#ffffff', per_chunk, true, true], pine_trunk: [pine_trunk, theme.trunk, per_chunk, true, false],
+    rock: [rock, '#ffffff', per_chunk, true, true], bush: [bush, '#ffffff', bushes_per_chunk, true, true],
+    tuft: [tuft, '#ffffff', tufts_per_chunk, false, true], post: [post, '#f4f4f4', posts_per_chunk, false, false],
+    boulder: [boulder, '#ffffff', boulders_per_chunk, true, true],
   };
-  return props;
+  const mats = Object.fromEntries(Object.entries(kinds).map(([k, v]) => [k, flat_mat(v[1])]));
+  const white = new THREE.Color('#ffffff');
+  const slots = Array.from({ length: chunk_count }, () => Object.fromEntries(Object.entries(kinds).map(([k, [g, , n, shadow, colored]]) => {
+    const m = new THREE.InstancedMesh(g, mats[k], n);
+    m.castShadow = shadow;
+    m.receiveShadow = true;
+    if (colored) m.setColorAt(0, white);   // colour buffer from the start: same shader for every slot
+    m.count = 0;
+    scene.add(m);
+    return [k, m];
+  })));
+  return { slots, per_chunk, bushes_per_chunk, tufts_per_chunk, boulders_per_chunk, posts_per_chunk };
 }
 
 const m4 = new THREE.Matrix4();
@@ -1297,7 +1300,9 @@ export function create_kit(canvas, opts = {}) {
 
   function fill_props(slot, chunk_i, z0) {
     const rnd = seeded(chunk_i * 7919 + 13);
-    const base_i = slot * props.per_chunk;
+    const P = props.slots[slot];
+    const used = Object.fromEntries(Object.keys(P).map((k) => [k, 0]));
+    const put = (k, ...a) => set_inst(P[k], used[k]++, ...a);
     // random spot beside the road: side offset from the road centre
     const spot = (min, spread) => {
       const z = z0 - rnd() * chunk_len;
@@ -1305,8 +1310,6 @@ export function create_kit(canvas, opts = {}) {
       return { z, rx: side * (road_edge + min + spread) };
     };
     for (let k = 0; k < props.per_chunk; k++) {
-      const i = base_i + k;
-      for (const m of [props.crown, props.trunk, props.pine, props.pine_trunk, props.rock]) m.setMatrixAt(i, hidden);
       // most trees line the road (a forest corridor), the rest scatter over the hills
       const near = rnd() < 0.6;
       const { z, rx } = spot(4, near ? rnd() * 40 : 40 + rnd() ** 1.3 * 260);
@@ -1319,55 +1322,49 @@ export function create_kit(canvas, opts = {}) {
       if (in_clearing(x, z)) continue;   // keep clearings (forks) open
       const y = ground(x, z) - 0.15;
       if (kind < theme.mix.round) {
-        set_inst(props.crown, i, x, y, z, s, sy, rot, palette_color(theme.round, cr));
-        set_inst(props.trunk, i, x, y, z, s, sy, rot);
+        put('crown', x, y, z, s, sy, rot, palette_color(theme.round, cr));
+        put('trunk', x, y, z, s, sy, rot);
       } else if (kind < theme.mix.round + theme.mix.pine) {
-        set_inst(props.pine, i, x, y, z, s * 1.15, sy * 1.25, rot, palette_color(theme.pine, cr));
-        set_inst(props.pine_trunk, i, x, y, z, s * 1.15, 1, rot);
+        put('pine', x, y, z, s * 1.15, sy * 1.25, rot, palette_color(theme.pine, cr));
+        put('pine_trunk', x, y, z, s * 1.15, 1, rot);
       } else {
-        set_inst(props.rock, i, x, y, z, s * (0.5 + cr * 0.9), 1, rot, palette_color(theme.rock, cr));
+        put('rock', x, y, z, s * (0.5 + cr * 0.9), 1, rot, palette_color(theme.rock, cr));
       }
     }
     // bushes in the verge and under the trees
-    const bb = slot * props.bushes_per_chunk;
     for (let k = 0; k < props.bushes_per_chunk; k++) {
       const { z, rx } = spot(2, rnd() ** 1.3 * 45);
       const x = road_x(z) + rx;
       const s = 0.7 + rnd() * 1.1, rot = rnd() * 6.28, cr = rnd();
-      if (in_clearing(x, z)) { props.bush.setMatrixAt(bb + k, hidden); continue; }
-      set_inst(props.bush, bb + k, x, ground(x, z) - 0.1, z, s, 1, rot, palette_color(theme.round, cr).offsetHSL(0, 0, -0.04));
+      if (in_clearing(x, z)) continue;
+      put('bush', x, ground(x, z) - 0.1, z, s, 1, rot, palette_color(theme.round, cr).offsetHSL(0, 0, -0.04));
     }
     // boulder piles in the woods, a few close to the road
-    const ob = slot * props.boulders_per_chunk;
     for (let k = 0; k < props.boulders_per_chunk; k++) {
       const { z, rx } = spot(6, rnd() ** 1.4 * 55);
       const x = road_x(z) + rx;
       const s = 0.8 + rnd() * 1.4, rot = rnd() * 6.28, cr = rnd();
-      if (in_clearing(x, z)) { props.boulder.setMatrixAt(ob + k, hidden); continue; }
-      set_inst(props.boulder, ob + k, x, ground(x, z) - 0.3 * s, z, s, 0.8 + cr * 0.4, rot, palette_color(theme.rock, cr));
+      if (in_clearing(x, z)) continue;
+      put('boulder', x, ground(x, z) - 0.3 * s, z, s, 0.8 + cr * 0.4, rot, palette_color(theme.rock, cr));
     }
     // grass tufts close to the road: small detail that reads as texture at speed
-    const tb = slot * props.tufts_per_chunk;
     for (let k = 0; k < props.tufts_per_chunk; k++) {
       const { z, rx } = spot(0.4, rnd() ** 1.5 * 30);
       const x = road_x(z) + rx;
-      set_inst(props.tuft, tb + k, x, ground(x, z) - 0.05, z, 0.8 + rnd() * 1.4, 0.7 + rnd(), rnd() * 6.28,
+      put('tuft', x, ground(x, z) - 0.05, z, 0.8 + rnd() * 1.4, 0.7 + rnd(), rnd() * 6.28,
         palette_color(theme.grass, rnd()).offsetHSL(0, 0.05, -0.08));
     }
     // white roadside posts every 25 m: strong speed cue (only where there is a road)
-    const pb = slot * props.posts_per_chunk;
-    let k = 0;
     const first = Math.ceil(-z0 / 25) * 25;
-    for (let d = first; d < -z0 + chunk_len && k < props.posts_per_chunk - 1; d += 25) {
+    for (let d = first; d < -z0 + chunk_len && used.post < props.posts_per_chunk - 1; d += 25) {
       if (opts.posts === false || -d < road_end) continue;
-      for (const side of [-1, 1]) props.post.setMatrixAt(pb + k++, m4.makeTranslation(road_x(-d) + side * (road_edge + 0.7), road_y(-d), -d));
+      for (const side of [-1, 1]) P.post.setMatrixAt(used.post++, m4.makeTranslation(road_x(-d) + side * (road_edge + 0.7), road_y(-d), -d));
     }
-    while (k < props.posts_per_chunk) props.post.setMatrixAt(pb + k++, hidden);
-    for (const m of Object.values(props)) {
-      if (m.isInstancedMesh) {
-        m.instanceMatrix.needsUpdate = true;
-        if (m.instanceColor) m.instanceColor.needsUpdate = true;
-      }
+    for (const [k, m] of Object.entries(P)) {
+      m.count = used[k];
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      m.computeBoundingSphere();   // per-chunk culling (main view, shadows, mirror)
     }
   }
 
