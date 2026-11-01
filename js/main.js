@@ -1,25 +1,25 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=27';
-import { control } from './ble.js?v=27';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=27';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=27';
-import { stats_html } from './stats.js?v=27';
-import { set_rider_mass, steady_speed } from './physics.js?v=27';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=27';
-import * as ride_log from './ride_log.js?v=27';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=27';
-import * as daily from './daily.js?v=27';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=27';
-import { rider_preview, ambience } from './kit3d.js?v=27';
-import race from './games/race.js?v=27';
-import crossroads from './games/crossroads.js?v=27';
-import summit from './games/summit.js?v=27';
-import pulse from './games/pulse.js?v=27';
-import spinbeat from './games/spinbeat.js?v=27';
-import escape from './games/escape.js?v=27';
-import sprint from './games/sprint.js?v=27';
-import workout from './games/workout.js?v=27';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=28';
+import { control } from './ble.js?v=28';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=28';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=28';
+import { stats_html } from './stats.js?v=28';
+import { set_rider_mass, steady_speed } from './physics.js?v=28';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=28';
+import * as ride_log from './ride_log.js?v=28';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=28';
+import * as daily from './daily.js?v=28';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=28';
+import { rider_preview, ambience } from './kit3d.js?v=28';
+import race from './games/race.js?v=28';
+import crossroads from './games/crossroads.js?v=28';
+import summit from './games/summit.js?v=28';
+import pulse from './games/pulse.js?v=28';
+import spinbeat from './games/spinbeat.js?v=28';
+import escape from './games/escape.js?v=28';
+import sprint from './games/sprint.js?v=28';
+import workout from './games/workout.js?v=28';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -321,7 +321,8 @@ function needs_html(g) {
 // ---- play loop ----
 let instance = null;          // running game
 let active_opts = null;
-let phase = 'idle';           // idle | countdown | play | ending
+let phase = 'idle';           // idle | loading | countdown | play | ending
+let load_frames = 0;          // frames drawn while loading
 let phase_end = 0;
 let last_ts = 0;
 let demo = false;
@@ -398,8 +399,12 @@ function start_game() {
     insets,
     look: look(),
   });
-  phase = 'countdown';
-  phase_end = performance.now() + 3000;
+  // preload: draw the world (frozen) for ~1.5 s before the countdown. the first frames compile every shader,
+  // upload geometry + textures and let auto resolution settle, so none of that stutters once you ride
+  phase = 'loading';
+  load_frames = 0;
+  phase_end = performance.now() + 1500;
+  show_big_text('Loading…', 0, 'callout');
   last_ts = performance.now();
   requestAnimationFrame(loop);
 }
@@ -430,6 +435,17 @@ function loop(ts) {
     stop_ride();   // silence while paused
     instance.render(0, input);
     update_metrics(input);
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  if (phase === 'loading') {
+    instance.render(0, input);
+    load_frames += 1;
+    if (ts > phase_end && load_frames >= 40) {
+      phase = 'countdown';
+      phase_end = ts + 3000;
+    }
     requestAnimationFrame(loop);
     return;
   }

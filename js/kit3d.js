@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=27';
+import { seeded } from './util.js?v=28';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -1612,12 +1612,14 @@ export function create_kit(canvas, opts = {}) {
   // late frames (> 1.5x the screen refresh) in the last ~2 s lower the resolution a step; a long smooth stretch
   // raises it again, but never back to a level that already stuttered. pauses (> 250 ms) are ignored
   let last_frame = 0, quality_t = performance.now();
+  const kit_t0 = performance.now();
   const frame_ms = [];
   function adapt_resolution() {
     const now = performance.now();
     if (last_frame) { frame_ms.push(now - last_frame); if (frame_ms.length > 120) frame_ms.shift(); }
     last_frame = now;
-    if (frame_ms.length < 90 || now - quality_t < 2000) return;
+    const early = now - kit_t0 < 15000;   // settle fast during loading and the first seconds
+    if (frame_ms.length < (early ? 45 : 90) || now - quality_t < (early ? 1000 : 2000)) return;
     const sorted = [...frame_ms].sort((a, b) => a - b);
     const refresh = sorted[Math.floor(sorted.length * 0.1)];
     const late = frame_ms.filter((t) => t > refresh * 1.5 && t < 250).length / frame_ms.length;

@@ -1,7 +1,7 @@
 // race world: the shared low-poly kit + the race course (start line, finish arch, km boards) and the pack.
 // the scenery is drawn vis_scale times faster than the physics (the world flies by), while riders keep their
 // real gaps to the player so the pack looks natural
-import { create_kit } from './kit3d.js?v=27';
+import { create_kit } from './kit3d.js?v=28';
 
 export const vis_scale = 2.5;              // visual speed multiplier (speed numbers and physics are unchanged)
 const lane_count = 6;
