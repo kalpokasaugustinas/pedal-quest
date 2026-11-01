@@ -1,0 +1,5 @@
+#!/bin/sh
+# git pre-commit hook: stamp the build number + cache-busting ?v=N before every commit,
+# then re-stage the stamped files. install: cp tools/pre-commit .git/hooks/pre-commit
+python tools/stamp_version.py || exit 1
+git add index.html style.css js

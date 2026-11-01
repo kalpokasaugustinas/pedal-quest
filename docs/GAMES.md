@@ -27,6 +27,8 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 - You race 5 bots: 80% to 120% of the "rival strength" watts.
 - Bots: slow power wave, random surges, a final sprint, and nitro at 50% of a perfect player's rate.
 - Nitro: a random 5 bpm HR window. 30 s inside fills the bar; outside it drains at half that speed. A full bar gives +80 W for 3 s.
+- Look: low-poly, flat-shaded 3D (faceted terrain chunks recycled around the camera, instanced trees / rocks / roadside posts, mountain ring, clouds, soft shadows, fog). Scenery option: Sunny meadow, Misty valley, Starry night.
+- Visual speed: the scenery moves 2.5× faster than the physics (`vis_scale` in `js/world.js`); speed, watts and times are unchanged. Riders keep their real gaps to the player so the pack looks natural. Wind streaks scale with speed; riders between the camera and you fade out.
 - Drafting: a rider up to 5 m ahead cuts your air drag, linearly up to 30% at 1 m. Everyone drafts (not in the first 3 s). In 3D the drafting rider slides in behind the wheel.
 
 ### 🔀 Crossroads
@@ -90,7 +92,8 @@ js/world.js       Three.js world for Race
 js/race_model.js  Race model: bots, nitro, drafting, standings
 js/ride_log.js    per-second ride samples -> results chart + stats (all games)
 js/games/*.js     one module per game
-tools/stamp_version.py   run before each commit: build number + cache-busting ?v=N
+tools/stamp_version.py   build number + cache-busting ?v=N (run by the git hook)
+tools/pre-commit         git hook: cp tools/pre-commit .git/hooks/pre-commit
 test.html         raw sensor test page
 ```
 

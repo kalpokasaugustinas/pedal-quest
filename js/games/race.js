@@ -1,7 +1,7 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=14';
-import { create_world } from '../world.js?v=14';
-import { fmt_time, ordinal } from '../util.js?v=14';
+import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=15';
+import { create_world, themes } from '../world.js?v=15';
+import { fmt_time, ordinal } from '../util.js?v=15';
 
 export default {
   id: 'race',
@@ -19,6 +19,7 @@ export default {
   options: [
     { key: 'km', label: 'Race distance', choices: [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], def: 2 },
     { key: 'base_watts', label: 'Rival strength', type: 'stepper', min: 50, max: 500, step: 10, unit: 'W', def: 150 },
+    { key: 'scenery', label: 'Scenery', choices: Object.entries(themes).map(([id, t]) => [id, t.name]), def: 'meadow' },
   ],
   setup_html: (o) => `<ul class="rivals">${bot_lineup(o.base_watts).reverse()
     .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name}<span class="w">~${b.avg_watts} W avg</span></li>`).join('')}</ul>`,
@@ -29,7 +30,7 @@ export default {
 function create(env) {
   const $ = (id) => document.getElementById(id);
   const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts });
-  const world = create_world(env.canvas, race);
+  const world = create_world(env.canvas, race, env.opts.scenery);
 
   env.hud.innerHTML = `
     <div class="race-top">
