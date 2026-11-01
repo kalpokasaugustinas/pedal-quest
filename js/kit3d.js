@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=29';
+import { seeded } from './util.js?v=30';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -108,31 +108,52 @@ function house_geom(rnd, winter) {
   ]);
 }
 
-// rain (streaks) or snow (flakes) falling in a box around the camera
+// rain (streaks) or snow (flakes) in a box around the camera. you ride into it: drops come at you as fast as
+// you ride, and each streak is drawn along its motion relative to you (falling + rushing at you), so at speed
+// rain slants towards the screen like the wind streaks and snow turns into short streaks
 function make_precip(scene, snow) {
   const n = snow ? 900 : 700;
-  const pos = new Float32Array(n * (snow ? 3 : 6));
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const obj = snow
-    ? new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 0.12, transparent: true, opacity: 0.9, depthWrite: false }))
-    : new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#c8d4de', transparent: true, opacity: 0.45, depthWrite: false }));
-  obj.frustumCulled = false;
-  scene.add(obj);
-  const pts = Array.from({ length: n }, () => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 22, z: -Math.random() * 70 + 8, ph: Math.random() * 6.28 }));
+  const lines = new Float32Array(n * 6);
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.BufferAttribute(lines, 3));
+  const line_mat = new THREE.LineBasicMaterial({ color: snow ? '#ffffff' : '#c8d4de', transparent: true, opacity: snow ? 0 : 0.45, depthWrite: false });
+  const streaks = new THREE.LineSegments(lg, line_mat);
+  streaks.frustumCulled = false;
+  scene.add(streaks);
+  // snow also gets round flakes (visible when you ride slowly)
+  const dots = snow ? new Float32Array(n * 3) : null;
+  let flakes = null;
+  if (snow) {
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute('position', new THREE.BufferAttribute(dots, 3));
+    flakes = new THREE.Points(dg, new THREE.PointsMaterial({ color: '#ffffff', size: 0.12, transparent: true, opacity: 0.9, depthWrite: false }));
+    flakes.frustumCulled = false;
+    scene.add(flakes);
+  }
+  const pts = Array.from({ length: n }, () => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 22, z: -Math.random() * 80 + 8, ph: Math.random() * 6.28 }));
+  const fall = snow ? 1.6 : 16;
+  const trail = snow ? 0.07 : 0.045;   // streak length = relative speed x this many seconds
   return {
     update(dt, cx, cy, cz, speed) {
-      const fall = snow ? 1.6 : 16;
       pts.forEach((p, i) => {
+        const vx = snow ? Math.sin(p.ph + p.y * 0.5) * 0.6 : 0;
+        p.x += vx * dt;
         p.y -= fall * dt;
-        p.z += speed * dt * 0.9;   // you ride into it
-        if (snow) p.x += Math.sin(p.ph + p.y * 0.5) * dt * 0.6;
-        if (p.y < 0 || p.z > 8) { p.y = 14 + Math.random() * 8; p.z = -Math.random() * 70; p.x = (Math.random() - 0.5) * 50; }
+        p.z += speed * dt;   // you ride into it at your own speed
+        // fell to the ground: back to the top. passed the camera: back far ahead at any height
+        if (p.y < 0) { p.y = 16 + Math.random() * 6; p.z = 8 - Math.random() * 80; p.x = (Math.random() - 0.5) * 50; }
+        if (p.z > 8) { p.z = -60 - Math.random() * 20; p.y = Math.random() * 22; p.x = (Math.random() - 0.5) * 50; }
         const x = cx + p.x, y = cy - 3 + p.y, z = cz + p.z;
-        if (snow) pos.set([x, y, z], i * 3);
-        else pos.set([x, y, z, x + 0.05, y + 0.7, z - 0.25], i * 6);
+        // tail = where the drop was a moment ago, relative to you: up (it falls) and further ahead (you close in)
+        const tail = Math.max(trail, snow ? 0 : 0.7 / fall);
+        lines.set([x, y, z, x - vx * tail, y + fall * tail, z - speed * tail], i * 6);
+        if (snow) dots.set([x, y, z], i * 3);
       });
-      g.attributes.position.needsUpdate = true;
+      lg.attributes.position.needsUpdate = true;
+      if (snow) {
+        flakes.geometry.attributes.position.needsUpdate = true;
+        line_mat.opacity = Math.min(0.75, speed / 25);   // flakes stretch into streaks as you speed up
+      }
     },
   };
 }
