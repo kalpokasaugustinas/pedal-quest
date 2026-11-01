@@ -4,7 +4,7 @@
 // race coordinates: rider x (meters along the course). the scenery is drawn vis_scale times faster than the
 // physics (the world flies by), while riders keep their real gaps to the player so the pack looks natural
 import * as THREE from 'three';
-import { seeded } from './util.js?v=16';
+import { seeded } from './util.js?v=17';
 
 export const vis_scale = 2.5;              // visual speed multiplier (speed numbers and physics are unchanged)
 const lane_w = 1.1;                        // meters per lane
@@ -25,7 +25,7 @@ export const themes = {
     mountain: ['#b08a68', '#9a7556', '#c9a582', '#86664c'], snow: '#f4f1ea', snow_line: 0.82,
     round: ['#55a52e', '#62b236', '#4a9628', '#70bb3e'], pine: ['#2f8530', '#287a2b', '#379238'],
     trunk: '#a8622f', rock: ['#a4a4a8', '#8e8f96'], mix: { round: 0.55, pine: 0.3, rock: 0.15 },
-    asphalt: '#5d6068', cloud: '#ffffff', cloud_glow: 0.25, stars: false, camps: 0.25,
+    asphalt: '#6c6f78', cloud: '#ffffff', cloud_glow: 0.25, stars: false, camps: 0.25,
   },
   valley: {
     name: 'Misty valley',
@@ -35,7 +35,7 @@ export const themes = {
     mountain: ['#3f8f7a', '#2f7563', '#5aa38a', '#286a58'], snow: null, snow_line: 1,
     round: ['#5aa35a', '#4f9650'], pine: ['#2e7a58', '#28704f', '#358763'],
     trunk: '#8a5230', rock: ['#7d8a80', '#6d786f'], mix: { round: 0.12, pine: 0.7, rock: 0.18 },
-    asphalt: '#5e5852', cloud: '#f6f7ea', cloud_glow: 0.3, stars: false, camps: 0.2,
+    asphalt: '#6e6860', cloud: '#f6f7ea', cloud_glow: 0.3, stars: false, camps: 0.2,
   },
   night: {
     name: 'Starry night',
@@ -45,7 +45,7 @@ export const themes = {
     mountain: ['#3a5590', '#4a68a8', '#2c4478', '#5a7ac0'], snow: '#dfe9fb', snow_line: 0.78,
     round: ['#3f9f45', '#34903b'], pine: ['#2f9a3c', '#27883a', '#3aab45', '#2a7f35'],
     trunk: '#b8622a', rock: ['#5e6f96', '#4f5f86', '#6b7da6'], mix: { round: 0.05, pine: 0.8, rock: 0.15 },
-    asphalt: '#2d3142', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55,
+    asphalt: '#3a3f56', cloud: '#c8d4f2', cloud_glow: 0.35, stars: true, camps: 0.55,
   },
 };
 

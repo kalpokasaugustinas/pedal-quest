@@ -1,7 +1,7 @@
 // spin beat: a rhythm game for your legs. target cadence blocks scroll down a highway,
 // keep your cadence inside them to score; hitting in a row builds a combo multiplier
-import { setup_2d, round_rect, label } from '../draw2d.js?v=16';
-import { clamp, seeded } from '../util.js?v=16';
+import { setup_2d, round_rect, label } from '../draw2d.js?v=17';
+import { clamp, seeded } from '../util.js?v=17';
 
 // tracks are generated from a fixed seed, so the same track is the same every time (fair leaderboards)
 const tracks = {
