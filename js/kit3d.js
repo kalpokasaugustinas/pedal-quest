@@ -3,7 +3,7 @@
 // warm trunks, calm colours, lit clouds, campfires, wind streaks, and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=20';
+import { seeded } from './util.js?v=21';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -639,6 +639,13 @@ function make_wind(scene) {
   };
 }
 
+// winding road centre line (visual meters): long sweeping bends, medium s-curves and the odd tight turn.
+// each layer fades in and out on its own slow cycle, so turns vary from gentle to sharp
+export function curve_x(z) {
+  const wave = (len, amp, ph, env_len, env_ph) => amp * Math.sin(z / len + ph) * (0.55 + 0.45 * Math.sin(z / env_len + env_ph));
+  return wave(420, 75, 0.3, 1900, 1.1) + wave(160, 38, 1.3, 760, 2.4) + wave(70, 14, 0.7, 380, 0.2);
+}
+
 // ---- the kit: one low-poly world around a (possibly curving, climbing) road ----
 //
 // coordinates: forward = -z. the road centre line is road_x(z), its height road_y(z) (both in visual meters).
@@ -650,7 +657,7 @@ export function create_kit(canvas, opts = {}) {
   const road_w = opts.road_w ?? 7.6;
   const lanes = opts.lanes ?? 6;
   const road_edge = road_w / 2;
-  const road_x = opts.road_x || (() => 0);
+  const road_x = opts.road_x || (opts.curves === false ? () => 0 : curve_x);
   const road_y = opts.road_y || (() => 0);
   const surface = opts.surface || (() => 'asphalt');
   const flat_zones = [];   // { x, z, r }: clearings where the hills flatten out (e.g. a crossroads)
@@ -813,7 +820,10 @@ export function create_kit(canvas, opts = {}) {
     for (let i = 0; i <= n; i++) {
       const z = z0 - ((z0 - z1) * i) / n;
       const x = cx(z), y = cy(z);
-      pos.push(x - width / 2, y, z, x + width / 2, y, z);
+      // sideways unit vector: perpendicular to the direction of travel (x changes by sl per meter forward)
+      const sl = cx(z - 0.5) - cx(z + 0.5);
+      const k = width / 2 / Math.sqrt(1 + sl * sl);
+      pos.push(x - k, y, z - sl * k, x + k, y, z + sl * k);
       uv.push(0, -z / 8, 1, -z / 8);
       if (i < n) {
         const a = i * 2;
@@ -1122,6 +1132,7 @@ export function create_kit(canvas, opts = {}) {
   // fade factor for a rider at z when the camera follows a target at target_z (1 = fully visible)
   function fade_for(z, target_z, back) {
     const cz = target_z + (back ?? (portrait ? 4.2 : 5.2));
+    if (z > cz - 0.3) return 1;   // behind the camera: not in the main view (but visible in a mirror)
     const near = Math.max(0, Math.min(1, (cz - z - 1.0) / 2.2));
     return 0.05 + 0.95 * near * near;
   }
@@ -1255,7 +1266,41 @@ export function create_kit(canvas, opts = {}) {
     sun.target.position.set(road_x(fz - 45), road_y(fz - 45), fz - 45);
     sun.position.copy(sun.target.position).add(sun_off);
     renderer.render(scene, camera);
+    if (f.mirror) render_mirror(f.mirror);
   }
+
+  // rear-view mirror: a small inset at the top showing the road behind the rider at m.z
+  // m = { z, top (px from the top of the canvas), look_z (optional: aim at a rider behind) }
+  const mirror_cam = new THREE.PerspectiveCamera(30, 2.4, 0.5, 600);   // zoomed in: riders behind read clearly
+  let mirror_frame = null;
+  function render_mirror(m) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const mw = Math.round(Math.min(w * 0.62, 340)), mh = Math.round(mw / 2.4);
+    const mx = Math.round((w - mw) / 2), my = Math.round(m.top ?? 70);
+    const yaw = heading(m.z);
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const x = road_x(m.z), y = road_y(m.z);
+    mirror_cam.position.set(x + fx * 0.6, y + 2.2, m.z + fz * 0.6);
+    const lz = m.look_z ?? m.z - fz * 40;
+    mirror_cam.lookAt(road_x(lz), road_y(lz) + 0.8, lz);
+    mirror_cam.aspect = mw / mh;
+    mirror_cam.updateProjectionMatrix();
+    renderer.setScissorTest(true);
+    renderer.setScissor(mx, h - my - mh, mw, mh);
+    renderer.setViewport(mx, h - my - mh, mw, mh);
+    renderer.render(scene, mirror_cam);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, w, h);
+    // frame around the mirror (html, so it stays crisp)
+    if (!mirror_frame) {
+      mirror_frame = document.createElement('div');
+      mirror_frame.className = 'mirror-frame';
+      canvas.parentElement?.appendChild(mirror_frame);
+      mood_layers.push(mirror_frame);
+    }
+    Object.assign(mirror_frame.style, { left: `${mx}px`, top: `${my}px`, width: `${mw}px`, height: `${mh}px`, display: 'block' });
+  }
+  function hide_mirror() { if (mirror_frame) mirror_frame.style.display = 'none'; }
 
   function dispose() {
     dispose_scene(scene);
@@ -1270,7 +1315,7 @@ export function create_kit(canvas, opts = {}) {
     add_flat_zone(x, z, r) { flat_zones.push({ x, z, r }); },
     clear_flat_zones() { flat_zones.length = 0; },
     add_rider, place_rider, fade_for, chase, add_arch, add_board, add_sign, add_trail, remove, invalidate,
-    frame, resize, dispose,
+    frame, resize, dispose, hide_mirror,
   };
 }
 

@@ -1,5 +1,5 @@
 // badges: long-term goals across all games. checked after every finished game, saved in localStorage
-import { load, store } from './util.js?v=20';
+import { load, store } from './util.js?v=21';
 
 // each check gets: { game, opts, flags, ride (ride_log summary), life (lifetime totals), state, ftp }
 const list = [
@@ -18,7 +18,7 @@ const list = [
   { id: 'spin90', icon: '🎼', name: 'Metronome Legs', desc: 'Spin Beat: 90% in the zone', check: (c) => c.game === 'spinbeat' && c.flags.acc >= 90 },
   { id: 'storm10', icon: '🌩️', name: 'Storm Chaser', desc: 'Escape: survive 10 minutes', check: (c) => c.game === 'escape' && c.flags.secs >= 600 },
   { id: 'storm20', icon: '⛈️', name: 'Eye of the Storm', desc: 'Escape: survive 20 minutes', check: (c) => c.game === 'escape' && c.flags.secs >= 1200 },
-  { id: 'sprint', icon: '⚡', name: 'Sprint Champion', desc: 'Win the Sprint Cup', check: (c) => c.game === 'sprint' && c.flags.won >= 3 },
+  { id: 'sprint', icon: '⚡', name: 'Untouchable', desc: 'Sprint Cup: hold off every attack (5+ attacks)', check: (c) => c.game === 'sprint' && c.flags.all && c.opts.attacks >= 5 },
   { id: 'workout', icon: '📈', name: 'Disciplined', desc: 'Workout: 80% on target without ERG', check: (c) => c.game === 'workout' && c.flags.pct >= 80 && !c.flags.erg },
   { id: 'ramp', icon: '✨', name: 'Know Your Numbers', desc: 'Complete an FTP ramp test', check: (c) => c.game === 'workout' && c.flags.ramp },
   { id: 'threshold', icon: '💪', name: 'Threshold', desc: 'Normalized power at or above FTP for 10+ min', check: (c) => c.ride.secs >= 600 && c.ride.np >= c.ftp },

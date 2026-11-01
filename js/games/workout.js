@@ -1,9 +1,9 @@
 // workout: structured interval sessions scaled to your ftp, scored by how well you hold the targets.
 // optional erg mode makes the trainer hold the target power for you. includes a ramp test that estimates ftp
-import { overlay_2d, round_rect, label } from '../draw2d.js?v=20';
-import { create_kit, scenery_option } from '../kit3d.js?v=20';
-import { step_speed } from '../physics.js?v=20';
-import { clamp, fmt_clock } from '../util.js?v=20';
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=21';
+import { create_kit, scenery_option } from '../kit3d.js?v=21';
+import { step_speed } from '../physics.js?v=21';
+import { clamp, fmt_clock } from '../util.js?v=21';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });

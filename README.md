@@ -10,10 +10,10 @@ Pick a game from the tabs at the top. Bluetooth stays connected while you switch
 - 🏁 **Race**: 3D race against 5 bots with drafting. Nitro charges when you keep your heart rate in a target window.
 - 🔀 **Crossroads**: the road forks into 3 real paths each stage. Each shows the watts to hold and the points it pays. Do the math.
 - ⛰️ **Summit**: climb time-trial. Trainer resistance follows the gradient, and you race a ghost of your best run.
-- ❤️ **Pulse Pilot**: your heart rate is your altitude. Fly through gates set at target bpm.
+- ❤️ **Pulse Pilot**: your heart rate is your altitude. Pedal a winged bike through gates set at target bpm.
 - 🎵 **Spin Beat**: rhythm game for your legs. Match scrolling cadence blocks to a metronome.
 - 🌩️ **Escape**: an endless chase. A storm with growing power hunts you down.
-- ⚡ **Sprint Cup**: knockout tournament of standing-start sprints against rivals who fade.
+- ⚡ **Sprint Cup**: one race where rivals attack you from behind, one after another. Hold them off.
 - 📈 **Workout**: structured interval sessions scaled to your FTP, with optional ERG mode and an FTP ramp test.
 
 Every game has local top-10 leaderboards and a ride chart (power + heart rate) on the results screen. 24 badges to unlock, and a daily challenge with a streak. Download any ride as a .tcx file for Strava. Set your FTP, max HR and weight once, and the games scale to you.

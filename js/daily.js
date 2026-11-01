@@ -1,5 +1,5 @@
 // daily challenge: one game + settings + goal per calendar day (same for everyone on that day), with a streak
-import { load, store, seeded } from './util.js?v=20';
+import { load, store, seeded } from './util.js?v=21';
 
 const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)];
 const round10 = (w) => Math.max(50, Math.min(500, Math.round(w / 10) * 10));
@@ -26,8 +26,8 @@ const pool = [
   },
   () => ({ game: 'escape', opts: { level: 0.65 }, text: 'Normal storm', goal: 'Survive 8 minutes', check: (fl) => fl.secs >= 480 }),
   (rnd) => {
-    const dist = pick(rnd, [200, 250]);
-    return { game: 'sprint', opts: { level: 1.4, dist }, text: `Club rivals · ${dist} m`, goal: 'Reach the final', check: (fl) => fl.won >= 2 };
+    const attacks = pick(rnd, [3, 5]);
+    return { game: 'sprint', opts: { level: 1.4, attacks }, text: `Club rivals · ${attacks} attacks`, goal: `Hold off ${attacks - 1} attacks`, check: (fl) => fl.won >= attacks - 1 };
   },
   (rnd) => {
     const plan = pick(rnd, ['quick', 'pyramid', 'vo2']);

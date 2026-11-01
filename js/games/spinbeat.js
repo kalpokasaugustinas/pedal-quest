@@ -1,8 +1,8 @@
 // spin beat: a rhythm game for your legs. target cadence blocks scroll down a highway,
 // keep your cadence inside them to score; hitting in a row builds a combo multiplier
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=20';
-import { clamp, seeded } from '../util.js?v=20';
+import { create_kit, scenery_option } from '../kit3d.js?v=21';
+import { clamp, seeded } from '../util.js?v=21';
 
 // tracks are generated from a fixed seed, so the same track is the same every time (fair leaderboards)
 const tracks = {
@@ -159,7 +159,7 @@ function create(env) {
   const road_w = 16;
   const rx = (rpm) => -road_w / 2 + 1 + ((clamp(rpm, rpm_min, rpm_max) - rpm_min) / (rpm_max - rpm_min)) * (road_w - 2);
   const kit = create_kit(env.canvas, {
-    theme: env.opts.scenery, road_w, lanes: 1, camps: false,
+    theme: env.opts.scenery, road_w, lanes: 1, camps: false, curves: false,
     // rpm guide lines + numbers painted on the asphalt
     paint_road(g, w, h) {
       g.textAlign = 'center';

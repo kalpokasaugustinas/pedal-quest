@@ -1,9 +1,9 @@
-// pulse pilot: your heart rate is your altitude. fly a pedal-powered plane through gates set at target bpm.
+// pulse pilot: your heart rate is your altitude. fly a winged bicycle through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=20';
-import { step_speed } from '../physics.js?v=20';
-import { clamp, rand } from '../util.js?v=20';
+import { create_kit, scenery_option } from '../kit3d.js?v=21';
+import { step_speed } from '../physics.js?v=21';
+import { clamp, rand } from '../util.js?v=21';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect
@@ -16,7 +16,7 @@ export default {
   tagline: 'Your heart rate is your altitude. Thread the gates.',
   uses: ['power', 'hr'],
   how: [
-    'Your plane flies at the height of your heart rate. Gates are set at target bpm.',
+    'You pedal a flying bike: it flies at the height of your heart rate, the wings flap with your pedal strokes. Gates are set at target bpm.',
     'Pedal harder to climb (HR up), ease off to descend. Your heart reacts with a 10–30 s delay, so plan ahead!',
     'Your watts set your speed, so pushing hard also brings the next gate closer.',
     'Within ±2 bpm = PERFECT (100), within ±5 = GOOD (50). Hits in a row build a combo bonus.',
@@ -79,6 +79,7 @@ function create(env) {
     speed: () => st.v,
     update(dt, input) {
       st.v = step_speed(st.v, game.done ? 0 : input.watts, dt);
+      watts_now = game.done ? 0 : input.watts;
       st.x += st.v * dt;
       st.prop += (input.cadence / 60) * 2 * Math.PI * dt * 3;
       if (input.hr !== null) {
@@ -132,37 +133,39 @@ function create(env) {
     env.sfx(kind);
   }
 
-  // ---- 3d: a pedal-powered plane flying over the low-poly valley, gates as frames at bpm heights ----
+  // ---- 3d: a flying bike over the low-poly valley, gates as frames at bpm heights ----
   const vis = 2.5;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery, posts: false });
   const alt_lo = 6, alt_hi = 46;   // meters above the road for view_lo .. view_hi bpm
   const y_of = (bpm) => alt_lo + ((clamp(bpm, view_lo, view_hi) - view_lo) / (view_hi - view_lo)) * (alt_hi - alt_lo);
   const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, ...extra });
 
-  // plane: faceted fuselage, wide wing, tail, spinning prop, pilot under a glass canopy
-  const plane = new THREE.Group();
-  const body_mat = mat('#ffd400'), wing_mat = mat('#ffb300'), dark = mat('#2b2f38');
-  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.18, 3.2, 7), body_mat);
-  fuse.rotation.x = Math.PI / 2;
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 7), body_mat);
-  nose.rotation.x = -Math.PI / 2;
-  nose.position.z = -1.9;
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.1, 0.9), wing_mat);
-  wing.position.set(0, 0.25, -0.3);
-  const tail_h = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.5), wing_mat);
-  tail_h.position.set(0, 0.1, 1.45);
-  const tail_v = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.6), wing_mat);
-  tail_v.position.set(0, 0.5, 1.45);
-  const prop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.05), dark);
-  prop.position.z = -2.2;
-  const pilot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), mat('#e53935'));
-  pilot.position.set(0, 0.45, -0.4);
-  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), mat('#90caf9', { transparent: true, opacity: 0.55 }));
-  canopy.position.set(0, 0.2, -0.4);
-  canopy.scale.z = 1.6;
-  plane.add(fuse, nose, wing, tail_h, tail_v, prop, pilot, canopy);
-  plane.traverse((o) => { o.castShadow = true; });
-  kit.scene.add(plane);
+  // flying bike: you pedal a winged bicycle; the wings flap once per pedal revolution
+  const flyer = kit.add_rider('#ffd400');
+  const wing_mat = mat('#ffb300'), rib_mat = mat('#8d6e63');
+  const wings = [-1, 1].map((side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.22, 1.32, 0.1);
+    // three overlapping feather panels, shorter towards the tip, plus a wooden spar
+    [[3.4, 1.1, 0], [2.6, 0.8, 0.35], [1.7, 0.55, 0.7]].forEach(([len, depth, back]) => {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, depth), wing_mat);
+      f.position.set(side * len / 2, 0, back);
+      f.castShadow = true;
+      pivot.add(f);
+    });
+    const spar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 3.5, 5), rib_mat);
+    spar.rotation.z = Math.PI / 2;
+    spar.position.set(side * 1.75, 0.05, -0.45);
+    pivot.add(spar);
+    flyer.bike.add(pivot);
+    return { pivot, side };
+  });
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.7), wing_mat);
+  tail.position.set(0, 0.75, 1.15);
+  const tail_fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.6), wing_mat);
+  tail_fin.position.set(0, 1.0, 1.2);
+  flyer.bike.add(tail, tail_fin);
+  let flap_crank = 0, watts_now = 0;
 
   // bpm number on a small board
   function bpm_texture(text) {
@@ -173,7 +176,7 @@ function create(env) {
     x.fillStyle = 'rgba(20,24,30,0.85)';
     x.fillRect(0, 0, 256, 96);
     x.fillStyle = '#fff';
-    x.font = '900 64px system-ui, sans-serif';
+    x.font = '900 58px system-ui, sans-serif';
     x.textAlign = 'center';
     x.textBaseline = 'middle';
     x.fillText(text, 128, 52);
@@ -205,11 +208,13 @@ function create(env) {
       new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
     band.position.y = y_of(g.hr);
     grp.add(band);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.3), new THREE.MeshBasicMaterial({ map: bpm_texture(String(g.hr)) }));
-    sign.position.set(gate_w / 2 + 2.4, (y1 + y2) / 2, 0);
+    // big bpm board above the opening, readable from far away
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.4), new THREE.MeshBasicMaterial({ map: bpm_texture(`${g.hr} bpm`), fog: false }));
+    sign.position.set(0, y2 + 2.6, 0);
     grp.add(sign);
     const z = -g.x * vis;
     grp.position.set(kit.road_x(z), kit.road_y(z), z);
+    grp.rotation.y = kit.heading(z);
     kit.scene.add(grp);
     return { grp, mat: m };
   });
@@ -230,11 +235,13 @@ function create(env) {
     const z = -st.x * vis;
     const alt = st.alt === null ? null : y_of(st.alt);
     const y = (alt ?? alt_lo) + kit.road_y(z);
-    // nose follows the hr trend: climbing / diving
-    plane.position.set(kit.road_x(z), y, z);
-    plane.rotation.set(clamp(st.slope * 0.25, -0.35, 0.35), 0, Math.sin(st.time * 0.7) * 0.05);
-    prop.rotation.z = st.prop;
-    plane.visible = alt !== null;
+    // the flying bike: pedalling drives the wings, the nose follows the hr trend (climbing / diving)
+    flap_crank = st.prop / 3;
+    kit.place_rider(flyer, { z, y, watts: watts_now, v: st.v, crank: flap_crank, dist: st.x * vis, ref: env.profile.ftp }, dt);
+    flyer.group.rotation.x = clamp(st.slope * 0.25, -0.35, 0.35);
+    flyer.group.visible = alt !== null;
+    const flap = Math.sin(flap_crank);
+    for (const w of wings) w.pivot.rotation.z = w.side * (0.12 + 0.5 * flap);
     gate_models.forEach((gm, i) => {
       const r = gates[i].result;
       gm.mat.color.set(r === 'perfect' ? '#7ee08a' : r === 'good' ? '#ffd54f' : r === 'miss' ? '#ef5350' : '#ff7043');
@@ -258,7 +265,7 @@ function create(env) {
       const target = clamp(st.alt + st.slope * eta, view_lo, view_hi);
       const gz = -ng.x * vis;
       const pp = proj.geometry.attributes.position;
-      pp.setXYZ(0, plane.position.x, plane.position.y, plane.position.z);
+      pp.setXYZ(0, flyer.group.position.x, flyer.group.position.y + 1.2, flyer.group.position.z);
       pp.setXYZ(1, kit.road_x(gz), y_of(target) + kit.road_y(gz), gz);
       pp.needsUpdate = true;
       proj.computeLineDistances();

@@ -10,7 +10,7 @@
 | ❤️ Pulse Pilot | Your heart rate is your altitude, fly through bpm gates | HR (power = speed) | points |
 | 🎵 Spin Beat | Rhythm game: keep cadence inside scrolling blocks, metronome | cadence | points |
 | 🌩️ Escape | Endless chase: a storm with growing power hunts you | power | time survived |
-| ⚡ Sprint Cup | Knockout tournament of 3 standing-start sprints vs fading rivals | power | points |
+| ⚡ Sprint Cup | One race: rivals attack from behind one by one, hold them off | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
 Ride history: the setup screen lists recent rides and this week's totals (Monday to Sunday).
@@ -36,13 +36,15 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 ### 3D look (all games)
 Effects: ~1.2 km of terrain ahead, shadows over ~140 m around the action (no pop-in), fast wind streaks that swirl in small spirals, and tyre dust (gravel / dirt) or smoke (asphalt) when a rider pushes 2× FTP, a big cloud at 3× FTP (bots: 2× / 3× their average).
 
+Roads wind (`curve_x` in the kit: long sweeping bends, s-curves and the odd tight turn, varying along the route); Spin Beat stays straight so its lanes stay readable. Escape's camera sits ~10 m ahead of you looking back, locked (no lag), so you never ride out of the picture.
+
 Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, { theme, road_w, lanes, road_x(z), road_y(z), surface(z), camps, posts, paint_road })`. Games place riders (`place_rider`), steer the camera (`chase`) and call `frame()` each render. Every game has a **Scenery** option (meadow / valley / night).
-- Crossroads: the road forks in a clearing with 3 signposted trails; your pick bends the road into that trail (and its surface: asphalt, gravel, dirt).
+- Crossroads: a single bike track (2.6 m) that forks in a clearing into 3 signposted trails; your pick bends the road into that trail (and its surface: asphalt, gravel, dirt).
 - Summit: the road really climbs (distance ×1.6, height ×2.2 on screen); grade boards, KOM arch, translucent ghost; profile chart as an overlay.
-- Pulse Pilot: a low-poly plane flies over the valley through gate frames at bpm heights; dashed flight trail + projection line.
+- Pulse Pilot: you pedal a winged bicycle (wings flap once per pedal stroke) over the valley through gate frames at bpm heights; big bpm boards above each gate; dashed flight trail + projection line.
 - Spin Beat: a wide road with rpm lanes painted on it; glowing note tiles; the rider steers across with your cadence.
 - Escape: the camera rides ahead looking back; a dark storm wall with rain and lightning; the world darkens as it closes in; shelter huts.
-- Sprint Cup: START / FINISH arches per round, cheering crowd at the line, rival beside you; duel bars as an overlay.
+- Sprint Cup: one winding road; the camera pulls back during attacks and a rear-view mirror inset shows the attacker coming; duel bars as an overlay.
 - Workout: you ride through the scenery (speed from the physics); the interval chart is a translucent panel on top.
 
 ### 🔀 Crossroads
@@ -79,11 +81,10 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Every km, a shelter pushes the storm back 25 m.
 
 ### ⚡ Sprint Cup
-- Quarterfinal, semifinal and final, each 200 / 250 / 400 m from a standstill against one rival.
-- Rival peak power = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × round strength (0.9 / 1.0 / 1.1).
-- Rivals ramp to their peak in 2 s, then fade towards 75%.
-- 10 s to get ready before round 1, 45 s of recovery between rounds. Lose a round and you're out.
-- Score: 100 per round won + 20 per second of winning margin. Live power-duel bars show your watts vs the rival's.
+- One continuous race. After 15 s, rivals attack one by one (3 / 5 / 8 attacks), with 25–40 s of random calm between attacks and a warning 3 s before.
+- An attacker starts 20 m behind you, 3 m/s faster (steady riding always gets passed: you have to answer; ~1.5–1.75× FTP for 22 s holds a Club attack, ~2× for Racer / Pro), and surges to peak in 3 s, then fades towards 75%. Peak = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × rider strength (0.9 → 1.15, +8% each time the roster comes round).
+- Still ahead after 22 s = held off: 100 points + 10 per meter of lead. Passed by 5 m = lost (0 points). The race goes on either way.
+- Earlier attackers settle at 75% FTP and drift away. Rear-view mirror + duel bars during attacks.
 
 ### 📈 Workout
 - Plans: Quick Spin (15 min), Sweet Spot (30), VO2 30/30 (22), Pyramid (23), Over-Unders (31). Power = share of FTP × intensity (90 / 100 / 105%).
