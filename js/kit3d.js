@@ -3,7 +3,7 @@
 // warm trunks, calm colours, lit clouds, campfires, wind streaks, and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=21';
+import { seeded } from './util.js?v=22';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -591,7 +591,7 @@ function animate_rider(model, r, dt, ref_watts, boost) {
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
 
 function make_wind(scene) {
-  const n = 190;
+  const n = 70;   // few streaks: a hint of air rushing past, not a blizzard
   const pos = new Float32Array(n * 6);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -634,7 +634,7 @@ function make_wind(scene) {
         pos[o + 3] = cam_x + p.x + Math.cos(a0) * p.r; pos[o + 4] = p.y + Math.sin(a0) * p.r * 0.7; pos[o + 5] = cam_z + p.z - len;
       }
       g.attributes.position.needsUpdate = true;
-      mat.opacity = Math.min(0.55, Math.max(0, (vis_speed - 5) / 40)) + (boost ? 0.3 : 0);
+      mat.opacity = Math.min(0.4, Math.max(0, (vis_speed - 5) / 50)) + (boost ? 0.25 : 0);
     },
   };
 }

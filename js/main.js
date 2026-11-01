@@ -1,23 +1,27 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, connect, ble_supported, on_change } from './sensors.js?v=21';
-import { control } from './ble.js?v=21';
-import { load, store, clamp } from './util.js?v=21';
-import { set_rider_mass, steady_speed } from './physics.js?v=21';
-import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=21';
-import * as ride_log from './ride_log.js?v=21';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=21';
-import * as daily from './daily.js?v=21';
-import race from './games/race.js?v=21';
-import crossroads from './games/crossroads.js?v=21';
-import summit from './games/summit.js?v=21';
-import pulse from './games/pulse.js?v=21';
-import spinbeat from './games/spinbeat.js?v=21';
-import escape from './games/escape.js?v=21';
-import sprint from './games/sprint.js?v=21';
-import workout from './games/workout.js?v=21';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=22';
+import { control } from './ble.js?v=22';
+import { load, store, clamp, players, active_player, set_active_player, save_players, delete_player_data } from './util.js?v=22';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=22';
+import { stats_html } from './stats.js?v=22';
+import { set_rider_mass, steady_speed } from './physics.js?v=22';
+import { unlock as unlock_sound, play as sfx, set_sound } from './sfx.js?v=22';
+import * as ride_log from './ride_log.js?v=22';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=22';
+import * as daily from './daily.js?v=22';
+import race from './games/race.js?v=22';
+import crossroads from './games/crossroads.js?v=22';
+import summit from './games/summit.js?v=22';
+import pulse from './games/pulse.js?v=22';
+import spinbeat from './games/spinbeat.js?v=22';
+import escape from './games/escape.js?v=22';
+import sprint from './games/sprint.js?v=22';
+import workout from './games/workout.js?v=22';
 
-const games = [race, crossroads, summit, pulse, spinbeat, escape, sprint, workout];
+// main games are in the picker; archived ones are still playable from the stats tab (or a #link)
+const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
+const main_games = ['race', 'crossroads', 'sprint', 'workout'];
 const $ = (id) => document.getElementById(id);
 
 // test helper: ?warp=20 runs game time 20x faster (physics stays stable via sub-steps)
@@ -57,16 +61,21 @@ function board_add(b, entry) {
   list.sort((x, y) => (b.lower ? x.score - y.score : y.score - x.score));
   list = list.slice(0, 10);
   store(`pq_board_${b.key}`, list);
+  // remember the board's name for the stats tab (keys alone don't say "2 km" or "5 stages × 2 min")
+  const labels = load('pq_board_labels', {});
+  if (labels[b.key] !== b.label) { labels[b.key] = b.label; store('pq_board_labels', labels); }
   return { list, rank: list.indexOf(entry) };
 }
 
-// ---- top navigation ----
+// ---- top navigation: main games, an opened archived game, and the stats tab ----
 let current = games[0];
+let stats_view = false;
 
 function render_nav() {
-  $('game-nav').innerHTML = games
-    .map((g) => `<button data-id="${g.id}" class="${g === current ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
-    .join('');
+  const shown = games.filter((g) => main_games.includes(g.id) || g === current);
+  $('game-nav').innerHTML = shown
+    .map((g) => `<button data-id="${g.id}" class="${g === current && !stats_view ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
+    .join('') + `<button data-id="stats" class="${stats_view ? 'on' : ''}"><span class="nav-icon">📊</span>Stats</button>`;
   $('game-nav').querySelectorAll('button').forEach((b) => {
     b.onclick = () => { location.hash = b.dataset.id; };
   });
@@ -74,16 +83,82 @@ function render_nav() {
 }
 
 function select_game(id) {
+  stats_view = id === 'stats';
+  if (stats_view) {
+    render_nav();
+    render_stats();
+    show('screen-stats');
+    return;
+  }
   current = games.find((g) => g.id === id) || games[0];
   render_nav();
   render_setup();
+  show('screen-setup');
 }
 
 window.addEventListener('hashchange', () => {
   if (phase !== 'idle') return;
   select_game(location.hash.slice(1));
-  show('screen-setup');
 });
+
+function render_stats() {
+  $('stats-body').innerHTML = stats_html({ games, main: main_games, opts_of: game_opts, player: active_player().name, daily: daily.state() });
+}
+
+// ---- players: each person on this device has their own profile, scores, history and badges ----
+function render_players() {
+  const me = active_player();
+  $('player').innerHTML = players.list.map((p) => `<option value="${p.id}" ${p === me ? 'selected' : ''}>${p.name.replace(/</g, '&lt;')}</option>`).join('')
+    + '<option disabled>──────────</option><option value="__new">+ New player…</option><option value="__rename">Rename…</option>'
+    + (me.id !== 'me' ? '<option value="__delete">Delete player…</option>' : '');
+}
+
+// show the active player's profile in the setup inputs
+function show_profile() {
+  $('p-ftp').value = profile.ftp;
+  $('p-maxhr').value = profile.max_hr;
+  $('p-weight').value = profile.weight;
+  $('p-sound').checked = profile.sound;
+  set_sound(profile.sound);
+}
+
+function switch_player(id) {
+  set_active_player(id);
+  reload_profile();
+  ride_log.backfill_totals();
+  show_profile();
+  render_players();
+  if (stats_view) render_stats(); else render_setup();
+}
+
+$('player').onchange = () => {
+  const v = $('player').value, me = active_player();
+  if (v === '__new') {
+    const name = (prompt('Name of the new player:') || '').trim().slice(0, 24);
+    if (name) {
+      const p = { id: `p${Date.now().toString(36)}`, name };
+      players.list.push(p);
+      save_players();
+      switch_player(p.id);   // starts with a default profile: set FTP, max HR and weight
+      return;
+    }
+  } else if (v === '__rename') {
+    const name = (prompt('New name:', me.name) || '').trim().slice(0, 24);
+    if (name) { me.name = name; save_players(); }
+  } else if (v === '__delete') {
+    if (confirm(`Delete player "${me.name}" with all their scores, history and badges?`)) {
+      players.list = players.list.filter((p) => p !== me);
+      save_players();
+      delete_player_data(me.id);
+      switch_player(players.list[0].id);
+      return;
+    }
+  } else if (v) {
+    switch_player(v);
+    return;
+  }
+  render_players();   // reset the picker after a menu action
+};
 
 // ---- sensors panel + profile ----
 function status_class(text) {
@@ -115,17 +190,13 @@ if (!ble_supported) {
   $('btn-hr').disabled = true;
 }
 
-$('p-ftp').value = profile.ftp;
-$('p-maxhr').value = profile.max_hr;
+show_profile();
 $('p-ftp').onchange = () => {
   profile.ftp = clamp(Math.round(+$('p-ftp').value || 200), 60, 600);
   $('p-ftp').value = profile.ftp;
   save_profile();
   render_setup();
 };
-$('p-weight').value = profile.weight;
-$('p-sound').checked = profile.sound;
-set_sound(profile.sound);
 $('p-weight').onchange = () => {
   profile.weight = clamp(Math.round(+$('p-weight').value || 75), 35, 150);
   $('p-weight').value = profile.weight;
@@ -410,6 +481,7 @@ function save_run_stats() {
   life.kj += run.kj;
   life.km += run.km;
   store('pq_stats', life);
+  ride_log.save_totals(current.id, run.km);
   run = null;
 }
 
@@ -425,6 +497,7 @@ function leave_play() {
   wake_lock?.release().catch(() => {});
   wake_lock = null;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  cloud_flush();   // a sync that arrived during the game
 }
 
 function finish_game() {
@@ -434,7 +507,7 @@ function finish_game() {
   let list = load(`pq_board_${b.key}`, []);
   let rank = -1;
   if (res.score !== null && res.score !== undefined) {
-    ({ list, rank } = board_add(b, { score: res.score, note: res.note || '', date: new Date().toISOString().slice(0, 10) }));
+    ({ list, rank } = board_add(b, { score: res.score, text: b.fmt(res.score), note: res.note || '', date: new Date().toISOString().slice(0, 10) }));
   }
   last_result = res;
   $('r-title').textContent = res.title;
@@ -450,7 +523,7 @@ function finish_game() {
     $('r-daily').innerHTML = `<div class="panel daily ${d.ok ? 'ok' : ''}"><div class="label">📅 Daily challenge</div>
       <b>${d.ok ? (d.new_day ? `Done! 🔥 Streak: ${d.streak} day${d.streak > 1 ? 's' : ''}` : 'Done again ✓') : `Not this time. Goal: ${daily_run.goal}`}</b></div>`;
   }
-  const fresh = check_badges({ game: current.id, opts: active_opts, flags: res.flags, ride: ride_log.summary(profile.ftp), ftp: profile.ftp, game_count: games.length });
+  const fresh = check_badges({ game: current.id, opts: active_opts, flags: res.flags, ride: ride_log.summary(profile.ftp), ftp: profile.ftp, main: main_games });
   $('r-badges').innerHTML = fresh_html(fresh);
   if (fresh.length) setTimeout(() => sfx('perfect'), 400);
   // optional result actions (e.g. the ramp test's "set my ftp"): buttons that change the profile
@@ -547,4 +620,17 @@ for (const km of [1, 2, 5, 10]) {
   try { localStorage.removeItem(`pq_best_${km}`); } catch { /* storage blocked */ }
 }
 
+ride_log.backfill_totals();
+render_players();
 select_game(location.hash.slice(1));
+init_cloud({
+  button: $('sync'),
+  can_apply: () => phase === 'idle',
+  // data from another device: reload the player and redraw whatever screen is open
+  on_remote: () => {
+    reload_profile();
+    show_profile();
+    render_players();
+    if (stats_view) render_stats(); else render_setup();
+  },
+});

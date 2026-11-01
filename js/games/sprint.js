@@ -1,9 +1,9 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=21';
-import { create_kit, scenery_option } from '../kit3d.js?v=21';
-import { step_speed } from '../physics.js?v=21';
-import { clamp, fmt_clock } from '../util.js?v=21';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=22';
+import { create_kit, scenery_option } from '../kit3d.js?v=22';
+import { step_speed } from '../physics.js?v=22';
+import { clamp, fmt_clock, load, store } from '../util.js?v=22';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -18,6 +18,20 @@ const gap_s = [25, 40];      // random calm time between attacks (so you can't t
 const start_behind = 20;     // an attacker appears this far behind you (m)
 const pass_margin = 5;       // attacker this far ahead of you = you've been passed
 const attack_s = 22;         // an attack lasts this long; still in front at the end = held off
+
+// ghosts: your own earlier attempts. a ghost replays the watts you pushed in the same attack of your strongest
+// run (per number of attacks). it starts a bit faster than you, so the same effort as last time ends level:
+// you have to ride harder than your past self to hold it off.
+const ghost_bonus = 2;       // m/s head start speed (vs +3 for rivals); same watts as last time ≈ a tie at the end
+const ghost_color = '#b3e5fc';
+const ghost_key = (attacks) => `pq_sprint_ghost_${attacks}`;
+const short_date = (d) => new Date(`${d}T12:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+// your watts in second t of a recorded attack (linear between the 1 s samples)
+function ghost_watts(w, t) {
+  const i = Math.min(w.length - 1, Math.floor(t)), j = Math.min(w.length - 1, i + 1), f = t - Math.floor(t);
+  return w[i] + (w[j] - w[i]) * f;
+}
 
 // attacker power: a surge to peak in 3 s, then fading towards 75% (they can't hold a sprint forever)
 function rival_watts(peak, t) {
@@ -38,14 +52,25 @@ export default {
     'Attackers surge in 3 s and then fade, like real sprinters. Go too early and you fade with them.',
     `Between attacks you get ${gap_s[0]}–${gap_s[1]} s of calm (random, so stay alert).`,
     'Later attackers are stronger. Rival level sets their peak power from your FTP.',
+    '👻 Past me: your strongest earlier run attacks you too, replaying the exact watts you pushed in each attack. Ride like last time and it ends level, so beat yourself.',
   ],
   options: [
     { key: 'level', label: 'Rival level', choices: [[1.4, 'Club'], [1.7, 'Racer'], [2.0, 'Pro']], def: 1.4 },
     { key: 'attacks', label: 'Attacks', choices: [[3, '3'], [5, '5'], [8, '8']], def: 5 },
+    { key: 'attackers', label: 'Attackers', choices: [['mix', 'Rivals + past me'], ['ghost', 'Past me 👻'], ['bots', 'Rivals only']], def: 'mix' },
     scenery_option('meadow'),
   ],
-  setup_html: (o, profile) => `<p class="small">Attackers peak at ${Math.round(profile.ftp * o.level * 0.9)}–${Math.round(profile.ftp * o.level * 1.15)} W (from FTP ${profile.ftp} W). Race ≈ ${Math.round((first_gap_s + o.attacks * (attack_s + 32)) / 60)} min.</p>`,
-  board: (o) => ({ key: `sprint_${o.level}_${o.attacks}`, label: `Top scores · ${o.attacks} attacks · level ${o.level}`, lower: false, fmt: (s) => `${s} pts` }),
+  setup_html: (o, profile) => {
+    const g = load(ghost_key(o.attacks), {}).best;
+    const ghost = o.attackers === 'bots' ? ''
+      : g ? `<p class="small">👻 Past you: your strongest ${o.attacks}-attack run (${short_date(g.date)}, ${g.avg} W average in the attacks)${o.attackers === 'mix' ? ' takes every 2nd attack' : ' makes every attack'}. Ride the same as then and it ends level, so beat it.</p>`
+        : `<p class="small">👻 No ${o.attacks}-attack run saved yet: this one becomes your ghost. Rivals attack until then.</p>`;
+    return `<p class="small">Rivals peak at ${Math.round(profile.ftp * o.level * 0.9)}–${Math.round(profile.ftp * o.level * 1.15)} W (from FTP ${profile.ftp} W). Race ≈ ${Math.round((first_gap_s + o.attacks * (attack_s + 32)) / 60)} min.</p>${ghost}`;
+  },
+  // each attacker mix has its own board (ghost-only scores don't depend on the rival level)
+  board: (o) => (o.attackers === 'ghost'
+    ? { key: `sprint_ghost_${o.attacks}`, label: `Top scores · ${o.attacks} attacks · past me`, lower: false, fmt: (s) => `${s} pts` }
+    : { key: `sprint_${o.attackers === 'mix' ? 'mix_' : ''}${o.level}_${o.attacks}`, label: `Top scores · ${o.attacks} attacks · level ${o.level}${o.attackers === 'mix' ? ' + past me' : ''}`, lower: false, fmt: (s) => `${s} pts` }),
   create,
 };
 
@@ -59,9 +84,18 @@ function create(env) {
     riders: [],          // attackers on the road (current + earlier ones still in view)
     cur: null,           // the current attacker
     time: 0, energy: 0, peak: 0, attack_peak: 0,
+    efforts: [],         // your watts, 1 per second, for attack_s seconds from the start of each attack (the next ghost)
+    rec: null,           // the attack being recorded: { w: [], acc, t }
   };
-  // the n-th attacker: roster cycles, stronger each time round
+  const mode = env.opts.attackers || 'bots';
+  const ghost = mode === 'bots' ? null : load(ghost_key(total), {}).best || null;
+  // the n-th attacker: a ghost of your strongest run (every attack, or every 2nd in the mix), else the roster
+  // (cycling, stronger each time round)
   const attacker_for = (n) => {
+    const w = ghost?.efforts?.[n];
+    if (w?.length && (mode === 'ghost' || n % 2 === 1)) {
+      return { rival: `👻 You · ${short_date(ghost.date)}`, color: ghost_color, ghost: w, peak: Math.max(...w) };
+    }
     const r = roster[n % roster.length];
     return { ...r, peak: ftp * env.opts.level * r.strength * (1 + 0.08 * Math.floor(n / roster.length)) };
   };
@@ -79,7 +113,9 @@ function create(env) {
 
   function start_attack() {
     const a = attacker_for(st.n);
-    const rider = { ...a, x: st.p.x - start_behind, v: st.p.v + 3, crank: 0, watts: 0, t: 0, model: kit.add_rider(a.color), lane: (st.n % 2 ? 1 : -1) * 0.9 };
+    const rider = { ...a, x: st.p.x - start_behind, v: st.p.v + (a.ghost ? ghost_bonus : 3), crank: 0, watts: 0, t: 0, model: kit.add_rider(a.color), lane: (st.n % 2 ? 1 : -1) * 0.9 };
+    if (st.rec) finish_rec();
+    st.rec = { w: [], acc: 0, t: 0 };
     st.riders.push(rider);
     st.cur = rider;
     st.phase = 'attack';
@@ -87,6 +123,26 @@ function create(env) {
     st.attack_peak = 0;
     env.big_text(`⚠ ${a.rival} attacks!`, 1600, 'hot');
     env.sfx('warn');
+  }
+
+  // close the current attack's recording (padded with your last second if the race ended early)
+  function finish_rec() {
+    const w = st.rec.w;
+    while (w.length < attack_s) w.push(w.length ? w[w.length - 1] : 0);
+    st.efforts.push(w);
+    st.rec = null;
+  }
+
+  // a finished race becomes the new ghost if its attacks were harder (average watts) than the saved one
+  function save_ghost() {
+    if (st.rec) finish_rec();
+    if (st.efforts.length < total) return false;
+    const avg = Math.round(st.efforts.flat().reduce((a, b) => a + b, 0) / (total * attack_s));
+    const run = { date: new Date().toISOString().slice(0, 10), avg, efforts: st.efforts };
+    const saved = load(ghost_key(total), {});
+    const better = !saved.best || avg > saved.best.avg;
+    store(ghost_key(total), { best: better ? run : saved.best, last: run });
+    return better;
   }
 
   function end_attack(held) {
@@ -121,7 +177,7 @@ function create(env) {
       p.crank += (input.cadence / 60) * 2 * Math.PI * dt;
       // attackers: the current one sprints, finished ones settle into a steady pace (and drift away)
       for (const r of st.riders) {
-        if (r === st.cur) { r.t += dt; r.watts = rival_watts(r.peak, r.t); }
+        if (r === st.cur) { r.t += dt; r.watts = r.ghost ? ghost_watts(r.ghost, r.t) : rival_watts(r.peak, r.t); }
         else r.watts = ftp * 0.75;
         r.v = step_speed(r.v, r.watts, dt);
         r.x += r.v * dt;
@@ -133,6 +189,13 @@ function create(env) {
         st.riders.splice(st.riders.indexOf(r), 1);
       }
       if (game.done) return;
+      // record your attack response, second by second (keeps going for the full attack time even if you were passed)
+      if (st.rec) {
+        st.rec.acc += input.watts * dt;
+        st.rec.t += dt;
+        if (st.rec.t >= 1 - 1e-6) { st.rec.w.push(Math.round(st.rec.acc / st.rec.t)); st.rec.acc = 0; st.rec.t = 0; }
+        if (st.rec.w.length >= attack_s) finish_rec();
+      }
       st.time += dt;
       st.t_phase += dt;
       st.energy += input.watts * dt;
@@ -170,7 +233,9 @@ function create(env) {
     kit.place_rider(me, { z: pz, x: 0, watts: p.watts, v: p.v, crank: p.crank, dist: -pz, ref: ftp }, dt);
     for (const r of st.riders) {
       const z = pz - (r.x - p.x);   // real gap to you (like the race pack)
-      kit.place_rider(r.model, { z, x: r.lane, watts: r.watts, v: r.v, crank: r.crank, dist: p.x * vis + (r.x - p.x), ref: r.peak / 1.6, fade: kit.fade_for(z, pz, cam_back) }, dt);
+      // ghosts are see-through; their dust is measured against your ftp (it's your own power)
+      const fade = kit.fade_for(z, pz, cam_back) * (r.ghost ? 0.55 : 1);
+      kit.place_rider(r.model, { z, x: r.lane, watts: r.watts, v: r.v, crank: r.crank, dist: p.x * vis + (r.x - p.x), ref: r.ghost ? ftp : r.peak / 1.6, fade }, dt);
     }
     // during an attack the camera pulls back and up far enough to keep the attacker in the picture
     const behind = st.cur ? Math.max(0, p.x - st.cur.x) : 0;
@@ -230,7 +295,9 @@ function create(env) {
   }
 
   function result() {
+    const new_ghost = save_ghost();
     const held = st.log.filter((l) => l.held).length;
+    const ghost_note = new_ghost ? `<p class="small">👻 Your strongest ${total}-attack run so far: it becomes the ghost that attacks you next time.</p>` : '';
     const rows = st.log.map((l) => `
       <tr class="${l.held ? 'me' : ''}">
         <td>${l.n}</td>
@@ -243,7 +310,7 @@ function create(env) {
     return {
       title: held === total ? 'Untouchable! 🏆' : `Held off ${held}/${total} attacks`,
       sub: `${st.score} points · peak ${Math.round(st.peak)} W · avg ${Math.round(st.energy / Math.max(1, st.time))} W`,
-      body: `<table><tr class="th"><td>#</td><td>Attacker</td><td class="num">Their peak</td><td class="num">Your peak</td><td class="num">Lead</td><td class="num">Pts</td></tr>${rows}</table>`,
+      body: `<table><tr class="th"><td>#</td><td>Attacker</td><td class="num">Their peak</td><td class="num">Your peak</td><td class="num">Lead</td><td class="num">Pts</td></tr>${rows}</table>${ghost_note}`,
       score: st.score,
       flags: { won: held, all: held === total },
       note: `${held}/${total} held · peak ${Math.round(st.peak)} W`,

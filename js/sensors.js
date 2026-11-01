@@ -1,7 +1,7 @@
 // shared sensor state for every game: trainer + hr strap connections and the rider profile (ftp, max hr).
 // lives for the whole page session, so switching games keeps bluetooth connected
-import { ble_supported, connect_device, control } from './ble.js?v=21';
-import { load, store } from './util.js?v=21';
+import { ble_supported, connect_device, control } from './ble.js?v=22';
+import { load, store } from './util.js?v=22';
 
 export { ble_supported, control };
 
@@ -61,7 +61,12 @@ export async function connect(kind) {
 }
 
 // rider profile used by games to size targets (ftp = power you can hold ~1 hour)
-export const profile = { ftp: 200, max_hr: 185, weight: 75, sound: true, ...load('pq_profile', {}) };
+const profile_defaults = { ftp: 200, max_hr: 185, weight: 75, sound: true };
+export const profile = { ...profile_defaults, ...load('pq_profile', {}) };
+// after switching players (or a sync from another device): load the active player's profile in place
+export function reload_profile() {
+  Object.assign(profile, profile_defaults, load('pq_profile', {}));
+}
 export function save_profile() {
   store('pq_profile', profile);
 }

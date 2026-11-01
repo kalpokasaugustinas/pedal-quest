@@ -1,10 +1,10 @@
 // badges: long-term goals across all games. checked after every finished game, saved in localStorage
-import { load, store } from './util.js?v=21';
+import { load, store } from './util.js?v=22';
 
 // each check gets: { game, opts, flags, ride (ride_log summary), life (lifetime totals), state, ftp }
 const list = [
   { id: 'first', icon: '🚲', name: 'First Pedal', desc: 'Finish any game', check: () => true },
-  { id: 'explorer', icon: '🧭', name: 'Explorer', desc: 'Finish every game at least once', check: (c) => c.state.played.length >= c.game_count },
+  { id: 'explorer', icon: '🧭', name: 'Explorer', desc: 'Finish every game at least once', check: (c) => c.main.every((id) => c.state.played.includes(id)) },
   { id: 'race_win', icon: '🏆', name: 'Top Step', desc: 'Win a race', check: (c) => c.game === 'race' && c.flags.win },
   { id: 'giant', icon: '💥', name: 'Giant Killer', desc: 'Win a race with rival strength at or above your FTP', check: (c) => c.game === 'race' && c.flags.win && c.opts.base_watts >= c.ftp },
   { id: 'nitro', icon: '🚀', name: 'Nitro Junkie', desc: 'Fire nitro 3 times in one race', check: (c) => c.game === 'race' && c.flags.nitro >= 3 },
@@ -29,18 +29,21 @@ const list = [
   { id: 'mega', icon: '🔋', name: 'Megajoule', desc: '1000 kJ of work in total', check: (c) => c.life.kj >= 1000 },
 ];
 
+// badges of the archived games (summit, pulse, spin beat, escape)
+const archived_badges = ['summit', 'peaks', 'pulse5', 'pulse0', 'spin4', 'spin90', 'storm10', 'storm20'];
+
 function get_state() {
   const s = load('pq_badges', {});
   return { unlocked: s.unlocked || {}, played: s.played || [], climbs: s.climbs || [] };
 }
 
 // call after a finished game; returns the badges unlocked by this game
-export function check_badges({ game, opts, flags, ride, ftp, game_count }) {
+export function check_badges({ game, opts, flags, ride, ftp, main }) {
   const state = get_state();
   if (!state.played.includes(game)) state.played.push(game);
   if (game === 'summit' && flags?.climb && !state.climbs.includes(flags.climb)) state.climbs.push(flags.climb);
   const life = load('pq_stats', { rides: 0, secs: 0, kj: 0, km: 0 });
-  const ctx = { game, opts, flags: flags || {}, ride, life, state, ftp, game_count };
+  const ctx = { game, opts, flags: flags || {}, ride, life, state, ftp, main };
   const fresh = [];
   for (const b of list) {
     if (state.unlocked[b.id]) continue;
@@ -65,9 +68,10 @@ export function fresh_html(fresh) {
 // setup: the full collection, locked ones greyed out
 export function collection_html() {
   const st = get_state();
-  const got = list.filter((b) => st.unlocked[b.id]).length;
-  return `<summary>Badges · ${got}/${list.length}</summary>
-    <div class="badge-grid">${list.map((b) => {
+  const shown = list.filter((b) => !archived_badges.includes(b.id) || st.unlocked[b.id]);
+  const got = shown.filter((b) => st.unlocked[b.id]).length;
+  return `<summary>Badges · ${got}/${shown.length}</summary>
+    <div class="badge-grid">${shown.map((b) => {
       const on = st.unlocked[b.id];
       return `<div class="badge${on ? ' on' : ''}"><span class="badge-icon">${b.icon}</span><b>${b.name}</b><small>${on ? `✓ ${on}` : b.desc}</small></div>`;
     }).join('')}</div>`;

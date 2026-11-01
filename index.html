@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 <header class="topbar">
   <div class="topbar-row">
     <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 21 · 2026-11-01 14:37</span>
+    <span id="version">build 22 · 2026-11-01 15:15</span>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -25,6 +25,7 @@
 <!-- setup screen: sensors, profile, selected game's rules and options -->
 <section id="screen-setup" class="screen active">
   <div class="panel">
+    <div class="row player-row"><label class="small" for="player">Player</label><select id="player"></select><button id="sync" class="sync-btn" hidden></button></div>
     <div class="row"><button id="btn-trainer">Connect trainer</button><span id="st-trainer" class="st">not connected</span></div>
     <div class="row"><button id="btn-hr" class="secondary">Connect HR strap</button><span id="st-hr" class="st">optional</span></div>
     <p id="ble-warning" class="warn hidden">This browser has no Web Bluetooth. Use Chrome on Android or PC. Demo mode still works.</p>
@@ -55,6 +56,9 @@
   <details class="panel badges" id="badges"></details>
   <p class="small"><a href="test.html">Connection test page</a></p>
 </section>
+
+<!-- stats tab: totals, records, best result per game -->
+<section id="screen-stats" class="screen"><div id="stats-body"></div></section>
 
 <!-- play screen shared by all games: canvas + game hud + shared metrics -->
 <section id="screen-play" class="screen">
@@ -102,6 +106,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=21"></script>
+<script type="module" src="js/main.js?v=22"></script>
 </body>
 </html>

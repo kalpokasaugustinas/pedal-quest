@@ -1,5 +1,5 @@
 // daily challenge: one game + settings + goal per calendar day (same for everyone on that day), with a streak
-import { load, store, seeded } from './util.js?v=21';
+import { load, store, seeded } from './util.js?v=22';
 
 const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)];
 const round10 = (w) => Math.max(50, Math.min(500, Math.round(w / 10) * 10));
@@ -40,10 +40,14 @@ function day_key(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// the games the daily challenge picks from (archived games are left out)
+const daily_games = ['race', 'crossroads', 'sprint', 'workout'];
+const daily_pool = pool.filter((make) => daily_games.includes(make(seeded(1), 200).game));
+
 export function today(ftp) {
   const key = day_key();
   const rnd = seeded(+key.replaceAll('-', ''));
-  const ch = pool[Math.floor(rnd() * pool.length)](rnd, ftp);
+  const ch = daily_pool[Math.floor(rnd() * daily_pool.length)](rnd, ftp);
   return { ...ch, day: key };
 }
 

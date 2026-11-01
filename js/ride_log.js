@@ -1,6 +1,6 @@
 // ride log: one sample per second of game time (watts, hr, cadence) for the results chart + ride stats
 // shared by every game through the shell, so the games don't need to record anything themselves
-import { load, store } from './util.js?v=21';
+import { load, store } from './util.js?v=22';
 
 let samples = [];     // [{ w, hr, rpm }] one per second
 let acc = null;       // running sums for the current second
@@ -70,10 +70,13 @@ export function summary(ftp) {
     if_: np && ftp ? np / ftp : null,
     best_5s: best_avg(ws, 5),
     best_1m: best_avg(ws, 60),
+    best_5m: best_avg(ws, 300),
+    best_20m: best_avg(ws, 1200),
     avg_hr: avg(hrs),
     max_hr: hrs.length ? Math.max(...hrs) : null,
     avg_rpm: avg(pedal.map((s) => s.rpm)),
     kj: ws.reduce((x, y) => x + y, 0) / 1000,
+    km: samples.reduce((x, y) => x + y.m, 0) / 1000,
   };
 }
 
@@ -187,7 +190,7 @@ export function tcx(sport_name, speed_of_watts) {
 `;
 }
 
-// ---- ride history: last 50 finished rides (summary only), newest first ----
+// ---- ride history: last 200 finished rides (summary only), newest first ----
 export function save_history(game, title) {
   const s = summary(0);
   if (s.secs < 60) return;
@@ -197,8 +200,54 @@ export function save_history(game, title) {
     game, title,
     secs: s.secs, avg_w: Math.round(s.avg_w), np: s.np ? Math.round(s.np) : null,
     kj: Math.round(s.kj), avg_hr: s.avg_hr ? Math.round(s.avg_hr) : null,
+    km: +s.km.toFixed(2), max_w: s.max_w ? Math.round(s.max_w) : null, max_hr: s.max_hr ? Math.round(s.max_hr) : null,
   });
-  store('pq_history', list.slice(0, 50));
+  store('pq_history', list.slice(0, 200));
+}
+
+// ---- per-game totals and all-time records (kept forever, unlike the history list) ----
+// call when a game ends (finished or quit) with the game's own distance (km)
+export function save_totals(game, km) {
+  const s = summary(0);
+  if (s.secs < 60) return;
+  const totals = load('pq_game_stats', {});
+  const t = totals[game] || { plays: 0, secs: 0, km: 0, kj: 0 };
+  t.plays += 1;
+  t.secs += s.secs;
+  t.km += km;
+  t.kj += s.kj;
+  t.last = new Date().toISOString().slice(0, 10);
+  totals[game] = t;
+  store('pq_game_stats', totals);
+  // records: keep the higher value and the day it was set
+  const rec = load('pq_records', {});
+  const day = t.last;
+  const better = (k, v) => { if (v !== null && v !== undefined && v > (rec[k]?.v ?? 0)) rec[k] = { v: Math.round(v * 100) / 100, day, game }; };
+  better('max_w', s.max_w);
+  better('best_5s', s.best_5s);
+  better('best_1m', s.best_1m);
+  better('best_5m', s.best_5m);
+  better('best_20m', s.best_20m);
+  better('np', s.secs >= 600 ? s.np : null);
+  better('max_hr', s.max_hr);
+  better('secs', s.secs);
+  better('km', km);
+  better('kj', s.kj);
+  store('pq_records', rec);
+}
+
+// one-time: per-game counts from the history saved before totals existed (no distances in old entries)
+export function backfill_totals() {
+  if (load('pq_game_stats', null)) return;
+  const totals = {};
+  for (const r of load('pq_history', [])) {
+    const t = totals[r.game] || (totals[r.game] = { plays: 0, secs: 0, km: 0, kj: 0, last: r.date.slice(0, 10) });
+    t.plays += 1;
+    t.secs += r.secs;
+    t.kj += r.kj;
+    t.km += r.km || 0;
+  }
+  if (Object.keys(totals).length) store('pq_game_stats', totals);
 }
 
 // monday 00:00 local of the current week

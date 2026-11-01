@@ -13,6 +13,14 @@
 | ⚡ Sprint Cup | One race: rivals attack from behind one by one, hold them off | power | points |
 | 📈 Workout | Structured intervals scaled to FTP, optional ERG, FTP ramp test | power, resistance | % on target / FTP estimate |
 
+Main games: Race, Crossroads, Sprint Cup, Workout (in the top tabs and the daily challenge). Summit, Pulse Pilot, Spin Beat and Escape are archived: hidden from the tabs, still playable from the Stats tab or a `#game-id` link. Their badges only show once earned.
+
+Players (`js/util.js`): a picker on the setup screen. Every `pq_*` key belongs to the active player; the first player ("me") keeps the plain keys, others use `<key>@<player id>`. Switching players reloads the profile in place, so Bluetooth stays connected.
+
+Cloud sync (`js/cloud.js`, optional): Google sign-in through Firebase, same project and method as Muscle Map. All players' keys go as one JSON string into the `pedal_quest` field of `users/<uid>` in Firestore (merge write: Muscle Map keeps its own field). Changes upload 1.5 s after the last write; a change from another device applies live, but never during a game (it waits until the game ends). First sign-in on a device with rides asks which copy wins.
+
+Stats tab (`js/stats.js`, `#stats`): lifetime totals, most played game, daily streak, days ridden, records (max power, best 5 s / 1 / 5 / 20 min, best NP, max HR, longest ride / distance / work, each with the day), and per game: plays, time, distance and the best result of every board.
+
 Ride history: the setup screen lists recent rides and this week's totals (Monday to Sunday).
 
 Ride export: results have a **Download ride (.tcx)** button (rides over 1 min). The TCX has 1-s trackpoints with power, HR, cadence and distance, so Strava / Garmin Connect / intervals.icu can import it. Games without a speed (Spin Beat, Workout, Pulse) get a virtual distance from the flat-road physics.
@@ -85,6 +93,8 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - An attacker starts 20 m behind you, 3 m/s faster (steady riding always gets passed: you have to answer; ~1.5–1.75× FTP for 22 s holds a Club attack, ~2× for Racer / Pro), and surges to peak in 3 s, then fades towards 75%. Peak = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × rider strength (0.9 → 1.15, +8% each time the roster comes round).
 - Still ahead after 22 s = held off: 100 points + 10 per meter of lead. Passed by 5 m = lost (0 points). The race goes on either way.
 - Earlier attackers settle at 75% FTP and drift away. Rear-view mirror + duel bars during attacks.
+- Attackers option: Rivals + past me (default: ghost on every 2nd attack), Past me (ghost on every attack), Rivals only. Each mix has its own board.
+- Ghost = your strongest finished run with the same number of attacks (highest average watts over the attack windows). Your watts are recorded at 1 Hz for 22 s from the start of each attack; ghost attack k replays attack k. It starts 20 m behind at only +2 m/s, so the same effort as last time ends about level (physics sim: +1 m/s ≈ 10 m over 22 s). Stored in `pq_sprint_ghost_<attacks>` (best + last).
 
 ### 📈 Workout
 - Plans: Quick Spin (15 min), Sweet Spot (30), VO2 30/30 (22), Pyramid (23), Over-Unders (31). Power = share of FTP × intensity (90 / 100 / 105%).
@@ -101,7 +111,9 @@ js/main.js        shell: routing (#game-id), setup/options, countdown, loop, res
 js/sensors.js     shared sensor state + connect + rider profile (FTP, max HR)
 js/ble.js         Web Bluetooth: FTMS indoor bike data, heart rate, FTMS control point (grade, erg power)
 js/physics.js     cycling physics (rolling, gravity, drag); same for everyone
-js/util.js        formatting, seeded random, safe localStorage
+js/util.js        formatting, seeded random, safe localStorage (per player), sync data helpers
+js/cloud.js       optional google sign-in + firestore sync of all players
+js/stats.js       stats tab
 js/draw2d.js      2D canvas helpers (overlay layer for charts / bars, labels)
 js/kit3d.js       shared low-poly 3d kit: terrain/road chunks (road can curve + climb), props, mountains,
                   lights + colour grade, campfires, wind, riders with body language, chase camera, arches, signs, trails
@@ -150,11 +162,16 @@ export default {
 - Headless checks: Playwright with the installed Chrome. Scripts aren't in the repo; see the project notes.
 
 ### Storage keys (localStorage)
+- Per player (plain key for the first player, `<key>@<id>` for others). Device-only: `pq_active_player`. Shared: `pq_players`.
 - `pq_profile`: FTP, max HR, weight
 - `pq_opts_<game>`: last options per game
 - `pq_board_<key>`: top 10 results per board
 - `pq_ghost_summit_<climb>`: best-run trace for the ghost
 - `pq_stats`: lifetime totals
-- `pq_history`: last 50 finished rides (summary: date, game, duration, avg W, NP, kJ, avg HR)
+- `pq_history`: last 200 finished rides (summary: date, game, duration, avg W, NP, kJ, avg HR, km, max W, max HR)
+- `pq_game_stats`: per game plays, time, km, kJ, last played (backfilled once from the history)
+- `pq_records`: all-time records with value, day and game
+- `pq_board_labels`: board key → readable name for the stats tab
+- `pq_sprint_ghost_<attacks>`: Sprint Cup ghost (best + last run's attack efforts)
 - `pq_daily`: daily challenge streak (last day done, streak, best, total)
 - `pq_badges`: unlocked badges with dates, games played, climbs finished
