@@ -1,15 +1,15 @@
 // game-style setup controls: section headers with icons, number tiles, difficulty stars, a power gauge,
 // and painted scenery cards (a tiny landscape per theme, drawn once and cached).
 // the markup keeps the .seg / .stepper + data-key / data-i / data-d hooks that main.js wires up.
-import { themes, surprise_id } from './kit3d.js?v=38';
+import { themes, surprise_id } from './kit3d.js?v=39';
 
 // icon per option key (falls back to a diamond)
 const icons = {
-  km: '🏁', base_watts: '⚡', scenery: '🗺️', stages: '🔀', stage_min: '⏱️', level: '🏆', attacks: '⚔️',
+  km: '🏁', rivals: '⚡', scenery: '🗺️', stages: '🔀', stage_min: '⏱️', level: '🏆', attacks: '⚔️',
   attackers: '👥', plan: '📈', intensity: '🔥', erg: '🎛️', track: '🎵', climb: '⛰️',
 };
 // options whose choices go from easy to hard: shown with 1-3 stars
-const rated = ['level', 'intensity', 'stages', 'attacks'];
+const rated = ['level', 'intensity', 'stages', 'attacks', 'rivals'];
 
 // "2 km" → big 2 + small km; plain words stay as they are
 function tile_text(text) {
@@ -121,7 +121,9 @@ export function option_html(opt, v, profile) {
   }
   const n = opt.choices.length;
   return `<section class="opt">${head}<div class="seg${opt.wide ? ' wide' : ' tiles'}" data-key="${opt.key}">${opt.choices.map(([cv, text], i) => {
-    const stars = rated.includes(opt.key) && !opt.wide ? `<span class="stars">${'★'.repeat(Math.min(3, Math.round(((i + 1) / n) * 3)))}</span>` : '';
-    return `<button data-i="${i}" class="${cv === v ? 'on' : ''}">${opt.wide ? text : tile_text(text)}${stars}</button>`;
+    const stars = rated.includes(opt.key) && !opt.wide ? `<span class="stars">${'★'.repeat(n <= 4 ? i + 1 : Math.min(3, Math.round(((i + 1) / n) * 3)))}</span>` : '';
+    // shares of ftp show the watts they mean for this rider
+    const watts = opt.ftp_share ? `<small>${Math.round(profile.ftp * cv)} W</small>` : '';
+    return `<button data-i="${i}" class="${cv === v ? 'on' : ''}">${opt.wide ? text : tile_text(text)}${watts}${stars}</button>`;
   }).join('')}</div></section>`;
 }

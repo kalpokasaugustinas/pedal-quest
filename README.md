@@ -20,7 +20,7 @@ Archived for now (still playable from the 📊 Stats tab):
 
 Every game has local top-10 leaderboards and a ride chart (power + heart rate) on the results screen. 24 badges to unlock, and a daily challenge with a streak. Download any ride as a .tcx file for Strava. Set your FTP, max HR and weight once, and the games scale to you.
 Set your rider details and connect the trainer + HR strap once in the rider bar at the top; every game uses them. Optional Google sign-in syncs your data across devices. The 📊 Stats tab shows totals, the most played game, best results per game and all-time power / heart rate records.
-Ride to earn PP (pedal points), level up and unlock your cyclist's look in the 🎨 Garage: jersey colours and patterns, frame, rims, helmet, shoes, nitro flame and trail. Sound: wind, rain, rivers, birds, a cheering finish crowd and music that follows your cadence.
+Ride to earn PP (pedal points), level up and unlock your cyclist's look in the 🎨 Garage: jersey colours and patterns, frame, rims, helmet, shoes, nitro flame and trail. Sound: wind, rain, rivers, birds, a cheering finish crowd and six generated songs (house, synthwave, breakbeat, lo-fi, rock, chiptune) whose beat follows your cadence.
 No trainer? Demo mode gives you sliders for watts, cadence and heart rate.
 
 Details, rules and the architecture for developers: [docs/GAMES.md](docs/GAMES.md).

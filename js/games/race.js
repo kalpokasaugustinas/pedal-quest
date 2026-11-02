@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=38';
-import { create_world } from '../world.js?v=38';
-import { scenery_option } from '../kit3d.js?v=38';
-import { fmt_time, ordinal } from '../util.js?v=38';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=39';
+import { create_world } from '../world.js?v=39';
+import { scenery_option } from '../kit3d.js?v=39';
+import { fmt_time, ordinal } from '../util.js?v=39';
 
 export default {
   id: 'race',
@@ -21,7 +21,8 @@ export default {
   ],
   options: [
     { key: 'km', label: 'Race distance', choices: [[1, '1 km'], [2, '2 km'], [5, '5 km'], [10, '10 km']], def: 2 },
-    { key: 'base_watts', label: 'Rival strength', type: 'stepper', min: 50, max: 500, step: 10, unit: 'W', def: 150 },
+    // rival strength as a share of your ftp: hard = your ftp, easy = half of it
+    { key: 'rivals', label: 'Rival strength', ftp_share: true, choices: [[0.5, 'Easy'], [0.75, 'Normal'], [1, 'Hard'], [1.25, 'Extreme']], def: 0.75 },
     scenery_option('meadow'),
   ],
   board: (o) => ({ key: `race_${o.km}km`, label: `Best times · ${o.km} km`, lower: true, fmt: fmt_time }),
@@ -30,7 +31,9 @@ export default {
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
-  const race = create_race({ distance_m: env.opts.km * 1000, base_watts: env.opts.base_watts, max_hr: env.profile.max_hr });
+  const base_watts = Math.round(env.profile.ftp * env.opts.rivals);
+  const level_name = { 0.5: 'Easy', 0.75: 'Normal', 1: 'Hard', 1.25: 'Extreme' }[env.opts.rivals];
+  const race = create_race({ distance_m: env.opts.km * 1000, base_watts, max_hr: env.profile.max_hr });
   race.player.color = env.look.jersey;   // your dot in the leaderboard = your jersey
   const world = create_world(env.canvas, race, env.opts.scenery, env.profile.ftp, env.look);
 
@@ -146,7 +149,7 @@ function create(env) {
       body: `<table>${rows}</table>`,
       score: p.finish_time,
       flags: { win: pos === 1, pos, nitro: p.nitro.count },
-      note: `${ordinal(pos)} vs ${env.opts.base_watts} W bots`,
+      note: `${ordinal(pos)} vs ${level_name} bots (${base_watts} W)`,
     };
   }
 

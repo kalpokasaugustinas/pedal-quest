@@ -1,12 +1,18 @@
 // sound made with web audio (no files to load): short effects, ride ambience (wind with your speed, rain,
-// rivers, birds, a cheering finish crowd) and generated music whose tempo follows your cadence.
+// rivers, birds, a cheering finish crowd) and generated songs (music.js) whose tempo follows your cadence.
 // unlock() must run inside a tap, otherwise mobile browsers keep audio muted
+import { create_music, track_ids, tracks } from './music.js?v=39';
 let audio = null;
 let enabled = true;
 let music_on = true;
+let track = 'shuffle';   // a track id, or 'shuffle' (a different one each ride)
 
 export function set_sound(on) { enabled = on; if (!on) stop_ride(); }
-export function set_music(on) { music_on = on; }
+export function set_music(on) { music_on = on; if (!on && ride?.song) { ride.song.stop(); ride.song = null; } }
+export function set_track(id) { track = id; }
+export const music_tracks = () => track_ids.map((id) => [id, tracks[id].name, tracks[id].style]);
+// name of the song playing now (or null)
+export const now_playing = () => ride?.song?.name ?? null;
 
 export function unlock() {
   if (!enabled) return;
@@ -75,49 +81,21 @@ function layer(buf, type, freq, q = 0.7) {
 }
 function start_ride() {
   const buf = noise_buffer();
-  const music = audio.createGain();
-  music.gain.value = 0.5;
-  music.connect(audio.destination);
   ride = {
     wind: layer(buf, 'lowpass', 400),
     rain: layer(buf, 'highpass', 2500),
     water: layer(buf, 'bandpass', 700, 0.8),
     crowd: layer(buf, 'bandpass', 1100, 1.2),
-    music, next_beat: audio.currentTime + 0.2, beat: 0, bird_t: 3, cheer_t: 0,
+    song: null, bird_t: 3, cheer_t: 0,
   };
 }
 export function stop_ride() {
   if (!ride) return;
   for (const k of ['wind', 'rain', 'water', 'crowd']) { try { ride[k].src.stop(); } catch { /* already stopped */ } }
-  ride.music.disconnect();
+  ride.song?.stop();
   ride = null;
 }
 const fade = (node, v) => node.gain.setTargetAtTime(v, audio.currentTime, 0.4);
-
-// music: a minor-key loop. a kick on every pedal stroke (tempo = cadence), bass on the beat,
-// hats and an arpeggio join as your effort rises
-const chords = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];   // am, f, c, g (midi notes)
-const hz = (m) => 440 * 2 ** ((m - 69) / 12);
-function schedule_music(cadence, effort) {
-  const bpm = Math.min(120, Math.max(60, cadence || 0));
-  const beat_len = 60 / bpm;
-  const out = ride.music;
-  while (ride.next_beat < audio.currentTime + 0.15) {
-    const t = ride.next_beat, b = ride.beat;
-    const chord = chords[Math.floor(b / 8) % chords.length];
-    if (cadence > 20) {
-      // kick: a fast pitch drop
-      const k = tone(150, 0.25, 'sine', 0.35, 0, out, t);
-      k.frequency.exponentialRampToValueAtTime(45, t + 0.2);
-      tone(hz(chord[0] - 24), beat_len * 0.9, 'triangle', 0.22, 0, out, t);
-      if (effort > 0.75) tone(7000, 0.04, 'square', 0.025, 0, out, t + beat_len / 2);   // off-beat hat
-      if (effort > 0.95) [0, 1, 2].forEach((i) => tone(hz(chord[i] + 12), beat_len / 4, 'square', 0.035, 0, out, t + (i * beat_len) / 3));
-    }
-    if (b % 8 === 0) chord.forEach((m) => tone(hz(m), beat_len * 7.5, 'sine', 0.035, 0, out, t));   // soft pad
-    ride.next_beat += beat_len;
-    ride.beat += 1;
-  }
-}
 
 // call every frame while a game runs. s = { speed (m/s), cadence, effort (watts / ftp), rain, water (0..1), crowd (0..1), birds }
 export function update_ride(dt, s) {
@@ -146,7 +124,10 @@ export function update_ride(dt, s) {
         c.frequency.exponentialRampToValueAtTime(base * 1.4, audio.currentTime + i * 0.12 + 0.07);
       }
     }
-    if (music_on) schedule_music(s.cadence, s.effort);
-    else ride.next_beat = audio.currentTime + 0.1;
+    // music (music.js): a song whose beat follows your cadence; shuffle picks a new one each ride
+    if (music_on) {
+      ride.song ??= create_music(audio, audio.destination, track === 'shuffle' || !tracks[track] ? track_ids[Math.floor(Math.random() * track_ids.length)] : track);
+      ride.song.update(dt, s.cadence, s.effort);
+    }
   } catch { /* audio not available */ }
 }

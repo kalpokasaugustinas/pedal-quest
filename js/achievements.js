@@ -1,12 +1,12 @@
 // badges: long-term goals across all games. checked after every finished game, saved in localStorage
-import { load, store } from './util.js?v=38';
+import { load, store } from './util.js?v=39';
 
 // each check gets: { game, opts, flags, ride (ride_log summary), life (lifetime totals), state, ftp }
 const list = [
   { id: 'first', icon: '🚲', name: 'First Pedal', desc: 'Finish any game', check: () => true },
   { id: 'explorer', icon: '🧭', name: 'Explorer', desc: 'Finish every game at least once', check: (c) => c.main.every((id) => c.state.played.includes(id)) },
   { id: 'race_win', icon: '🏆', name: 'Top Step', desc: 'Win a race', check: (c) => c.game === 'race' && c.flags.win },
-  { id: 'giant', icon: '💥', name: 'Giant Killer', desc: 'Win a race with rival strength at or above your FTP', check: (c) => c.game === 'race' && c.flags.win && c.opts.base_watts >= c.ftp },
+  { id: 'giant', icon: '💥', name: 'Giant Killer', desc: 'Win a race with rival strength at or above your FTP', check: (c) => c.game === 'race' && c.flags.win && c.opts.rivals >= 1 },
   { id: 'nitro', icon: '🚀', name: 'Nitro Junkie', desc: 'Fire nitro 3 times in one race', check: (c) => c.game === 'race' && c.flags.nitro >= 3 },
   { id: 'clean', icon: '✅', name: 'Clean Sheet', desc: 'Crossroads: every stage clean', check: (c) => c.game === 'crossroads' && c.flags.clean_all },
   { id: 'calc', icon: '🧠', name: 'Calculator', desc: 'Crossroads: best-value path on every stage', check: (c) => c.game === 'crossroads' && c.flags.smart_all },

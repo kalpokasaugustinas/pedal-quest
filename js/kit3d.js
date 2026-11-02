@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=38';
+import { seeded } from './util.js?v=39';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;
@@ -92,7 +92,8 @@ export function roll_scenery(id) {
   const label = [themes[tid].name, { summer: '☀️ Summer', autumn: '🍂 Autumn', winter: '❄️ Winter' }[season],
     weather === 'rain' ? (season === 'winter' ? '🌨️ Snowfall' : '🌧️ Rain') : weather === 'fog' ? '🌫️ Fog' : '',
     dusk ? '🌅 Sunset ride' : '', water ? '🌉 Rivers + lakes' : '', village ? '🏘️ Villages' : '', plains ? '🐄 Farmland' : ''].filter(Boolean).join(' · ');
-  return { id: tid, theme: season_theme(themes[tid], season), season, weather, dusk, water, village, plains, label };
+  const range = force.find((k) => ['alpine', 'ridges', 'rolling', 'canyon'].includes(k));   // else rolled in make_backdrop
+  return { id: tid, theme: season_theme(themes[tid], season), season, weather, dusk, water, village, plains, range, label };
 }
 
 // little house: walls, pitched roof, door, two windows (one merged mesh)
@@ -691,10 +692,30 @@ function animate_animal(a, dt, speed) {
 // forward speed the clouds come towards you (parallax: a feeling of travelling under them)
 const cloud_box = { n: 18, span: 1000, z: [-1150, 400], approach: 0.3 };
 
-function make_backdrop(scene, theme) {
+// mountain range styles (rolled per ride): alpine peaks, long ridgelines, rolling domes, canyon mesas
+const range_styles = {
+  alpine: { peak: 5, ridge: 3, dome: 0, mesa: 0 },
+  ridges: { peak: 2, ridge: 6, dome: 1, mesa: 0 },
+  rolling: { peak: 0, ridge: 1, dome: 8, mesa: 0 },
+  canyon: { peak: 0, ridge: 1, dome: 1, mesa: 6 },
+};
+// sky types: puffy cumulus, many small scattered clouds, long streaks, towering storm clouds
+const sky_types = {
+  cumulus: { n: 18, puffy: 6, small: 2, streak: 1, tower: 0 },
+  scattered: { n: 26, puffy: 2, small: 7, streak: 1, tower: 0 },
+  streaks: { n: 16, puffy: 1, small: 1, streak: 6, tower: 0 },
+  towering: { n: 14, puffy: 3, small: 1, streak: 1, tower: 4 },
+};
+const weighted = (rnd, w) => { let r = rnd() * Object.values(w).reduce((a, b) => a + b, 0); for (const [k, v] of Object.entries(w)) { r -= v; if (r <= 0) return k; } return Object.keys(w)[0]; };
+
+function make_backdrop(scene, theme, sc = {}) {
   const group = new THREE.Group();
-  const rnd = seeded(42);
+  const rnd = seeded(1 + Math.floor(Math.random() * 1e6));   // a different skyline every ride
   const fog = new THREE.Color(theme.fog);
+  // range: canyons only in dry seasons, fewer domes under snow
+  const range = sc.range || weighted(rnd, sc.season === 'winter' ? { alpine: 4, ridges: 3, rolling: 1 } : { alpine: 3, ridges: 3, rolling: 3, canyon: theme.stars ? 0 : 1.2 });
+  const mix = range_styles[range];
+  const mesa_cols = ['#b5643c', '#c27a4a', '#a0522d', '#d29a6a'];
   // mountains are lit by the key light (strong facets) but skip scene fog; a light haze is baked in by distance
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, fog: false });
   const ring = [
@@ -704,18 +725,42 @@ function make_backdrop(scene, theme) {
   for (const m of ring) {
     const ahead = Math.abs(Math.atan2(Math.sin(m.a + Math.PI / 2), Math.cos(m.a + Math.PI / 2)));   // angle from straight ahead
     if (m.r < 600 && ahead < 0.45) m.r += 380;
-    // a mountain = a main peak + a shoulder peak, both jittered for crisp facets
-    const main = jitter(new THREE.ConeGeometry(m.w, m.h, 11, 7), m.w * 0.17, rnd, true);
-    const sh_h = m.h * (0.55 + rnd() * 0.2);
-    const shoulder = jitter(new THREE.ConeGeometry(m.w * 0.7, sh_h, 9, 5), m.w * 0.15, rnd, true)
-      .translate(m.w * 0.55, (sh_h - m.h) / 2, m.w * 0.15);
-    const g = merge([main, shoulder]);
+    const kind = weighted(rnd, mix);
+    let g;
+    if (kind === 'ridge') {
+      // a ridgeline: 3-5 peaks of different heights in a row
+      const n = 3 + Math.floor(rnd() * 3), parts = [];
+      for (let j = 0; j < n; j++) {
+        const hh = m.h * (0.5 + rnd() * 0.5), ww = m.w * (0.55 + rnd() * 0.3);
+        parts.push(jitter(new THREE.ConeGeometry(ww, hh, 9, 5), ww * 0.16, rnd, true).translate((j - (n - 1) / 2) * m.w * 0.62, (hh - m.h) / 2, rnd() * m.w * 0.3));
+      }
+      g = merge(parts);
+    } else if (kind === 'dome') {
+      // rolling hill: a squashed, lumpy dome
+      m.h *= 0.45;
+      g = merge([jitter(new THREE.SphereGeometry(m.w * 1.2, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), m.w * 0.1, rnd).scale(1.3, m.h / (m.w * 1.2), 1).translate(0, -m.h / 2, 0),
+        jitter(new THREE.SphereGeometry(m.w * 0.8, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), m.w * 0.08, rnd).scale(1, (m.h * 0.7) / (m.w * 0.8), 1).translate(m.w * 0.9, -m.h / 2, m.w * 0.2)]);
+    } else if (kind === 'mesa') {
+      // canyon mesa: steep sides, flat top, a smaller butte beside it
+      m.h *= 0.55;
+      g = merge([jitter(new THREE.CylinderGeometry(m.w * 0.75, m.w * 1.05, m.h, 9, 4), m.w * 0.07, rnd, true),
+        jitter(new THREE.CylinderGeometry(m.w * 0.28, m.w * 0.42, m.h * 0.7, 7, 3), m.w * 0.05, rnd, true).translate(m.w * 1.2, -m.h * 0.15, m.w * 0.3)]);
+    } else {
+      // alpine peak: a main peak + a shoulder peak, both jittered for crisp facets
+      const main = jitter(new THREE.ConeGeometry(m.w, m.h, 11, 7), m.w * 0.17, rnd, true);
+      const sh_h = m.h * (0.55 + rnd() * 0.2);
+      const shoulder = jitter(new THREE.ConeGeometry(m.w * 0.7, sh_h, 9, 5), m.w * 0.15, rnd, true)
+        .translate(m.w * 0.55, (sh_h - m.h) / 2, m.w * 0.15);
+      g = merge([main, shoulder]);
+    }
     const p = g.attributes.position;
     const col = [];
     for (let t = 0; t < p.count; t += 3) {
       const cy = (p.getY(t) + p.getY(t + 1) + p.getY(t + 2)) / 3 / m.h + 0.5;   // 0 bottom .. 1 top
-      palette_color(theme.mountain, rnd());
-      if (theme.snow && cy > theme.snow_line - rnd() * 0.06) tmp_color.set(theme.snow);
+      if (kind === 'mesa') tmp_color.set(mesa_cols[Math.floor(cy * 7 + rnd() * 0.6) % mesa_cols.length]).offsetHSL(0, mood.sat, mood.light);   // rock layers
+      else if (kind === 'dome') palette_color(cy < 0.75 ? theme.high : theme.mountain, rnd());
+      else palette_color(theme.mountain, rnd());
+      if (theme.snow && kind !== 'mesa' && cy > theme.snow_line - rnd() * 0.06 - (kind === 'dome' ? 1 : 0) * (sc.season === 'winter' ? 0.9 : 0)) tmp_color.set(theme.snow);
       tmp_color.lerp(fog, Math.min(0.5, (m.r - 400) / 1600));   // farther = hazier
       for (let j = 0; j < 3; j++) col.push(tmp_color.r, tmp_color.g, tmp_color.b);
     }
@@ -727,21 +772,51 @@ function make_backdrop(scene, theme) {
   }
   scene.add(group);
 
-  // big faceted clouds: clusters of squashed icosahedrons, lit plus a soft glow. they drift sideways on the wind
-  // and slowly come closer as you ride; each fades in far away and out at the edges of its box, so wrapping never pops
+  // clouds of the rolled sky type: puffy cumulus (stacked blobs, taller in the middle), small fluffs,
+  // long flat streaks, towering storm clouds. lit plus a soft glow; they drift sideways on the wind and slowly come
+  // closer as you ride; each fades in far away and out at the edges of its box, so wrapping never pops
+  const sky = sc.weather === 'rain' ? 'towering' : weighted(rnd, { cumulus: 4, scattered: 3, streaks: 2, towering: sc.weather === 'fog' ? 1 : 0.6 });
+  const sk = sky_types[sky];
   const clouds = new THREE.Group();
-  for (let i = 0; i < cloud_box.n; i++) {
+  for (let i = 0; i < sk.n; i++) {
     const cloud_mat = new THREE.MeshLambertMaterial({ color: theme.cloud, flatShading: true, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow, transparent: true });
+    const kind = weighted(rnd, { puffy: sk.puffy, small: sk.small, streak: sk.streak, tower: sk.tower });
     const parts = [];
-    const n = 4 + Math.floor(rnd() * 3);
-    for (let j = 0; j < n; j++) {
-      const r = 22 + rnd() * 20 - Math.abs(j - n / 2) * 4;
-      parts.push(jitter(new THREE.IcosahedronGeometry(r, 0), r * 0.35, rnd).scale(1.2, 0.45, 0.8).translate(j * 26 - n * 13, rnd() * 6, rnd() * 12));
+    let y = 190 + rnd() * 150;
+    if (kind === 'streak') {
+      const n = 6 + Math.floor(rnd() * 5);
+      for (let j = 0; j < n; j++) {
+        const r = 14 + rnd() * 10;
+        parts.push(jitter(new THREE.IcosahedronGeometry(r, 0), r * 0.3, rnd).scale(2.4, 0.22, 0.7).translate(j * 38 - n * 19, rnd() * 4, rnd() * 10));
+      }
+      y += 80;
+    } else if (kind === 'small') {
+      const n = 2 + Math.floor(rnd() * 2);
+      for (let j = 0; j < n; j++) {
+        const r = 10 + rnd() * 9;
+        parts.push(jitter(new THREE.IcosahedronGeometry(r, 1), r * 0.25, rnd).scale(1.3, 0.6, 1).translate(j * 16 - n * 8, rnd() * 5, rnd() * 8));
+      }
+    } else if (kind === 'tower') {
+      // storm tower: wide dark base, piled blobs, an anvil top
+      for (let j = 0; j < 5; j++) {
+        const r = 40 - j * 4 + rnd() * 10;
+        parts.push(jitter(new THREE.IcosahedronGeometry(r, 1), r * 0.25, rnd).scale(1.2, 0.8, 1).translate((rnd() - 0.5) * 30, j * 34, (rnd() - 0.5) * 20));
+      }
+      parts.push(jitter(new THREE.IcosahedronGeometry(50, 1), 12, rnd).scale(2.2, 0.3, 1.3).translate(20, 180, 0));
+      y = 120 + rnd() * 60;
+    } else {
+      // cumulus: a row of blobs, the middle ones bigger and higher
+      const n = 4 + Math.floor(rnd() * 4);
+      for (let j = 0; j < n; j++) {
+        const mid = 1 - Math.abs(j - (n - 1) / 2) / n;
+        const r = 16 + rnd() * 14 + mid * 14;
+        parts.push(jitter(new THREE.IcosahedronGeometry(r, 1), r * 0.25, rnd).scale(1.15, 0.7, 0.9).translate(j * 24 - n * 12, mid * 18 + rnd() * 6, rnd() * 14));
+      }
     }
     const c = new THREE.Mesh(merge(parts), cloud_mat);
-    c.position.set((rnd() * 2 - 1) * cloud_box.span, 190 + rnd() * 150, cloud_box.z[0] + rnd() * (cloud_box.z[1] - cloud_box.z[0]));
+    c.position.set((rnd() * 2 - 1) * cloud_box.span, y, cloud_box.z[0] + rnd() * (cloud_box.z[1] - cloud_box.z[0]));
     c.rotation.y = rnd() * 0.6 - 0.3;
-    c.userData.v = 5 + rnd() * 9;   // wind drift (m/s); far clouds look slow, near ones fast
+    c.userData.v = (kind === 'streak' ? 9 : 5) + rnd() * 9;   // wind drift (m/s); far clouds look slow, near ones fast
     clouds.add(c);
   }
   scene.add(clouds);
@@ -1652,7 +1727,7 @@ export function create_kit(canvas, opts = {}) {
 
   // ---- chunks: terrain + road + props + campfire, recycled around the camera ----
 
-  const backdrop = make_backdrop(scene, theme);
+  const backdrop = make_backdrop(scene, theme, sc);
   const props = make_props(scene, theme);
   const camps = opts.camps === false ? null : make_camps(scene, theme);
   const wild = opts.wildlife === false ? null : make_wildlife(scene, theme);
