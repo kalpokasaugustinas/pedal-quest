@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=36';
+import { seeded } from './util.js?v=37';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;
@@ -79,7 +79,7 @@ const dusk_pal = { sky: ['#3a3f7a', '#f59e5b'], fog: '#e09a70', hemi: ['#ffc49a'
 export const surprise_id = 'random';
 // roll one ride. fixed theme ids give the old fixed look (summer, clear, no landmarks)
 export function roll_scenery(id) {
-  if (id !== surprise_id && themes[id]) return { id, theme: themes[id], season: 'summer', weather: 'clear', dusk: false, water: false, village: false, label: '' };
+  if (id !== surprise_id && themes[id]) return { id, theme: themes[id], season: 'summer', weather: 'clear', dusk: false, water: false, village: false, plains: false, label: '' };
   // test helper: ?roll=valley,autumn,rain,dusk,water,village forces a roll
   const force = (new URLSearchParams(location.search).get('roll') || '').split(',').filter(Boolean);
   const has = (k) => force.includes(k);
@@ -88,10 +88,11 @@ export function roll_scenery(id) {
   const weather = force.find((k) => ['clear', 'rain', 'fog'].includes(k)) || pick([['clear', 5.5], ['rain', 2], ['fog', 2.5]]);
   const dusk = force.length ? has('dusk') : tid !== 'night' && Math.random() < 0.3;
   const water = force.length ? has('water') : Math.random() < 0.7, village = force.length ? has('village') : Math.random() < 0.65;
+  const plains = force.length ? has('plains') : Math.random() < 0.6;
   const label = [themes[tid].name, { summer: '☀️ Summer', autumn: '🍂 Autumn', winter: '❄️ Winter' }[season],
     weather === 'rain' ? (season === 'winter' ? '🌨️ Snowfall' : '🌧️ Rain') : weather === 'fog' ? '🌫️ Fog' : '',
-    dusk ? '🌅 Sunset ride' : '', water ? '🌉 Rivers + lakes' : '', village ? '🏘️ Villages' : ''].filter(Boolean).join(' · ');
-  return { id: tid, theme: season_theme(themes[tid], season), season, weather, dusk, water, village, label };
+    dusk ? '🌅 Sunset ride' : '', water ? '🌉 Rivers + lakes' : '', village ? '🏘️ Villages' : '', plains ? '🐄 Farmland' : ''].filter(Boolean).join(' · ');
+  return { id: tid, theme: season_theme(themes[tid], season), season, weather, dusk, water, village, plains, label };
 }
 
 // little house: walls, pitched roof, door, two windows (one merged mesh)
@@ -324,6 +325,25 @@ function make_props(scene, theme) {
     jitter(new THREE.DodecahedronGeometry(0.6, 0), 0.25, rnd).translate(-1.1, 0.3, 0.8),
   ]);
   const boulders_per_chunk = 5;
+  // farmland: fence posts + rails, round hay bales, a red barn with a silo (vertex coloured)
+  const fpost = new THREE.CylinderGeometry(0.07, 0.08, 1.15, 5).translate(0, 0.55, 0);
+  const rail = new THREE.BoxGeometry(0.05, 0.08, 3.05);
+  const bale = new THREE.CylinderGeometry(0.75, 0.75, 1.3, 14).rotateZ(Math.PI / 2).translate(0, 0.72, 0);
+  const fence_per_chunk = Math.ceil(chunk_len / 3) * 2 + 4;
+  const bales_per_chunk = 14;
+  const barn = merge_painted([
+    paint(new THREE.BoxGeometry(10, 6, 15).translate(0, 3, 0), '#a8392c'),
+    paint(new THREE.CylinderGeometry(6, 6, 15.6, 3).rotateX(-Math.PI / 2).scale(1, 0.45, 1).translate(0, 7.35, 0), '#4c4f56'),   // gable roof
+    paint(new THREE.BoxGeometry(4.2, 4.6, 0.3).translate(0, 2.3, -7.55), '#6e2a20'),
+    paint(new THREE.BoxGeometry(4.6, 0.35, 0.35).translate(0, 4.7, -7.6), '#f2efe8'),
+    ...[-1, 1].map((sx) => paint(new THREE.BoxGeometry(0.35, 4.8, 0.35).translate(sx * 2.25, 2.4, -7.6), '#f2efe8')),
+    paint(new THREE.BoxGeometry(1.3, 1.3, 0.2).translate(0, 7.1, -7.75), '#f2efe8'),   // hayloft door
+  ]);
+  const silo = merge_painted([
+    paint(new THREE.CylinderGeometry(2, 2, 11, 14).translate(0, 5.5, 0), '#c9ccd1'),
+    paint(new THREE.SphereGeometry(2, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 11, 0), '#9aa0a8'),
+    ...[3, 6, 9].map((y) => paint(new THREE.CylinderGeometry(2.04, 2.04, 0.2, 14).translate(0, y, 0), '#8e949c')),
+  ]);
   // one instanced mesh per kind per chunk slot: only the instances a chunk uses are drawn (count), and a chunk
   // out of view, out of the shadow camera or behind the mirror is skipped as a whole (bounding sphere culling).
   // before this, every slot drew all three tree shapes (two shrunk to nothing): ~2.6 m triangles a frame
@@ -334,12 +354,15 @@ function make_props(scene, theme) {
     rock: [rock, '#ffffff', per_chunk, true, true], bush: [bush, '#ffffff', bushes_per_chunk, true, true],
     tuft: [tuft, '#ffffff', tufts_per_chunk, false, true], post: [post, '#f4f4f4', posts_per_chunk, false, false],
     boulder: [boulder, '#ffffff', boulders_per_chunk, true, true],
+    fpost: [fpost, '#8a6a48', fence_per_chunk, true, false], rail: [rail, '#9a7a56', fence_per_chunk * 2, true, false],
+    bale: [bale, '#ffffff', bales_per_chunk, true, true], barn: [barn, '#ffffff', 1, true, false], silo: [silo, '#ffffff', 1, true, false],
   };
   // baked light: each shape darker at the bottom (its own shade, under the canopy) and lighter on top.
   // stored as vertex colours once, multiplied with the instance colour: free while riding
-  const grade = { crown: [0.7, 1.12], pine: [0.68, 1.1], bush: [0.72, 1.06], trunk: [0.6, 1], pine_trunk: [0.6, 1], rock: [0.74, 1.06], boulder: [0.7, 1.06] };
+  const grade = { crown: [0.7, 1.12], pine: [0.68, 1.1], bush: [0.72, 1.06], trunk: [0.6, 1], pine_trunk: [0.6, 1], rock: [0.74, 1.06], boulder: [0.7, 1.06], bale: [0.78, 1.06] };
   for (const [k, [lo, hi]] of Object.entries(grade)) shade_y(kinds[k][0], lo, hi);
-  const mats = Object.fromEntries(Object.entries(kinds).map(([k, v]) => [k, flat_mat(v[1], grade[k] ? { vertexColors: true } : {})]));
+  const painted = (k) => grade[k] || k === 'barn' || k === 'silo';
+  const mats = Object.fromEntries(Object.entries(kinds).map(([k, v]) => [k, flat_mat(v[1], painted(k) ? { vertexColors: true } : {})]));
   const white = new THREE.Color('#ffffff');
   const slots = Array.from({ length: chunk_count }, () => Object.fromEntries(Object.entries(kinds).map(([k, [g, , n, shadow, colored]]) => {
     const m = new THREE.InstancedMesh(g, mats[k], n);
@@ -350,7 +373,7 @@ function make_props(scene, theme) {
     scene.add(m);
     return [k, m];
   })));
-  return { slots, per_chunk, bushes_per_chunk, tufts_per_chunk, boulders_per_chunk, posts_per_chunk };
+  return { slots, per_chunk, bushes_per_chunk, tufts_per_chunk, boulders_per_chunk, posts_per_chunk, fence_per_chunk, bales_per_chunk };
 }
 
 const m4 = new THREE.Matrix4();
@@ -466,6 +489,9 @@ const pivot = (x, y, z, mesh) => {
 const animal_kinds = {
   elk: { size: 1, body: '#7a5236', neck: '#4a3020', rump: '#d8bd90', leg: '#3b281a', antlers: '#eadbb8', run_v: 7 },
   deer: { size: 0.72, body: '#b07a42', neck: '#a06e3c', rump: '#f2e6cc', leg: '#6b4a2c', antlers: null, run_v: 8.5 },
+  // cows: stocky (squashed body group), spots, udder and little horns; they never bolt
+  cow: { size: 1, body: '#f2efe8', neck: '#f2efe8', rump: '#f2efe8', leg: '#e6e1d6', antlers: null, run_v: 0, cow: true, spots: '#2a2624' },
+  cow_brown: { size: 1, body: '#8a5a36', neck: '#7a4e2e', rump: '#f0e6d6', leg: '#6e4528', antlers: null, run_v: 0, cow: true, spots: null },
 };
 function make_animal(kind, mat, rnd) {
   const k = animal_kinds[kind];
@@ -499,6 +525,21 @@ function make_animal(kind, mat, rnd) {
       }
     }
   }
+  if (k.cow) {
+    // horns, a pink nose, black and white patches, an udder
+    for (const sx of [-1, 1]) head_parts.push(paint(new THREE.ConeGeometry(0.035, 0.2, 5).rotateZ(-sx * 0.5).translate(sx * 0.12, 1.02, -0.5), '#efe6cc'));
+    head_parts.push(paint(new THREE.BoxGeometry(0.19, 0.12, 0.08).translate(0, 0.7, -0.84), '#e4a3a0'));
+    if (k.spots) {
+      const spots = [];
+      for (let j = 0; j < 6; j++) {
+        const sx = rnd() < 0.5 ? -1 : 1;
+        spots.push(paint(new THREE.IcosahedronGeometry(0.22 + rnd() * 0.12, 0).scale(0.35, 0.8, 1.1)
+          .translate(sx * 0.4, 1.4 + (rnd() - 0.5) * 0.4, (rnd() - 0.5) * 1.3), k.spots));
+      }
+      body.add(part(spots, mat));
+    }
+    body.add(part([paint(new THREE.SphereGeometry(0.17, 6, 4).scale(1, 0.7, 1.2).translate(0, 0.98, 0.45), '#e9b0ac')], mat));
+  }
   const head = pivot(0, 1.5, -0.75, part(head_parts, mat));
   body.add(head);
   // legs hang from the hips and shoulders: 0 front left, 1 front right, 2 back left, 3 back right
@@ -510,6 +551,7 @@ function make_animal(kind, mat, rnd) {
     body.add(l);
     return l;
   });
+  if (k.cow) body.scale.set(1.25, 0.8, 1.12);   // stocky: shorter legs, broader body
   root.visible = false;
   return { root, body, head, legs, kind: k, x: 0, z: 0, yaw: 0, state: 'graze', timer: 0, phase: 0, t: 0 };
 }
@@ -615,9 +657,11 @@ function make_wildlife(scene, theme) {
     const s = {
       elk: make_animal('elk', mat, rnd), deer: [make_animal('deer', mat, rnd), make_animal('deer', mat, rnd)],
       hikers: [make_hiker(mat, rnd, theme.stars), make_hiker(mat, rnd, theme.stars)],
+      cows: ['cow', 'cow', 'cow_brown', 'cow', 'cow_brown'].map((kd) => make_animal(kd, mat, rnd)),
     };
+    s.cows[4].body.scale.multiplyScalar(0.7);   // a calf
     s.deer[1].body.scale.multiplyScalar(0.75);
-    for (const o of [s.elk, ...s.deer, ...s.hikers]) scene.add(o.root);
+    for (const o of [s.elk, ...s.deer, ...s.hikers, ...s.cows]) scene.add(o.root);
     return s;
   });
   return { slots, birds: theme.birds ? make_birds(scene) : null };
@@ -769,15 +813,20 @@ function piece(geom, color, m) {
 // projected shadow: every vertex slides along the sun direction onto the road plane under the rider.
 // one tiny shader, drawn once per pixel (stencil) so overlapping parts don't stack up darker
 const shadow_vs = `
+#include <common>
+#include <skinning_pars_vertex>
 uniform vec3 light;
 uniform vec3 plane_n;
 uniform vec3 plane_p;
 void main() {
+  #include <skinbase_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
   mat4 m = modelMatrix;
   #ifdef USE_INSTANCING
   m = m * instanceMatrix;
   #endif
-  vec4 wp = m * vec4(position, 1.0);
+  vec4 wp = m * vec4(transformed, 1.0);
   wp.xyz -= light * (dot(plane_n, wp.xyz - plane_p) / dot(plane_n, light));
   gl_Position = projectionMatrix * viewMatrix * wp;
 }`;
@@ -794,8 +843,14 @@ function shadow_mat(light) {
 }
 // a shadow copy of a mesh: child of it (same transform), never culled (the shadow reaches past the mesh)
 function add_shadow(mesh, mat) {
-  const s = mesh.isInstancedMesh ? new THREE.InstancedMesh(mesh.geometry, mat, mesh.count) : new THREE.Mesh(mesh.geometry, mat);
-  if (mesh.isInstancedMesh) s.instanceMatrix = mesh.instanceMatrix;
+  let s;
+  if (mesh.isSkinnedMesh) {
+    s = new THREE.SkinnedMesh(mesh.geometry, mat);
+    s.bind(mesh.skeleton, mesh.bindMatrix);   // same bones: the shadow pedals too
+  } else if (mesh.isInstancedMesh) {
+    s = new THREE.InstancedMesh(mesh.geometry, mat, mesh.count);
+    s.instanceMatrix = mesh.instanceMatrix;
+  } else s = new THREE.Mesh(mesh.geometry, mat);
   s.frustumCulled = false;
   s.renderOrder = -1;
   mesh.add(s);
@@ -825,36 +880,81 @@ function jersey_texture(base, pat, color) {
     if (pat === 'chevron') for (const y0 of [24, 70]) { g.beginPath(); g.moveTo(0, y0); g.lineTo(w / 2, y0 + 26); g.lineTo(w, y0); g.lineTo(w, y0 + 16); g.lineTo(w / 2, y0 + 42); g.lineTo(0, y0 + 16); g.fill(); }
     if (pat === 'checks') for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 ? 16 : 0; x < w; x += 32) g.fillRect(x, y, 16, 16);
     if (pat === 'rainbow') ['#1e88e5', '#e53935', '#212121', '#ffd400', '#43a047'].forEach((c, i) => { g.fillStyle = c; g.fillRect(0, 44 + i * 9, w, 9); });
+    // white strip at the bottom: the rest of the body samples it (one material for the whole rider)
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, h - 8, w, 8);
   });
 }
 const rainbow = (t) => new THREE.Color().setHSL((t * 0.6) % 1, 0.9, 0.6);
 
-// limbs: tapered smooth tubes (thick end at a, 78% at b), open ended: round joints cover the ends.
-// instances: per leg thigh, shin, crank (0-5), per arm upper arm, forearm (6-9)
-const limb_geo = new THREE.CylinderGeometry(0.78, 1, 1, 12, 1, true);
-const limb_count = 10;
-// joints: smooth spheres, scaled. knees 0-1, shoes 2-3, shoulders 4-5, elbows 6-7, gloves 8-9
-const joint_geo = new THREE.SphereGeometry(1, 12, 8);
-const joint_count = 10;
-const joint_q = new THREE.Quaternion(), joint_s = new THREE.Vector3();
-const joint_matrix = (out, p, sx, sy = sx, sz = sx) => out.compose(p, joint_q, joint_s.set(sx, sy, sz));
+// rider body: one skinned mesh (no seams at knees, elbows or neck). 15 bones, all children of a root at the
+// rider origin, posed in rider space every frame from the pedal stroke + body language:
+// root (gloves), torso, head, per leg thigh / shin / foot, per arm upper arm / forearm, per side crank
+const bone_ids = { root: 0, torso: 1, head: 2, thigh: [3, 6], shin: [4, 7], foot: [5, 8], upper: [9, 11], fore: [10, 12], crank: [13, 14] };
+const bone_count = 15;
+const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 // rider material: smooth matte lambert (no facets: riders read as people, not crystals)
 const rider_mat = (extra = {}) => new THREE.MeshLambertMaterial(extra);
 
-// merge painted pieces keeping their smooth normals
+// merge painted pieces keeping smooth normals (+ uv and skin weights when every piece has them)
 function merge_smooth(geoms) {
-  const pos = [], nor = [], col = [];
-  for (const g of geoms) {
-    pos.push(...g.attributes.position.array);
-    nor.push(...g.attributes.normal.array);
-    col.push(...g.attributes.color.array);
-  }
+  const names = ['position', 'normal', 'color', 'uv', 'skinIndex', 'skinWeight'].filter((n) => geoms.every((g) => g.attributes[n]));
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  for (const n of names) {
+    const size = geoms[0].attributes[n].itemSize;
+    const total = geoms.reduce((t, g) => t + g.attributes[n].array.length, 0);
+    const arr = n === 'skinIndex' ? new Uint16Array(total) : new Float32Array(total);
+    let o = 0;
+    for (const g of geoms) { arr.set(g.attributes[n].array, o); o += g.attributes[n].array.length; }
+    out.setAttribute(n, new THREE.BufferAttribute(arr, size));
+  }
   return out;
+}
+
+// skin weights for one piece: bones a and b, wa = weight of a (a number, or a function of the vertex position)
+const skin_p = new THREE.Vector3();
+function skin(g, a, b, wa = 1) {
+  const pos = g.attributes.position, n = pos.count;
+  const idx = new Uint16Array(n * 4), w = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const k = typeof wa === 'function' ? wa(skin_p.fromBufferAttribute(pos, i)) : wa;
+    idx[i * 4] = a; idx[i * 4 + 1] = b; w[i * 4] = k; w[i * 4 + 1] = 1 - k;
+  }
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(idx, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(w, 4));
+  return g;
+}
+// share of the way from A to B for a point (0 at A, 1 at B)
+const along = (A, B) => { const d = B.clone().sub(A), l2 = d.lengthSq(), q = new THREE.Vector3(); return (p) => q.copy(p).sub(A).dot(d) / l2; };
+// jersey print uv: the torso spans the pattern, every other piece samples the white strip at the bottom
+function print_uv(g, torso) {
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, torso ? uv.getX(i) : 0.5, torso ? 0.07 + uv.getY(i) * 0.93 : 0.02);
+  return g;
+}
+
+// leg joints for a crank angle (rider space): hip, knee, ankle, shoe centre, pedal. knee from two-segment ik
+function leg_pose(angle, side, hx, hy) {
+  const crank_len = 0.17, seg = 0.46;
+  const [bx, by] = geo.bb;
+  const fx = bx + crank_len * Math.cos(angle), fy = by - crank_len * Math.sin(angle);
+  const dx = fx - hx, dy = fy - hy, d = Math.hypot(dx, dy);
+  const half = Math.min(d, 2 * seg - 0.001) / 2, bend = Math.sqrt(seg * seg - half * half);
+  const ux = dx / d, uy = dy / d;
+  const kx = hx + ux * half - uy * bend, ky = hy + uy * half + ux * bend;
+  return { hip: v(hx, hy, side), knee: v(kx, ky, side), ankle: v(fx, fy + 0.03, side), shoe: v(fx + 0.03, fy + 0.025, side * 1.1), pedal: v(fx, fy, side * 0.7) };
+}
+// arm joints: shoulder (moves with the body) to the hand on the hoods; elbow bends out and down
+function arm_pose(arm, body_pos, body_q) {
+  const seg = 0.3;
+  const sh = arm.shoulder_local.clone().applyQuaternion(body_q).add(body_pos);
+  const d = arm.hand.clone().sub(sh);
+  const half = Math.min(d.length(), 2 * seg - 0.001) / 2, bend = Math.sqrt(seg * seg - half * half);
+  d.normalize();
+  const n = new THREE.Vector3(arm.side * 0.3, -1, 0.25);
+  n.addScaledVector(d, -n.dot(d)).normalize();
+  return { sh, el: sh.clone().addScaledVector(d, half).addScaledVector(n, bend), hand: arm.hand };
 }
 
 // look: a jersey colour, or { jersey, pattern, pattern_color, frame, rim, helmet, shoe, flame, trail } (progress.js)
@@ -866,15 +966,14 @@ function make_rider(look, light = null) {
   const accent = '#' + new THREE.Color(color).offsetHSL(0, 0, -0.18).getHexString();
   const printed = L.pattern && L.pattern !== 'plain';
   const col = {
-    jersey: color, accent, rim: L.rim && L.rim !== 'auto' ? L.rim : accent,
+    jersey: printed ? '#ffffff' : color, accent, rim: L.rim && L.rim !== 'auto' ? L.rim : accent,
     helmet: L.helmet && L.helmet !== 'auto' ? L.helmet : color, frame: L.frame || '#f2f2f2',
     tire: '#1b1b1f', skin: '#e2a878', shorts: '#1f2027', metal: '#a4aab2', white: L.pattern_color || '#ffffff', shoe: L.shoe || '#f5f5f5',
-    lens: '#2a2f3a',
+    lens: '#2a2f3a', sleeve: color,
   };
   // own materials per rider, so a rider can fade out near the camera
   const paint_mat = rider_mat({ vertexColors: true });
-  const limb_mat = rider_mat();
-  const print_mat = printed ? rider_mat({ map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : null;
+  const body_mat = printed ? rider_mat({ vertexColors: true, map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : paint_mat;
   const tube = new THREE.CylinderGeometry(1, 1, 1, 10);
   const bar = (c, r, a, b, rz) => piece(tube, c, bar_matrix(new THREE.Matrix4(), a, b, r, rz));
 
@@ -918,73 +1017,75 @@ function make_rider(look, light = null) {
     return w;
   });
 
-  // ---- upper body: one group pivoting at the hips (lean, rise out of the saddle, rock) ----
-  const hip0 = v(...geo.hip);
-  const at = (f, u, s = 0) => v(f, u, s).sub(hip0);   // body-local point
-  const torso_m = tr(at(0.03, 1.2), [-1.05, 0, 0], [1.12, 1, 0.82]);
-  const torso_geo = new THREE.CapsuleGeometry(0.15, 0.3, 6, 16);
-  const upper = [
-    piece(new THREE.SphereGeometry(0.155, 16, 10), col.shorts, tr(at(...geo.hip), [0, 0, 0], [1.15, 0.85, 1.05])),   // hips
-    bar(col.skin, 0.045, at(0.25, 1.38), at(0.31, 1.47)),                                                          // neck
-  ];
-  if (!printed) {
-    upper.push(piece(torso_geo, col.jersey, torso_m));
-    // chest band: the 'plain' pattern
-    upper.push(piece(new THREE.CylinderGeometry(0.153, 0.153, 0.07, 16, 1, true), col.white, tr(at(0.07, 1.23), [-1.05, 0, 0], [1.14, 1, 0.84])));
-  }
-  const body = new THREE.Group();
-  const body_mesh = new THREE.Mesh(merge_smooth(upper), paint_mat);
-  body.add(body_mesh);
-  let torso_mesh = null;
-  if (printed) {
-    // printed jersey: its own mesh with the pattern texture
-    torso_mesh = new THREE.Mesh(torso_geo, print_mat);
-    torso_mesh.applyMatrix4(torso_m);
-    body.add(torso_mesh);
-  }
-  // head on a neck pivot (nods, looks around): face, aero helmet with vents, sunglasses
-  const neck = at(0.3, 1.45);
-  const hd = (f, u, s = 0) => at(f, u, s).sub(neck);
-  const head_mesh = new THREE.Mesh(merge_smooth([
-    piece(new THREE.SphereGeometry(0.1, 16, 12), col.skin, tr(hd(0.37, 1.5), [0, 0, 0], [0.95, 1.05, 1.05])),
-    piece(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), col.helmet, tr(hd(0.34, 1.53), [0.25, 0, 0], [0.135, 0.12, 0.175])),
-    ...[-0.045, 0.045].map((s) => piece(new THREE.CapsuleGeometry(0.01, 0.09, 3, 6), col.white, tr(hd(0.35, 1.635, s), [Math.PI / 2, 0, 0]))),   // vents
-    piece(new THREE.CapsuleGeometry(0.024, 0.13, 4, 10), col.lens, tr(hd(0.455, 1.515), [0, 0, Math.PI / 2])),   // sunglasses
-  ]), paint_mat);
-  const head = new THREE.Group();
-  head.position.copy(neck);
-  head.add(head_mesh);
-  body.add(head);
-  body.position.copy(hip0);
-  g.add(body);
+  // ---- the body in its bind pose (rider space): seated, cranks level, arms on the hoods ----
+  const hip0 = v(...geo.hip), neck0 = v(0.3, 1.45);
+  const B = bone_ids;
+  const parts = [];
+  // add a piece with skin weights (and print uv: only the torso carries the pattern)
+  const add = (geom, a, b, wa, torso = false) => parts.push(print_uv(skin(geom, a, b, wa), torso));
+  const limb = (c, A, Bp, ra, rb) => piece(new THREE.CylinderGeometry(rb, ra, 1, 14, 4, true), c, bar_matrix(new THREE.Matrix4(), A, Bp, 1));
+  const ball = (c, at, sx, sy = sx, sz = sx) => piece(new THREE.SphereGeometry(1, 14, 10), c, tr(at, [0, 0, 0], [sx, sy, sz]));
 
-  // ---- limbs + joints: two instanced meshes, posed every frame (legs from the crank, arms by two-bone ik) ----
-  const limbs = new THREE.InstancedMesh(limb_geo, limb_mat, limb_count);
-  const joints = new THREE.InstancedMesh(joint_geo, limb_mat, joint_count);
-  for (const m of [limbs, joints]) {
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    m.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 1.4);   // they move: fixed generous bounds
-    g.add(m);
+  // torso + hips (torso bone), neck blending into the head, head with helmet, vents and sunglasses
+  add(ball(col.shorts, hip0, 0.155 * 1.15, 0.155 * 0.85, 0.155 * 1.05), B.torso, B.torso, 1);
+  add(piece(new THREE.CapsuleGeometry(0.15, 0.3, 6, 16), col.jersey, tr(v(0.03, 1.2), [-1.05, 0, 0], [1.12, 1, 0.82])), B.torso, B.torso, 1, true);
+  if (!printed) add(piece(new THREE.CylinderGeometry(0.153, 0.153, 0.07, 16, 1, true), col.white, tr(v(0.07, 1.23), [-1.05, 0, 0], [1.14, 1, 0.84])), B.torso, B.torso, 1);
+  const n0 = v(0.25, 1.38), n1 = v(0.31, 1.47), tn = along(n0, n1);
+  add(limb(col.skin, n0, n1, 0.05, 0.045), B.torso, B.head, (q) => 1 - sstep(0.1, 0.9, tn(q)));
+  add(ball(col.skin, v(0.37, 1.5), 0.095, 0.105, 0.105), B.head, B.head, 1);
+  add(piece(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), col.helmet, tr(v(0.34, 1.53), [0.25, 0, 0], [0.135, 0.12, 0.175])), B.head, B.head, 1);
+  for (const s of [-0.045, 0.045]) add(piece(new THREE.CapsuleGeometry(0.01, 0.09, 3, 6), col.white, tr(v(0.35, 1.635, s), [Math.PI / 2, 0, 0])), B.head, B.head, 1);
+  add(piece(new THREE.CapsuleGeometry(0.024, 0.13, 4, 10), col.lens, tr(v(0.455, 1.515), [0, 0, Math.PI / 2])), B.head, B.head, 1);
+
+  // legs: thigh and shin blend into each other around the knee, shoe on the foot bone, crank + pedal on the crank bone
+  const bind_angle = [0, Math.PI];
+  const legs = [-1, 1].map((s, i) => {
+    const side = s * 0.12, P = leg_pose(bind_angle[i], side, ...geo.hip);
+    const th = along(P.hip, P.knee), sh = along(P.knee, P.ankle);
+    add(limb(col.shorts, P.hip, P.knee, 0.078, 0.06), B.thigh[i], B.shin[i], (q) => 1 - 0.5 * sstep(0.7, 1, th(q)));
+    add(ball(col.skin, P.knee, 0.058), B.thigh[i], B.shin[i], 0.5);
+    add(limb(col.skin, P.knee, P.ankle, 0.055, 0.04), B.shin[i], B.thigh[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, sh(q)));
+    add(ball(col.shoe, P.shoe, 0.045, 0.035, 0.125), B.foot[i], B.foot[i], 1);
+    const bb = v(geo.bb[0], geo.bb[1], side * 0.7);
+    add(bar(col.metal, 0.014, bb, P.pedal), B.crank[i], B.crank[i], 1);
+    add(piece(new THREE.BoxGeometry(0.06, 0.012, 0.09), col.tire, tr(P.pedal.clone().setX(side * 0.95))), B.crank[i], B.crank[i], 1);
+    return { side, i, bb, thigh_dir: P.knee.clone().sub(P.hip).normalize(), shin_dir: P.ankle.clone().sub(P.knee).normalize(), hip: P.hip, knee: P.knee, shoe: P.shoe };
+  });
+  // arms: shoulder ball between torso and upper arm, elbow between upper arm and forearm, glove on the bars (root)
+  const arms = [-1, 1].map((s, i) => {
+    const arm = { side: s, i, shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.17).sub(hip0), hand: v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2) };
+    const A = arm_pose(arm, hip0, new THREE.Quaternion());
+    const tu = along(A.sh, A.el), tf = along(A.el, A.hand);
+    add(ball(col.sleeve, A.sh, 0.072), B.torso, B.upper[i], 0.5);
+    add(limb(col.sleeve, A.sh, A.el, 0.058, 0.047), B.upper[i], B.fore[i], (q) => 1 - 0.5 * sstep(0.7, 1, tu(q)));
+    add(ball(col.skin, A.el, 0.046), B.upper[i], B.fore[i], 0.5);
+    add(limb(col.skin, A.el, A.hand, 0.045, 0.035), B.fore[i], B.upper[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, tf(q)));
+    add(ball(col.tire, A.hand, 0.045, 0.04, 0.06), B.root, B.root, 1);
+    return Object.assign(arm, { sh: A.sh, el: A.el, upper_dir: A.el.clone().sub(A.sh).normalize(), fore_dir: A.hand.clone().sub(A.el).normalize() });
+  });
+
+  // bones at their bind positions (no rotation), then bind the skeleton
+  const bones = Array.from({ length: bone_count }, () => new THREE.Bone());
+  for (let k = 1; k < bone_count; k++) bones[0].add(bones[k]);
+  bones[B.torso].position.copy(hip0);
+  bones[B.head].position.copy(neck0);
+  for (const l of legs) {
+    bones[B.thigh[l.i]].position.copy(l.hip);
+    bones[B.shin[l.i]].position.copy(l.knee);
+    bones[B.foot[l.i]].position.copy(l.shoe);
+    bones[B.crank[l.i]].position.copy(l.bb);
   }
-  const legs = [-1, 1].map((s, i) => ({ side: s * 0.12, idx: i * 3, j: i }));
-  const arms = [-1, 1].map((s, i) => ({
-    side: s, idx: 6 + i * 2, j: i,
-    shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.17).sub(hip0),
-    hand: v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2),
-  }));
-  const c3 = new THREE.Color();
-  legs.forEach((l) => {
-    [col.shorts, col.skin, col.metal].forEach((c, k) => limbs.setColorAt(l.idx + k, c3.set(c)));
-    joints.setColorAt(l.j, c3.set(col.skin));          // knee
-    joints.setColorAt(2 + l.j, c3.set(col.shoe));      // shoe
-  });
-  arms.forEach((a) => {
-    [col.jersey, col.skin].forEach((c, k) => limbs.setColorAt(a.idx + k, c3.set(c)));
-    joints.setColorAt(4 + a.j, c3.set(col.jersey));    // shoulder
-    joints.setColorAt(6 + a.j, c3.set(col.skin));      // elbow
-    joints.setColorAt(8 + a.j, c3.set(col.tire));      // glove
-    joints.setMatrixAt(8 + a.j, joint_matrix(limb_m, a.hand, 0.045, 0.04, 0.06));
-  });
+  for (const a of arms) { bones[B.upper[a.i]].position.copy(a.sh); bones[B.fore[a.i]].position.copy(a.el); }
+  const skinned = new THREE.SkinnedMesh(merge_smooth(parts), body_mat);
+  skinned.add(bones[0]);
+  skinned.bind(new THREE.Skeleton(bones));
+  skinned.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 1.4);   // posed every frame: fixed generous bounds
+  g.add(skinned);
+
+  // pose holders: body (pivot at the hips) and head (pivot at the neck) carry the body language
+  const body = new THREE.Group();
+  body.position.copy(hip0);
+  const head = new THREE.Group();
 
   // nitro flame behind the rear wheel, visible only while boosting
   const flame = new THREE.Mesh(
@@ -996,16 +1097,17 @@ function make_rider(look, light = null) {
   flame.visible = false;
   g.add(flame);
 
-  // projected shadow of bike, body, head and limbs
+  // projected shadow of bike and body
   const shadow = light ? shadow_mat(light) : null;
-  if (shadow) for (const m of [bike_mesh, body_mesh, torso_mesh, head_mesh, limbs, joints]) if (m) add_shadow(m, shadow);
+  if (shadow) for (const m of [bike_mesh, skinned]) add_shadow(m, shadow);
 
   // the bike group sits inside a root group: the root is placed on the road, the bike rolls inside it
   const root = new THREE.Group();
   root.add(g);
   const model = {
-    group: root, bike: g, body, head, arms, legs, limbs, joints, wheels, flame, shadow, look: L, faded: false,
-    mats: [paint_mat, limb_mat, print_mat].filter(Boolean),
+    group: root, bike: g, body, head, arms, legs, bones, skinned, neck_local: neck0.clone().sub(hip0), bind_angle,
+    wheels, flame, shadow, look: L, faded: false,
+    mats: [...new Set([paint_mat, body_mat])],
     extra_mats: [blur_mat, flame.material, shadow].filter(Boolean),   // not faded with the rider
     // smoothed animation state (look: glancing around now and then)
     anim: { effort: 0.6, stand: 0, coast: 0, strain: 0, prev_v: 0, accel: 0, t: Math.random() * 10, look_t: 3 + Math.random() * 8, look: 0, look_to: 0 },
@@ -1016,48 +1118,34 @@ function make_rider(look, light = null) {
 // free a rider's materials (geometry is freed with the scene or here by the caller)
 function dispose_rider(model) {
   for (const m of [...model.mats, ...model.extra_mats]) { if (m.map && m.map !== blur_tex) m.map.dispose(); m.dispose(); }
+  model.skinned.skeleton.dispose();
 }
 
-// thigh + shin from hip to pedal; knee from two-segment inverse kinematics (side view, up positive)
-function pose_leg(model, leg, angle, hx = geo.hip[0], hy = geo.hip[1]) {
-  const crank_len = 0.17, seg = 0.46;
-  const [bx, by] = geo.bb;
-  const fx = bx + crank_len * Math.cos(angle);
-  const fy = by - crank_len * Math.sin(angle);
-  const dx = fx - hx, dy = fy - hy;
-  const d = Math.hypot(dx, dy);
-  const half = Math.min(d, 2 * seg - 0.001) / 2;
-  const bend = Math.sqrt(seg * seg - half * half);
-  const ux = dx / d, uy = dy / d;
-  const kx = hx + ux * half - uy * bend, ky = hy + uy * half + ux * bend;
-  const s = leg.side, L = model.limbs, J = model.joints, i = leg.idx;
-  const knee = v(kx, ky, s);
-  L.setMatrixAt(i, bar_matrix(limb_m, v(hx, hy, s), knee, 0.078));            // thigh (thick at the hip)
-  L.setMatrixAt(i + 1, bar_matrix(limb_m, knee, v(fx, fy + 0.03, s), 0.055));  // shin (calf at the knee)
-  L.setMatrixAt(i + 2, bar_matrix(limb_m, v(bx, by, s * 0.7), v(fx, fy, s * 0.7), 0.014));   // crank
-  J.setMatrixAt(leg.j, joint_matrix(limb_m, knee, 0.058));
-  J.setMatrixAt(2 + leg.j, joint_matrix(limb_m, v(fx + 0.03, fy + 0.025, s * 1.1), 0.045, 0.035, 0.125));   // shoe
-}
-
-// arm: shoulder (moves with the body) to the fixed hand; elbow bends out and down
-const arm_tmp = { sh: new THREE.Vector3(), d: new THREE.Vector3(), n: new THREE.Vector3(), el: new THREE.Vector3() };
-function pose_arm(model, arm, body) {
-  const seg = 0.3;
-  const { sh, d, n, el } = arm_tmp;
-  sh.copy(arm.shoulder_local).applyQuaternion(body.quaternion).add(body.position);
-  d.subVectors(arm.hand, sh);
-  const len = d.length();
-  const half = Math.min(len, 2 * seg - 0.001) / 2;
-  const bend = Math.sqrt(seg * seg - half * half);
-  d.normalize();
-  // bend direction: down and slightly outwards, made perpendicular to the arm
-  n.set(arm.side * 0.3, -1, 0.25);
-  n.addScaledVector(d, -n.dot(d)).normalize();
-  el.copy(sh).addScaledVector(d, half).addScaledVector(n, bend);
-  model.limbs.setMatrixAt(arm.idx, bar_matrix(limb_m, sh, el, 0.058));
-  model.limbs.setMatrixAt(arm.idx + 1, bar_matrix(limb_m, el, arm.hand, 0.045));
-  model.joints.setMatrixAt(4 + arm.j, joint_matrix(limb_m, sh, 0.072));
-  model.joints.setMatrixAt(6 + arm.j, joint_matrix(limb_m, el, 0.046));
+// pose every bone from the crank angle, the hips (hx, hy) and the body / head holders
+const x_axis = new THREE.Vector3(1, 0, 0);
+const pose_d = new THREE.Vector3();
+function pose_bones(model, crank, hx, hy) {
+  const bn = model.bones, B = bone_ids, b = model.body;
+  bn[B.torso].position.copy(b.position);
+  bn[B.torso].quaternion.copy(b.quaternion);
+  bn[B.head].position.copy(model.neck_local).applyQuaternion(b.quaternion).add(b.position);
+  bn[B.head].quaternion.copy(b.quaternion).multiply(model.head.quaternion);
+  for (const l of model.legs) {
+    const angle = crank + l.i * Math.PI, P = leg_pose(angle, l.side, hx, hy);
+    bn[B.thigh[l.i]].position.copy(P.hip);
+    bn[B.thigh[l.i]].quaternion.setFromUnitVectors(l.thigh_dir, pose_d.subVectors(P.knee, P.hip).normalize());
+    bn[B.shin[l.i]].position.copy(P.knee);
+    bn[B.shin[l.i]].quaternion.setFromUnitVectors(l.shin_dir, pose_d.subVectors(P.ankle, P.knee).normalize());
+    bn[B.foot[l.i]].position.copy(P.shoe);
+    bn[B.crank[l.i]].quaternion.setFromAxisAngle(x_axis, -(angle - model.bind_angle[l.i]));
+  }
+  for (const a of model.arms) {
+    const A = arm_pose(a, b.position, b.quaternion);
+    bn[B.upper[a.i]].position.copy(A.sh);
+    bn[B.upper[a.i]].quaternion.setFromUnitVectors(a.upper_dir, pose_d.subVectors(A.el, A.sh).normalize());
+    bn[B.fore[a.i]].position.copy(A.el);
+    bn[B.fore[a.i]].quaternion.setFromUnitVectors(a.fore_dir, pose_d.subVectors(A.hand, A.el).normalize());
+  }
 }
 
 // body language from effort: ref_watts = what this rider can hold comfortably (ftp / bot average).
@@ -1091,8 +1179,6 @@ function animate_rider(model, r, dt, ref_watts, boost) {
   const breathe = Math.sin(a.t * (1.6 + 6 * a.strain)) * (0.006 + 0.012 * a.strain);
   b.position.set(stroke * 0.03 * a.stand, hy + breathe, -hx);
   // legs follow the hips (standing lifts them), arms follow the shoulders
-  model.legs.forEach((leg, i) => pose_leg(model, leg, crank + i * Math.PI, hx, hy));
-  for (const arm of model.arms) pose_arm(model, arm, b);
   // head: drops a little when straining, nods with hard strokes, glances to the side now and then
   a.look_t -= dt;
   if (a.look_t < 0) {
@@ -1101,8 +1187,8 @@ function animate_rider(model, r, dt, ref_watts, boost) {
   }
   a.look += (a.look_to * (1 - a.strain) - a.look) * k(5);
   model.head.rotation.set(-0.12 * a.strain + Math.sin(crank * 2) * 0.03 * a.strain, a.look, 0);
-  model.limbs.instanceMatrix.needsUpdate = true;
-  model.joints.instanceMatrix.needsUpdate = true;
+  // legs follow the hips (standing lifts them), arms follow the shoulders: all through the skeleton
+  pose_bones(model, crank, hx, hy);
 }
 
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
@@ -1280,6 +1366,23 @@ export function create_kit(canvas, opts = {}) {
 
   // hills relative to the road: flat along the road, rolling hills growing towards the sides (a valley).
   // flat zones (clearings) pull the hills down to road level
+  // farmland: open plains every ~2.4 km of (visual) road, 0..1 strength with soft edges (hash of the zone index)
+  const farm_gap = 2400;
+  function farm_zone(k) {
+    if (!sc.plains || k < 1 || hash2(k, 41) > 0.65) return null;
+    return { k, z: -(k * farm_gap + (hash2(k, 42) - 0.5) * 600), half: 420 + hash2(k, 43) * 320, side: hash2(k, 44) < 0.5 ? -1 : 1 };
+  }
+  function farm(z) {
+    if (!sc.plains) return 0;
+    const k = Math.round(-z / farm_gap);
+    let f = 0;
+    for (let j = k - 1; j <= k + 1; j++) {
+      const zn = farm_zone(j);
+      if (zn) f = Math.max(f, 1 - smoothstep(zn.half - 140, zn.half, Math.abs(z - zn.z)));
+    }
+    return f;
+  }
+
   function ground(x, z) {
     const rx = x - road_x(z);
     const ry = road_y(z);
@@ -1291,7 +1394,9 @@ export function create_kit(canvas, opts = {}) {
       ramp *= smoothstep(f.r * 0.6, f.r, dist);
     }
     const n = vnoise(x / 50, z / 50) * 0.7 + vnoise(x / 16 + 31, z / 16) * 0.3;
-    const h = ry - 0.05 + n * (5 + d * 0.3) * ramp;
+    // farmland flattens the near hills into plains (the far ones stay as a skyline)
+    const flat = 1 - 0.88 * farm(z) * (1 - smoothstep(160, 420, d));
+    const h = ry - 0.05 + n * (5 + d * 0.3) * ramp * flat;
     // rivers and lakes: the ground sinks to a bed under the water level
     const w = wet(x, z);
     return w > 0 ? h + (water_bed(x, z) - h) * w : h;
@@ -1347,6 +1452,10 @@ export function create_kit(canvas, opts = {}) {
   const z_step = 5;
   const mid = xs.length / 2;
 
+  // field colours per season (winter: snowy fields stay the theme's snow)
+  const field_pal = sc.season === 'winter' ? null : sc.season === 'autumn'
+    ? ['#c9a95a', '#9c7b4c', '#b99c5c', '#7c5e3e', '#a7ad5a', '#d0b468']
+    : ['#d8bf5e', '#7fb04a', '#a6ca5c', '#8c6c48', '#e3d14e', '#6aa142', '#c4d66a'];
   function build_terrain(geom, z0) {
     const rows = Math.round(chunk_len / z_step);
     const row0 = Math.round(-z0 / z_step);
@@ -1383,6 +1492,13 @@ export function create_kit(canvas, opts = {}) {
           const r = hash2(Math.round(tri[0][0] * 10 + tri[1][2]), Math.round(tri[2][2] * 10 + cy * 7));
           const list = cy > 22 + r * 14 ? theme.high : theme.grass;
           palette_color(list, r);
+          // farmland: fields in their own colours behind the fences, with crop rows
+          const tz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3, tx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3 - road_x(tz);
+          if (field_pal && Math.abs(tx) > road_edge + 3.6 && farm(tz) > 0.55) {
+            const fh = hash2(Math.floor(tx / 48) + 300, Math.floor(tz / 75) + 300);
+            tmp_color.set(field_pal[Math.floor(fh * field_pal.length)]).offsetHSL(0, mood.sat, mood.light + (r - 0.5) * 0.03);
+            if (Math.floor(tz / 5) % 2) tmp_color.multiplyScalar(0.93);
+          }
           for (const p of tri) {
             pos.push(p[0], p[1], p[2]);
             col.push(tmp_color.r * p.shade, tmp_color.g * p.shade, tmp_color.b * p.shade);
@@ -1505,6 +1621,7 @@ export function create_kit(canvas, opts = {}) {
       const kind = rnd();
       const cr = rnd();
       if (in_clearing(x, z)) continue;   // keep clearings (forks) open
+      if (farm(z) > 0.3 && hash2(Math.round(x), Math.round(z)) < 0.94) continue;   // farmland: open fields
       const y = ground(x, z) - 0.15;
       if (kind < theme.mix.round) {
         put('crown', x, y, z, s, sy, rot, palette_color(theme.round, cr));
@@ -1521,7 +1638,7 @@ export function create_kit(canvas, opts = {}) {
       const { z, rx } = spot(2, rnd() ** 1.3 * 45);
       const x = road_x(z) + rx;
       const s = 0.7 + rnd() * 1.1, rot = rnd() * 6.28, cr = rnd();
-      if (in_clearing(x, z)) continue;
+      if (in_clearing(x, z) || (farm(z) > 0.3 && cr < 0.75)) continue;
       put('bush', x, ground(x, z) - 0.1, z, s, 1, rot, palette_color(theme.round, cr).offsetHSL(0, 0, -0.04));
     }
     // boulder piles in the woods, a few close to the road
@@ -1538,6 +1655,36 @@ export function create_kit(canvas, opts = {}) {
       const x = road_x(z) + rx;
       put('tuft', x, ground(x, z) - 0.05, z, 0.8 + rnd() * 1.4, 0.7 + rnd(), rnd() * 6.28,
         palette_color(theme.grass, rnd()).offsetHSL(0, 0.05, -0.08));
+    }
+    // farmland: wooden fences along both sides (post every 3 m, two rails), round hay bales, the barn + silo
+    for (let d = Math.ceil(-z0 / 3) * 3; d < -z0 + chunk_len && used.fpost < props.fence_per_chunk - 2; d += 3) {
+      const z = -d, zm = z - 1.5;
+      if (farm(z) < 0.6 || z < road_end || wet(road_x(z), z) > 0) continue;
+      for (const side of [-1, 1]) {
+        const off = side * (road_edge + 3.4);
+        const x = road_x(z) + off;
+        if (in_clearing(x, z)) continue;
+        put('fpost', x, ground(x, z) - 0.05, z, 1, 1, heading(z));
+        if (farm(zm - 1.5) < 0.6) continue;
+        const xm = road_x(zm) + off, ym = ground(xm, zm);
+        for (const h of [0.45, 0.88]) put('rail', xm, ym + h, zm, 1, 1, heading(zm));
+      }
+    }
+    if (sc.season !== 'winter') {
+      for (let k = 0; k < props.bales_per_chunk; k++) {
+        const z = z0 - rnd() * chunk_len, side = rnd() < 0.5 ? -1 : 1, rx = side * (road_edge + 9 + rnd() * 70), rot = rnd() * 6.28;
+        const x = road_x(z) + rx;
+        if (farm(z) < 0.7 || in_clearing(x, z) || rnd() < 0.3) continue;
+        put('bale', x, ground(x, z) - 0.08, z, 1, 1, rot, palette_color(['#d8b45a', '#cfa94e', '#e0c06a'], rnd()));
+      }
+    }
+    for (const j of [Math.round(-z0 / farm_gap), Math.round(-(z0 - chunk_len) / farm_gap)]) {
+      const zn = farm_zone(j);
+      if (!zn || zn.z > z0 || zn.z <= z0 - chunk_len || used.barn) continue;
+      const x = road_x(zn.z) + zn.side * (road_edge + 26);
+      put('barn', x, ground(x, zn.z) - 0.2, zn.z, 1, 1, heading(zn.z) + zn.side * Math.PI / 2);
+      const xs2 = x + zn.side * 9, zs = zn.z - 8;
+      put('silo', xs2, ground(xs2, zs) - 0.2, zs, 1, 1, 0);
     }
     // white roadside posts every 25 m: strong speed cue (only where there is a road)
     const first = Math.ceil(-z0 / 25) * 25;
@@ -1573,8 +1720,19 @@ export function create_kit(canvas, opts = {}) {
     if (!wild) return;
     const w = wild.slots[slot];
     const rnd = seeded(chunk_i * 15485863 + 3);
-    for (const o of [w.elk, ...w.deer, ...w.hikers]) o.root.visible = false;
-    if (rnd() < theme.animals) {
+    for (const o of [w.elk, ...w.deer, ...w.hikers, ...w.cows]) o.root.visible = false;
+    const zc = z0 - chunk_len / 2;
+    if (farm(zc) > 0.6 && sc.season !== 'winter') {
+      // a small herd grazing behind the fence (cows don't bolt)
+      const side = rnd() < 0.5 ? -1 : 1, rx = side * (road_edge + 9 + rnd() * 22), n = 2 + Math.floor(rnd() * 4);
+      w.cows.slice(0, n).forEach((a, k) => {
+        a.z = zc + (rnd() - 0.5) * 40;
+        a.x = road_x(a.z) + rx + side * rnd() * 14;
+        if (in_clearing(a.x, a.z)) return;
+        Object.assign(a, { yaw: rnd() * 6.28, state: rnd() < 0.7 ? 'graze' : 'look', timer: 2 + rnd() * 6, skittish: false, fled: false, side });
+        a.root.visible = true;
+      });
+    } else if (rnd() < theme.animals) {
       const herd = rnd() < 0.4 ? [w.elk] : [w.deer[0], w.deer[1]];
       const side = rnd() < 0.5 ? -1 : 1;
       const rx = side * (road_edge + 9 + rnd() * 26), z = z0 - 10 - rnd() * (chunk_len - 20);
@@ -1605,7 +1763,7 @@ export function create_kit(canvas, opts = {}) {
   function update_wild(dt, cam_z) {
     if (!wild) return;
     for (const w of wild.slots) {
-      for (const a of [w.elk, ...w.deer]) {
+      for (const a of [w.elk, ...w.deer, ...w.cows]) {
         if (!a.root.visible) continue;
         a.t += dt;
         a.timer -= dt;
@@ -1626,7 +1784,7 @@ export function create_kit(canvas, opts = {}) {
           a.x -= Math.sin(a.yaw) * speed * dt;
           a.z -= Math.cos(a.yaw) * speed * dt;
           // wandering animals turn back before they reach the road
-          if (a.state === 'walk' && Math.abs(a.x - road_x(a.z)) < road_edge + 6) a.yaw += Math.PI;
+          if (a.state === 'walk' && Math.abs(a.x - road_x(a.z)) < road_edge + 6) { a.yaw += Math.PI; a.x += Math.sign(a.x - road_x(a.z)) * 0.5; }
         }
         animate_animal(a, dt, speed);
         a.root.position.set(a.x, ground(a.x, a.z) - 0.05, a.z);
@@ -2223,6 +2381,49 @@ export function create_kit(canvas, opts = {}) {
       g.add(h);
     }
   }
+  // wind turbines: two or three per farm zone, far out in the fields, blades turning slowly
+  const farms = new Map();
+  const turbine_mat = flat_mat('#eef0f2');
+  function make_turbine(h) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.6, h, 8).translate(0, h / 2, 0), turbine_mat));
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(2, 2, 5).translate(0, h, 0.5), turbine_mat));
+    const rotor = new THREE.Group();
+    rotor.position.set(0, h, -2.2);
+    for (let b = 0; b < 3; b++) {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(1.2, h * 0.48, 0.3).translate(0, h * 0.24, 0), turbine_mat);
+      blade.rotation.z = (b * Math.PI * 2) / 3;
+      rotor.add(blade);
+    }
+    g.add(rotor);
+    g.userData.rotor = rotor;
+    return g;
+  }
+  function update_farms(dt, cz) {
+    if (!sc.plains) return;
+    const k0 = Math.round(-cz / farm_gap);
+    for (let k = k0; k <= k0 + 1; k++) {
+      const zn = farm_zone(k);
+      if (!zn || farms.has(k) || zn.z < cz - 1500 || zn.z > cz + 200) continue;
+      const g = new THREE.Group(), rnd = seeded(k * 131 + 7);
+      const n = 2 + Math.floor(rnd() * 2);
+      for (let t = 0; t < n; t++) {
+        const z = zn.z + (t - (n - 1) / 2) * 140 + (rnd() - 0.5) * 40, x = road_x(z) - zn.side * (160 + rnd() * 140);
+        const tb = make_turbine(38 + rnd() * 12);
+        tb.position.set(x, ground(x, z) - 0.5, z);
+        tb.rotation.y = 0.4;
+        tb.userData.rotor.rotation.z = rnd() * 6;
+        g.add(tb);
+      }
+      scene.add(g);
+      farms.set(k, g);
+    }
+    for (const [k, g] of farms) {
+      if (Math.abs(k - k0) > 1) { scene.remove(g); g.traverse((c) => c.geometry?.dispose()); farms.delete(k); continue; }
+      for (const tb of g.children) tb.userData.rotor.rotation.z += dt * 0.9;
+    }
+  }
+
   function update_villages(cz) {
     if (!sc.village) return;
     const k0 = Math.round(-cz / village_gap);
@@ -2305,6 +2506,7 @@ export function create_kit(canvas, opts = {}) {
     if (sc.dusk) update_dusk(dt, cx, cz);
     update_water(cz);
     update_villages(cz);
+    update_farms(dt, cz);
     if (crowd.length) update_crowd(dt, cz); else ambience.crowd = 0;
     ambience.rain = !!precip && sc.season !== 'winter';
     ambience.birds = theme.birds && sc.weather === 'clear' && (!sc.dusk || t_total < dusk_s * 0.5);

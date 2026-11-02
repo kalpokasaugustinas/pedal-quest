@@ -5,7 +5,7 @@ A browser game controlled by your indoor bike trainer and heart rate strap. Your
 **Play:** https://kalpokasaugustinas.github.io/pedal-quest/
 
 ## Games
-Pick a game from the tabs at the top. Bluetooth stays connected while you switch. All games use the same low-poly 3D world. Scenery defaults to 🎲 Surprise me: every ride rolls a theme, a season, the weather, sometimes a sunset ride, rivers with bridges, lakes and villages.
+Pick a game from the tabs at the top. Bluetooth stays connected while you switch. All games use the same low-poly 3D world. Scenery defaults to 🎲 Surprise me: every ride rolls a theme, a season, the weather, sometimes a sunset ride, rivers with bridges, lakes, villages and farmland (fields, fences, hay bales, barns, wind turbines, cows).
 
 - 🏁 **Race**: 3D race against 5 bots with drafting. Bots race with tactics (attack when you fade, chase breakaways, sit in for the sprint) but stick to their average watts. Nitro charges while you keep your heart rate at or above a target set from your own race effort (no upper limit: riding harder never hurts).
 - 🔀 **Crossroads**: the road forks into 3 real paths each stage. Each shows the watts to hold and the points it pays. Do the math.
