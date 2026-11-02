@@ -9,15 +9,28 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
+
+<!-- living cycling scene behind the menus (js/menu_bg.js) -->
+<canvas id="menu-bg" class="menu-bg" aria-hidden="true"></canvas>
 
 <!-- top bar: game picker (hidden while playing) -->
 <header class="topbar">
   <div class="topbar-row">
-    <span class="brand">🚴 Pedal Quest</span>
-    <span id="version">build 30 · 2026-11-01 20:13</span>
+    <div class="brand">
+      <svg class="brand-wheel" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="4"/>
+        <path d="M20 5v30M5 20h30M9.4 9.4l21.2 21.2M30.6 9.4L9.4 30.6" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="20" cy="20" r="3.5" fill="currentColor"/>
+      </svg>
+      <div><div class="brand-name">Pedal <span>Quest</span></div><span id="version">build 31 · 2026-11-02 09:20</span></div>
+    </div>
+    <div id="menu-icons" class="menu-icons"></div>
   </div>
   <nav id="game-nav" aria-label="games"></nav>
 </header>
@@ -125,6 +138,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=30"></script>
+<script type="module" src="js/main.js?v=31"></script>
 </body>
 </html>

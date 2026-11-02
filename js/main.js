@@ -1,30 +1,34 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=30';
-import { control } from './ble.js?v=30';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=30';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=30';
-import { stats_html } from './stats.js?v=30';
-import { set_rider_mass, steady_speed } from './physics.js?v=30';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=30';
-import * as ride_log from './ride_log.js?v=30';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=30';
-import * as daily from './daily.js?v=30';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=30';
-import { rider_preview, ambience } from './kit3d.js?v=30';
-import race from './games/race.js?v=30';
-import crossroads from './games/crossroads.js?v=30';
-import summit from './games/summit.js?v=30';
-import pulse from './games/pulse.js?v=30';
-import spinbeat from './games/spinbeat.js?v=30';
-import escape from './games/escape.js?v=30';
-import sprint from './games/sprint.js?v=30';
-import workout from './games/workout.js?v=30';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=31';
+import { control } from './ble.js?v=31';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=31';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=31';
+import { stats_html } from './stats.js?v=31';
+import { set_rider_mass, steady_speed } from './physics.js?v=31';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=31';
+import * as ride_log from './ride_log.js?v=31';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=31';
+import * as daily from './daily.js?v=31';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=31';
+import { rider_preview, ambience } from './kit3d.js?v=31';
+import { start_menu_bg } from './menu_bg.js?v=31';
+import race from './games/race.js?v=31';
+import crossroads from './games/crossroads.js?v=31';
+import summit from './games/summit.js?v=31';
+import pulse from './games/pulse.js?v=31';
+import spinbeat from './games/spinbeat.js?v=31';
+import escape from './games/escape.js?v=31';
+import sprint from './games/sprint.js?v=31';
+import workout from './games/workout.js?v=31';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
 const main_games = ['race', 'crossroads', 'sprint', 'workout'];
 const $ = (id) => document.getElementById(id);
+
+// animated cycling scene behind the menus (stopped while a game runs)
+const menu_bg = start_menu_bg($('menu-bg'), look);
 
 // test helper: ?warp=20 runs game time 20x faster (physics stays stable via sub-steps)
 const warp = clamp(+new URLSearchParams(location.search).get('warp') || 1, 1, 100);
@@ -34,6 +38,7 @@ function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   document.body.classList.toggle('playing', id === 'screen-play');
   document.body.classList.toggle('results', id === 'screen-results');
+  menu_bg.show(id !== 'screen-play');
   window.scrollTo(0, 0);
 }
 
@@ -77,11 +82,17 @@ let garage_view = false;
 
 function render_nav() {
   const shown = games.filter((g) => main_games.includes(g.id) || g === current);
+  // game select: one card per game
   $('game-nav').innerHTML = shown
-    .map((g) => `<button data-id="${g.id}" class="${g === current && !stats_view && !garage_view ? 'on' : ''}"><span class="nav-icon">${g.icon}</span>${g.name}</button>`)
-    .join('') + `<button data-id="stats" class="${stats_view ? 'on' : ''}"><span class="nav-icon">📊</span>Stats</button>`
-    + `<button data-id="garage" class="${garage_view ? 'on' : ''}"><span class="nav-icon">🎨</span>Garage</button>`;
-  $('game-nav').querySelectorAll('button').forEach((b) => {
+    .map((g) => `<button data-id="${g.id}" class="game-card${g === current && !stats_view && !garage_view ? ' on' : ''}"><span class="gc-icon">${g.icon}</span><span class="gc-name">${g.name}</span></button>`)
+    .join('');
+  // top right: level badge with pp progress, stats and garage
+  const li = level_info(pp_state().total);
+  $('menu-icons').innerHTML = `<button data-id="garage" class="lvl-chip" aria-label="level ${li.level}, open garage"><b>${li.level}</b>
+      <span><small>LEVEL</small><i><em style="width:${Math.round((li.into / li.need) * 100)}%"></em></i></span></button>`
+    + `<button data-id="stats" class="icon-btn${stats_view ? ' on' : ''}" aria-label="stats">📊</button>`
+    + `<button data-id="garage" class="icon-btn${garage_view ? ' on' : ''}" aria-label="garage">🎨</button>`;
+  document.querySelectorAll('#game-nav button, #menu-icons button').forEach((b) => {
     b.onclick = () => { location.hash = b.dataset.id; };
   });
   $('game-nav').querySelector('.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
@@ -144,7 +155,7 @@ function render_garage() {
       return `<button class="sw${lk[k] === id ? ' on' : ''}${locked ? ' locked' : ''}" data-slot="${k}" data-id="${id}" ${locked ? 'disabled' : ''}>${swatch(k, id)}<span>${locked ? `🔒 Lv ${lvl}` : name}</span></button>`;
     }).join('')}</div>`).join('');
   $('garage-slots').querySelectorAll('button.sw').forEach((b) => {
-    b.onclick = () => { set_look(b.dataset.slot, b.dataset.id); render_garage(); };
+    b.onclick = () => { set_look(b.dataset.slot, b.dataset.id); menu_bg.set_look(look()); render_garage(); };
   });
   preview ??= rider_preview($('garage-canvas'));
   preview.set(look());
@@ -283,7 +294,7 @@ function render_setup() {
   const b = g.board(o);
   $('g-board-label').textContent = b.label;
   $('g-board').innerHTML = board_html(b, load(`pq_board_${b.key}`, []), -1);
-  $('btn-start').textContent = `Start ${g.name}`;
+  $('btn-start').innerHTML = `<span class="go-arrow">▶</span> Ride ${g.name}`;
   render_daily();
   render_sensors();
 }
@@ -597,6 +608,8 @@ function finish_game() {
   $('r-board').innerHTML = board_html(b, list, rank);
   render_nav();
   show('screen-results');
+  // confetti for a podium, a new record or a level up
+  if ((res.flags?.pos ?? 99) <= 3 || rank === 0 || (pp && pp.after.level > pp.before.level)) menu_bg.celebrate();
 }
 
 // pause: the game clock stops, the screen keeps showing your live numbers

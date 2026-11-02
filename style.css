@@ -353,3 +353,88 @@ body.playing .rider, body.results .rider { display: none; }
   padding: 8px 12px; border-radius: 10px; transition: opacity 1s; pointer-events: none;
 }
 .scene-toast.gone { opacity: 0; }
+
+/* ---- game menu skin (build 31): living scene behind, glassy panels, chunky game buttons ---- */
+:root { --panel: rgba(18,26,38,.84); --glow: rgba(255,196,0,.45); --display: 'Russo One', system-ui, sans-serif; }
+html { background: #0b111a; }
+body { background: transparent; }
+.menu-bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; pointer-events: none; }
+body.playing .menu-bg { display: none; }
+
+/* top bar: logo with a spinning wheel, level badge + stats + garage on the right */
+.topbar { background: linear-gradient(rgba(8,12,20,.92), rgba(8,12,20,.78)); border-bottom: 1px solid rgba(255,255,255,.07); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.topbar-row { align-items: center; }
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.brand-wheel { width: 34px; height: 34px; color: var(--accent); flex: none; animation: spin 2.4s linear infinite; filter: drop-shadow(0 0 6px var(--glow)); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.brand-name { font-family: var(--display); font-size: 22px; line-height: 1; letter-spacing: .5px; text-transform: uppercase; font-style: italic; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.brand-name span { background: linear-gradient(180deg, #ffe259, #ff9f1a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+#version { font-size: 10px; display: block; margin-top: 2px; }
+.menu-icons { display: flex; align-items: center; gap: 6px; flex: none; }
+.icon-btn { width: 40px; height: 40px; padding: 0; font-size: 19px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); }
+.icon-btn.on { background: var(--accent); box-shadow: 0 0 14px var(--glow); }
+.lvl-chip { display: flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 20px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,213,79,.35); color: var(--fg); }
+.lvl-chip b { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-size: 15px;
+  background: radial-gradient(circle at 35% 30%, #ffe98a, #ffb300 60%, #c77800); color: #2a1c00; box-shadow: inset 0 -2px 0 rgba(0,0,0,.2); }
+.lvl-chip span { display: flex; flex-direction: column; gap: 3px; }
+.lvl-chip small { font-size: 9px; letter-spacing: 1.5px; color: #ffe082; font-weight: 700; }
+.lvl-chip i { display: block; width: 44px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+.lvl-chip em { display: block; height: 100%; background: linear-gradient(90deg, #ffb300, #ffe259); }
+
+/* game select: chunky cards */
+#game-nav { gap: 8px; padding: 10px 0 12px; }
+#game-nav .game-card { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 84px; padding: 9px 10px 8px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(48,62,80,.9), rgba(28,38,52,.9)); border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 3px 0 rgba(0,0,0,.35); transition: transform .15s, box-shadow .15s; }
+.gc-icon { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+.gc-name { font-family: var(--display); font-size: 12px; letter-spacing: .4px; text-transform: uppercase; }
+#game-nav .game-card.on { background: linear-gradient(180deg, #ffe259, #ffb300); color: #2a1c00; border-color: #fff3b0;
+  box-shadow: 0 3px 0 #b36b00, 0 0 18px var(--glow); transform: translateY(-2px); }
+#game-nav .game-card:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.35); }
+
+/* panels: dark glass over the scene */
+.panel, .rider { background: var(--panel); border: 1px solid rgba(255,255,255,.07); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.label { text-transform: uppercase; letter-spacing: 1px; font-size: 11px; font-weight: 700; color: #9fb0c0; }
+
+/* game title over the sky */
+.game-head { margin: 22px 0 12px; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.game-head h1, #r-title { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-style: italic; letter-spacing: .5px; font-size: 32px; }
+.game-head .tag, #r-sub { color: #e3eaf0; }
+.chip { background: rgba(10,16,24,.7); border: 1px solid rgba(255,255,255,.1); }
+
+/* start: big arcade button, pressed down when tapped, gentle pulse */
+button.big { position: relative; font-family: var(--display); font-weight: 400; text-transform: uppercase; letter-spacing: 1px; font-size: 22px; padding: 18px 16px;
+  border-radius: 16px; background: linear-gradient(180deg, #ffe985, #ffc400 45%, #ff9f1a); color: #2a1c00; border: 2px solid #fff3b0;
+  box-shadow: 0 6px 0 #b36b00, 0 10px 24px rgba(0,0,0,.35), 0 0 0 0 var(--glow); animation: go-pulse 2.2s ease-in-out infinite; margin: 8px 0 18px; }
+button.big:active { transform: translateY(5px); box-shadow: 0 1px 0 #b36b00, 0 4px 10px rgba(0,0,0,.35); }
+@keyframes go-pulse { 50% { box-shadow: 0 6px 0 #b36b00, 0 10px 24px rgba(0,0,0,.35), 0 0 0 8px rgba(255,196,0,0), 0 0 26px var(--glow); } }
+.go-arrow { display: inline-block; margin-right: 6px; animation: nudge 1.1s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: translateX(4px); } }
+
+/* option buttons: tactile, yellow when picked */
+.seg button, .stepper button, button.secondary { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 2px 0 rgba(0,0,0,.3); }
+.seg button.on { background: linear-gradient(180deg, #ffe259, #ffb300); color: #2a1c00; border-color: #fff3b0; box-shadow: 0 2px 0 #b36b00; }
+.seg button:active, .stepper button:active, button.secondary:active { transform: translateY(2px); box-shadow: none; }
+
+/* daily challenge: warm highlighted card */
+.daily { border: 1px solid rgba(255,159,26,.5); background: linear-gradient(120deg, rgba(80,40,10,.85), rgba(18,26,38,.88) 60%); }
+.daily.ok { border-color: var(--ok); }
+.daily-row button { font-family: var(--display); font-weight: 400; text-transform: uppercase; background: linear-gradient(180deg, #ffd27a, #ff9f1a); color: #2a1c00; box-shadow: 0 3px 0 #a85d00; }
+.daily-row button.secondary { background: rgba(255,255,255,.1); color: var(--fg); box-shadow: 0 3px 0 rgba(0,0,0,.35); }
+
+/* garage turntable sits on a glowing stage */
+.garage-canvas { background: radial-gradient(ellipse at 50% 85%, rgba(255,196,0,.18), rgba(0,0,0,0) 55%), radial-gradient(circle at 50% 40%, rgba(51,71,92,.85), rgba(14,20,28,.9)); border: 1px solid rgba(255,255,255,.07); }
+
+/* results: the screen pops in */
+#screen-results.active > * { animation: pop-in .45s cubic-bezier(.2,1.4,.4,1) both; }
+#screen-results.active > :nth-child(2) { animation-delay: .05s; }
+#screen-results.active > :nth-child(n+3) { animation-delay: .12s; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-wheel, button.big, .go-arrow, #screen-results.active > * { animation: none; }
+}
+@media (max-width: 380px) {
+  .brand-name { font-size: 18px; }
+  .lvl-chip i { width: 30px; }
+}
