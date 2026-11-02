@@ -1,5 +1,5 @@
 // badges: long-term goals across all games. checked after every finished game, saved in localStorage
-import { load, store } from './util.js?v=40';
+import { load, store } from './util.js?v=41';
 
 // each check gets: { game, opts, flags, ride (ride_log summary), life (lifetime totals), state, ftp }
 const list = [

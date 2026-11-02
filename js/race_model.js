@@ -1,13 +1,13 @@
 // race state: riders (player + bots), bot power model, standings
-import { step_speed } from './physics.js?v=40';
+import { step_speed } from './physics.js?v=41';
 
 // bot roster: name, color, strength relative to the chosen base watts and riding style
 const roster = [
-  { name: 'Red Rocket', color: '#e53935', factor: 0.80, style: 'attacker' },
-  { name: 'Blue Bolt', color: '#1e88e5', factor: 0.90, style: 'sitter' },
-  { name: 'Green Machine', color: '#43a047', factor: 1.00, style: 'diesel' },
-  { name: 'Purple Pace', color: '#8e24aa', factor: 1.10, style: 'chaser' },
-  { name: 'Orange Flash', color: '#fb8c00', factor: 1.20, style: 'sprinter' },
+  { name: 'Steve', color: '#e53935', factor: 0.80, style: 'attacker' },
+  { name: 'Henry', color: '#1e88e5', factor: 0.90, style: 'sitter' },
+  { name: 'Lukas', color: '#43a047', factor: 1.00, style: 'diesel' },
+  { name: 'Marta', color: '#8e24aa', factor: 1.10, style: 'chaser' },
+  { name: 'Olivia', color: '#fb8c00', factor: 1.20, style: 'sprinter' },
 ];
 
 // riding styles. bots never cheat: every watt above their average is paid back later (energy budget below).

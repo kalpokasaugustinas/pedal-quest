@@ -1,7 +1,7 @@
 // sound made with web audio (no files to load): short effects, ride ambience (wind with your speed, rain,
 // rivers, birds, a cheering finish crowd) and generated songs (music.js) whose tempo follows your cadence.
 // unlock() must run inside a tap, otherwise mobile browsers keep audio muted
-import { create_music, track_ids, tracks } from './music.js?v=40';
+import { create_music, track_ids, tracks } from './music.js?v=41';
 let audio = null;
 let enabled = true;
 let music_on = true;
@@ -13,6 +13,16 @@ export function set_track(id) { track = id; }
 export const music_tracks = () => track_ids.map((id) => [id, tracks[id].name, tracks[id].style]);
 // name of the song playing now (or null)
 export const now_playing = () => ride?.song?.name ?? null;
+// skip to another song (the next in the list, or a random other one on shuffle); returns its name
+export function next_song() {
+  if (!ride || !audio || !music_on) return null;
+  const cur = ride.song?.id;
+  const i = track_ids.indexOf(cur);
+  const id = track === 'shuffle' ? track_ids.filter((t) => t !== cur)[Math.floor(Math.random() * (track_ids.length - 1))] : track_ids[(i + 1) % track_ids.length];
+  ride.song?.stop();
+  ride.song = create_music(audio, audio.destination, id);
+  return ride.song.name;
+}
 
 export function unlock() {
   if (!enabled) return;

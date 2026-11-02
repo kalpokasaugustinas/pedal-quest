@@ -327,7 +327,7 @@ export function create_music(ctx, out, id, start_bar = 0) {
   }
 
   return {
-    name: T.name,
+    id: tracks[id] ? id : 'golden_hour', name: T.name,
     // dt (s), cadence (rpm), effort (watts / ftp)
     update(dt, cadence, effort) {
       if (!alive) return;

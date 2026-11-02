@@ -1,17 +1,17 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=40';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=40';
-import { step_speed } from '../physics.js?v=40';
-import { clamp, fmt_clock, load, store } from '../util.js?v=40';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=41';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=41';
+import { step_speed } from '../physics.js?v=41';
+import { clamp, fmt_clock, load, store } from '../util.js?v=41';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
-  { rival: 'Rocket Rosa', color: '#e53935', strength: 0.9 },
-  { rival: 'Turbo Tom', color: '#1e88e5', strength: 1.0 },
-  { rival: 'Green Gus', color: '#43a047', strength: 1.05 },
-  { rival: 'Big Ben', color: '#8e24aa', strength: 1.1 },
-  { rival: 'Orange Olga', color: '#fb8c00', strength: 1.15 },
+  { rival: 'Rosa', color: '#e53935', strength: 0.9 },
+  { rival: 'Tom', color: '#1e88e5', strength: 1.0 },
+  { rival: 'Gus', color: '#43a047', strength: 1.05 },
+  { rival: 'Ben', color: '#8e24aa', strength: 1.1 },
+  { rival: 'Olga', color: '#fb8c00', strength: 1.15 },
 ];
 const first_gap_s = 15;      // calm riding before the first attack
 const gap_s = [25, 40];      // random calm time between attacks (so you can't time them)

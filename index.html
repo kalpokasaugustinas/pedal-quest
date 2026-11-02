@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
 
@@ -28,7 +28,7 @@
         <path d="M20 5v30M5 20h30M9.4 9.4l21.2 21.2M30.6 9.4L9.4 30.6" stroke="currentColor" stroke-width="1.6"/>
         <circle cx="20" cy="20" r="3.5" fill="currentColor"/>
       </svg>
-      <div><div class="brand-name">Pedal <span>Quest</span></div><span id="version">build 40 · 2026-11-02 12:23</span></div>
+      <div><div class="brand-name">Pedal <span>Quest</span></div><span id="version">build 41 · 2026-11-02 12:56</span></div>
     </div>
     <div id="menu-icons" class="menu-icons"></div>
   </div>
@@ -52,6 +52,7 @@
       <label>Weight <input type="number" id="p-weight" inputmode="numeric" min="35" max="150"> kg</label>
       <label class="toggle"><input type="checkbox" id="p-sound"> Sounds</label>
       <label class="toggle"><input type="checkbox" id="p-music"> Music</label>
+      <label class="toggle"><input type="checkbox" id="p-comm"> Commentator</label>
       <label class="track">Track <select id="p-track"></select></label>
     </div>
   </div>
@@ -95,6 +96,7 @@
   <div id="overlay" class="overlay"></div>
   <div id="play-top" class="play-top">
     <div id="game-hud" class="game-hud"></div>
+    <button id="btn-song" class="quit" aria-label="next song">♪</button>
     <button id="btn-pause" class="quit" aria-label="pause">⏸</button>
     <button id="btn-quit" class="quit" aria-label="quit">✕</button>
   </div>
@@ -136,6 +138,6 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="js/main.js?v=40"></script>
+<script type="module" src="js/main.js?v=41"></script>
 </body>
 </html>

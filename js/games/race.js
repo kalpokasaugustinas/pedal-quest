@@ -1,8 +1,9 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=40';
-import { create_world } from '../world.js?v=40';
-import { scenery_option } from '../kit3d.js?v=40';
-import { fmt_time, ordinal } from '../util.js?v=40';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=41';
+import { create_world } from '../world.js?v=41';
+import { scenery_option } from '../kit3d.js?v=41';
+import { fmt_time, ordinal } from '../util.js?v=41';
+import { create_commentator, place_word, one } from '../commentary.js?v=41';
 
 export default {
   id: 'race',
@@ -53,6 +54,84 @@ function create(env) {
       <span id="nitro-range" class="nitro-range"></span>
     </div>`;
   const dots = [...$('progress').children];
+
+  // commentator: narrates overtakes, attacks, nitro, the gaps and your numbers (captions + voice)
+  const cm = env.profile.commentator === false ? null : create_commentator($('screen-play'), { voice: env.profile.sound !== false });
+  const talk = { started: false, order: null, order_t: 0, marks: new Set(), quiet_t: 14, draft_t: 0, boosting: new Set(), top_v: 0, cad: 0, hr: null };
+  const cap = (t) => t[0].toUpperCase() + t.slice(1);
+  const style_line = { attacker: 'itching to attack', sitter: 'sitting on wheels, waiting', diesel: 'riding a steady tempo', chaser: 'ready to chase anything', sprinter: 'saving it all for the sprint' };
+  // "12 metres behind Olivia" / "8 metres clear"
+  const gap_text = (order, me) => (me === 1
+    ? (order[1] ? `, ${Math.round(race.player.x - order[1].x)} metres clear` : '')
+    : `, ${Math.round(order[me - 2].x - race.player.x)} metres behind ${order[me - 2].name}`);
+  function narrate(dt, input) {
+    const p = race.player, km = race.distance_m / 1000;
+    talk.top_v = Math.max(talk.top_v, p.v);
+    talk.cad += ((input.cadence || 0) - talk.cad) * Math.min(1, dt * 0.5);
+    talk.hr = input.hr ?? null;
+    if (!talk.started) {
+      talk.started = true;
+      cm.say(one(`And they're off! Six riders, ${km} kilometres to the line.`, `We're racing! ${km} k, six riders. Let's go!`), 3);
+      return;
+    }
+    // positions twice a second: the lead, your overtakes, bots swapping places near you or at the front
+    talk.order_t -= dt;
+    if (talk.order_t <= 0) {
+      talk.order_t = 0.5;
+      const order = standings(race), prev = talk.order;
+      talk.order = order;
+      if (prev && race.time > 4) {
+        const pos = (r, list) => list.indexOf(r) + 1;
+        const me_now = pos(p, order), me_was = pos(p, prev);
+        if (order[0] !== prev[0]) cm.say(order[0].is_player ? one('You hit the front! You lead the race!', 'And you take the lead!') : `${order[0].name} takes the lead!`, 2, 'lead', 6);
+        else if (me_now < me_was) { const by = prev[me_now - 1]; cm.say(one(`You pass ${by.name}, up to ${place_word(me_now)}!`, `Great move, you go by ${by.name}. ${cap(place_word(me_now))} now.`), 2, 'pass', 4); }
+        else if (me_now > me_was) { const by = order[me_was - 1]; cm.say(one(`${by.name} gets past you. You drop to ${place_word(me_now)}.`, `${by.name} comes by! You're ${place_word(me_now)}.`), 2, 'passed', 4); }
+        else {
+          for (let i = 0; i < order.length - 1; i++) {
+            const a = order[i], b = order[i + 1];
+            if (a.is_player || b.is_player || pos(a, prev) <= pos(b, prev)) continue;
+            if (i < 2 || Math.abs(a.x - p.x) < 25) { cm.say(`${a.name} moves past ${b.name} into ${place_word(i + 1)}.`, 1, 'botpass', 8); break; }
+          }
+        }
+      }
+    }
+    // nitro: yours and theirs
+    for (const r of race.riders) {
+      const on = r.nitro.boost_left > 0;
+      if (on && !talk.boosting.has(r)) cm.say(r.is_player ? one('Nitro! You are flying!', 'There goes the nitro, full gas!') : `${r.name} fires the nitro!`, 2, r.is_player ? null : 'botnitro', 10);
+      if (on) talk.boosting.add(r); else talk.boosting.delete(r);
+    }
+    // distance marks
+    const order = talk.order || standings(race), me = order.indexOf(p) + 1, left = race.distance_m - p.x;
+    const mark = (id, cond, text) => { if (cond && !talk.marks.has(id)) { talk.marks.add(id); cm.say(text, 3); } };
+    mark('half', race.distance_m >= 2000 && p.x >= race.distance_m / 2, `Halfway! You're ${place_word(me)}${gap_text(order, me)}.`);
+    mark('1k', race.distance_m >= 3000 && left <= 1000, `Final kilometre! ${me === 1 ? 'You lead, now hold it!' : `You're ${place_word(me)}${gap_text(order, me)}.`}`);
+    mark('200', left <= 200, me === 1 ? 'Two hundred metres to go and you lead! Empty the tank!' : `Two hundred to go! ${cap(place_word(me))} place. Sprint now!`);
+    // drafting
+    talk.draft_t = p.draft > 0.12 ? talk.draft_t + dt : 0;
+    if (talk.draft_t > 3 && p.wheel) cm.say(`You're tucked in on ${p.wheel.name}'s wheel, saving energy.`, 1, 'draft', 45);
+    // quiet moments: your numbers, the gap at the front or what a rival is up to
+    talk.quiet_t -= dt;
+    if (talk.quiet_t <= 0 && cm.free()) {
+      talk.quiet_t = 13 + Math.random() * 9;
+      // live average (avg_watts() only counts finished riders)
+      const avg = Math.round(p.energy / Math.max(1, race.time)), pct = Math.round((avg / env.profile.ftp) * 100), r = Math.random();
+      if (r < 0.4 && race.time > 20 && avg > 20) {
+        cm.say(one(
+          `You're averaging ${avg} watts, that's ${pct} percent of your FTP.`,
+          `Cadence ${Math.round(talk.cad)}${talk.hr ? `, heart rate ${talk.hr}` : ''}. Average power ${avg} watts.`,
+          `Top speed so far: ${Math.round(talk.top_v * 3.6)} kilometres an hour.`,
+        ));
+      } else if (r < 0.75) {
+        const lead = order[0];
+        cm.say(lead.is_player ? `You lead by ${Math.round(p.x - order[1].x)} metres over ${order[1].name}.` : `${lead.name} leads${me > 1 ? `, you're ${place_word(me)}, ${Math.round(lead.x - p.x)} metres back` : ''}.`);
+      } else {
+        const bots = order.filter((x) => !x.is_player && Math.abs(x.x - p.x) < 40);
+        const b = bots[Math.floor(Math.random() * bots.length)];
+        if (b) cm.say(`${b.name} is ${style_line[b.style] || 'looking strong'}.`);
+      }
+    }
+  }
   let last_boosts = 0;
   let last_hr = null;
 
@@ -66,9 +145,11 @@ function create(env) {
       }
       last_hr = input.hr;
       update_race(race, dt, input.watts, input.cadence, input.hr);
+      if (cm) narrate(dt, input);
       // tactics near you get a callout (the leaderboard shows the rest)
       for (const e of race.events.splice(0)) {
         if (Math.abs(e.rider.x - race.player.x) > 30) continue;
+        if (cm && e.kind === 'attack') cm.say(one(`${e.rider.name} attacks!`, `${e.rider.name} jumps! Can you go with it?`), 2, 'attack', 6);
         const text = { attack: `⚔️ ${e.rider.name} attacks!`, chase: `🎯 ${e.rider.name} chases`, follow: `🧲 ${e.rider.name} follows` }[e.kind];
         env.big_text(text, 1400, 'callout');
         if (e.kind === 'attack') env.sfx('warn');
@@ -81,6 +162,8 @@ function create(env) {
       if (race.player.finish_time !== null) {
         game.done = true;
         game.done_text = 'FINISH';
+        const pos = standings(race).indexOf(race.player) + 1;
+        cm?.say(pos === 1 ? one('You win it! What a ride!', 'Victory! Nobody could touch you today!') : `You cross the line in ${place_word(pos)}.`, 3);
       }
     },
     render(dt) {
@@ -88,7 +171,7 @@ function create(env) {
       update_hud();
     },
     resize: () => world.resize(),
-    dispose: () => world.dispose(),
+    dispose: () => { world.dispose(); cm?.stop(); },
     result,
   };
 

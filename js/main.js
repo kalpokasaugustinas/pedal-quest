@@ -1,27 +1,27 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=40';
-import { control } from './ble.js?v=40';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=40';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=40';
-import { stats_html } from './stats.js?v=40';
-import { set_rider_mass, steady_speed } from './physics.js?v=40';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, update_ride, stop_ride } from './sfx.js?v=40';
-import * as ride_log from './ride_log.js?v=40';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=40';
-import * as daily from './daily.js?v=40';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=40';
-import { rider_preview, ambience } from './kit3d.js?v=40';
-import { start_menu3d } from './menu3d.js?v=40';
-import { option_html } from './menu_ui.js?v=40';
-import race from './games/race.js?v=40';
-import crossroads from './games/crossroads.js?v=40';
-import summit from './games/summit.js?v=40';
-import pulse from './games/pulse.js?v=40';
-import spinbeat from './games/spinbeat.js?v=40';
-import escape from './games/escape.js?v=40';
-import sprint from './games/sprint.js?v=40';
-import workout from './games/workout.js?v=40';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=41';
+import { control } from './ble.js?v=41';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=41';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=41';
+import { stats_html } from './stats.js?v=41';
+import { set_rider_mass, steady_speed } from './physics.js?v=41';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=41';
+import * as ride_log from './ride_log.js?v=41';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=41';
+import * as daily from './daily.js?v=41';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=41';
+import { rider_preview, ambience } from './kit3d.js?v=41';
+import { start_menu3d } from './menu3d.js?v=41';
+import { option_html } from './menu_ui.js?v=41';
+import race from './games/race.js?v=41';
+import crossroads from './games/crossroads.js?v=41';
+import summit from './games/summit.js?v=41';
+import pulse from './games/pulse.js?v=41';
+import spinbeat from './games/spinbeat.js?v=41';
+import escape from './games/escape.js?v=41';
+import sprint from './games/sprint.js?v=41';
+import workout from './games/workout.js?v=41';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -194,6 +194,7 @@ function show_profile() {
   $('p-weight').value = profile.weight;
   $('p-sound').checked = profile.sound;
   $('p-music').checked = profile.music;
+  $('p-comm').checked = profile.commentator !== false;
   // music track: shuffle (a new song each ride) or one favourite
   $('p-track').innerHTML = `<option value="shuffle">🔀 Shuffle</option>` + music_tracks().map(([id, name, style]) => `<option value="${id}">${name} (${style})</option>`).join('');
   $('p-track').value = profile.track || 'shuffle';
@@ -247,6 +248,12 @@ $('p-music').onchange = () => {
   set_music(profile.music);
   save_profile();
 };
+$('p-comm').onchange = () => {
+  profile.commentator = $('p-comm').checked;
+  save_profile();
+};
+// in a ride: skip to another song
+$('btn-song').onclick = () => { if (next_song()) show_song(true); };
 $('p-track').onchange = () => {
   profile.track = $('p-track').value;
   set_track(profile.track);
@@ -379,9 +386,10 @@ function show_big_text(text, hide_after_ms, cls = '') {
 }
 
 // "now playing" label for a few seconds after the start
-function show_song() {
+function show_song(force = false) {
   const name = now_playing();
-  if (!name || phase !== 'play') return;
+  if (!name || (phase !== 'play' && !force)) return;
+  document.querySelectorAll('.music-toast').forEach((e) => e.remove());
   const el = document.createElement('div');
   el.className = 'music-toast';
   el.textContent = `♪ ${name}`;
@@ -464,6 +472,7 @@ function read_input(ts) {
 
 function loop(ts) {
   if (phase === 'idle' || !instance) return;
+  track_hud_top(ts);
   const real_dt = Math.min(0.1, Math.max(0, (ts - last_ts) / 1000));   // app in background = pause
   last_ts = ts;
   const input = read_input(ts);
@@ -532,6 +541,16 @@ function loop(ts) {
   update_ride(real_dt, { speed: instance?.speed?.() ?? 0, cadence: input.cadence, effort: input.watts / profile.ftp, ...ambience });
   update_metrics(input);
   requestAnimationFrame(loop);
+}
+
+// the leaderboard and banners sit under the top hud, whose height changes (fullscreen notch, wrapped text)
+let hud_top = 0, hud_top_t = 0;
+function track_hud_top(ts) {
+  if (ts - hud_top_t < 500) return;
+  hud_top_t = ts;
+  const h = $('play-top').offsetHeight, hb = $('hud-bottom').offsetHeight;
+  if (h !== hud_top) { hud_top = h; document.documentElement.style.setProperty('--hud-top', `${h}px`); }
+  document.documentElement.style.setProperty('--hud-bottom', `${hb}px`);
 }
 
 function update_metrics(input) {
