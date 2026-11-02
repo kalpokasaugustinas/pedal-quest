@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=37';
+import { seeded } from './util.js?v=38';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;
@@ -208,6 +208,12 @@ const smoothstep = (a, b, x) => {
 
 // random colour from a palette with a small brightness jitter (keeps facets distinct)
 const tmp_color = new THREE.Color();
+
+// sun shadows fade out with distance (60 -> 100 m), well inside the shadow camera's box: trees coming
+// towards you get their shadow gradually instead of popping in at the edge of the shadow map
+THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
+  'getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] )',
+  'mix( getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ), 1.0, smoothstep( 60.0, 100.0, length( vViewPosition ) ) )');
 const mood = { sat: -0.16, light: 0.025 };   // calm, soft colours: applied to every palette colour
 function palette_color(list, r, out = tmp_color) {
   out.set(list[Math.floor(r * list.length) % list.length]);
@@ -866,25 +872,67 @@ const blur_texture = () => blur_tex ??= canvas_texture(64, 64, (g, w) => {
   g.fillStyle = gr; g.fillRect(0, 0, w, w);
 });
 
-// jersey print: pattern in a second colour on the jersey colour (cylinder uv: u around the body, v along it)
-function jersey_texture(base, pat, color) {
-  return canvas_texture(128, 128, (g, w, h) => {
+// rider texture (one per rider, 256 px): top 3/4 = jersey (print or plain with a chest band), then the race
+// number bib (left half), and a white strip at the bottom that every untextured part of the body samples
+function rider_texture(base, pat, color, num) {
+  return canvas_texture(256, 256, (g) => {
+    const j = document.createElement('canvas');
+    j.width = j.height = 128;
+    const c = j.getContext('2d');
+    c.fillStyle = base;
+    c.fillRect(0, 0, 128, 128);
+    c.fillStyle = color;
+    if (pat === 'plain' || !pat) c.fillRect(0, 42, 128, 10);   // chest band
+    if (pat === 'hoops') for (let y = 8; y < 128; y += 32) c.fillRect(0, y, 128, 14);
+    if (pat === 'stripes') for (let x = 0; x < 128; x += 21) c.fillRect(x, 0, 9, 128);
+    if (pat === 'sash') { c.beginPath(); c.moveTo(0, 20); c.lineTo(0, 56); c.lineTo(128, 108); c.lineTo(128, 72); c.fill(); }
+    if (pat === 'dots') for (let y = 8; y < 128; y += 22) for (let x = (y / 22) % 2 ? 11 : 0; x < 128; x += 22) { c.beginPath(); c.arc(x, y, 6, 0, 7); c.fill(); }
+    if (pat === 'twotone') c.fillRect(0, 0, 128, 128 * 0.45);
+    if (pat === 'chevron') for (const y0 of [24, 70]) { c.beginPath(); c.moveTo(0, y0); c.lineTo(64, y0 + 26); c.lineTo(128, y0); c.lineTo(128, y0 + 16); c.lineTo(64, y0 + 42); c.lineTo(0, y0 + 16); c.fill(); }
+    if (pat === 'checks') for (let y = 0; y < 128; y += 16) for (let x = (y / 16) % 2 ? 16 : 0; x < 128; x += 32) c.fillRect(x, y, 16, 16);
+    if (pat === 'rainbow') ['#1e88e5', '#e53935', '#212121', '#ffd400', '#43a047'].forEach((k, i) => { c.fillStyle = k; c.fillRect(0, 44 + i * 9, 128, 9); });
+    g.drawImage(j, 0, 0, 256, 192);
+    // race number bib
     g.fillStyle = base;
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = color;
-    if (pat === 'hoops') for (let y = 8; y < h; y += 32) g.fillRect(0, y, w, 14);
-    if (pat === 'stripes') for (let x = 0; x < w; x += 21) g.fillRect(x, 0, 9, h);
-    if (pat === 'sash') { g.beginPath(); g.moveTo(0, 20); g.lineTo(0, 56); g.lineTo(w, 108); g.lineTo(w, 72); g.fill(); }
-    if (pat === 'dots') for (let y = 8; y < h; y += 22) for (let x = (y / 22) % 2 ? 11 : 0; x < w; x += 22) { g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill(); }
-    if (pat === 'twotone') g.fillRect(0, 0, w, h * 0.45);
-    if (pat === 'chevron') for (const y0 of [24, 70]) { g.beginPath(); g.moveTo(0, y0); g.lineTo(w / 2, y0 + 26); g.lineTo(w, y0); g.lineTo(w, y0 + 16); g.lineTo(w / 2, y0 + 42); g.lineTo(0, y0 + 16); g.fill(); }
-    if (pat === 'checks') for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 ? 16 : 0; x < w; x += 32) g.fillRect(x, y, 16, 16);
-    if (pat === 'rainbow') ['#1e88e5', '#e53935', '#212121', '#ffd400', '#43a047'].forEach((c, i) => { g.fillStyle = c; g.fillRect(0, 44 + i * 9, w, 9); });
-    // white strip at the bottom: the rest of the body samples it (one material for the whole rider)
+    g.fillRect(128, 192, 128, 48);
+    g.fillStyle = '#f7f7f4';
+    g.fillRect(0, 192, 128, 48);
+    g.fillStyle = '#d23a2e';
+    g.fillRect(0, 192, 128, 6);
+    g.fillStyle = '#16181d';
+    g.font = 'bold 34px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(num), 64, 220);
     g.fillStyle = '#ffffff';
-    g.fillRect(0, h - 8, w, 8);
+    g.fillRect(0, 240, 256, 16);
   });
 }
+// uv into the rider texture: torso -> jersey area, bib -> number area, everything else -> white strip
+function rider_uv(g, kind) {
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    if (kind === 'torso') uv.setXY(i, uv.getX(i), 0.26 + uv.getY(i) * 0.73);
+    else if (kind === 'bib') uv.setXY(i, 0.02 + uv.getX(i) * 0.46, 0.075 + uv.getY(i) * 0.165);
+    else uv.setXY(i, 0.75, 0.03);
+  }
+  return g;
+}
+// per-vertex colour from position + normal: fn(colour, p, n) changes colour in place (geometry already placed)
+const rc_c = new THREE.Color(), rc_p = new THREE.Vector3(), rc_n = new THREE.Vector3();
+function recolor(g, fn) {
+  const col = g.attributes.color, pos = g.attributes.position, nor = g.attributes.normal;
+  for (let i = 0; i < col.count; i++) {
+    rc_c.fromBufferAttribute(col, i);
+    fn(rc_c, rc_p.fromBufferAttribute(pos, i), rc_n.fromBufferAttribute(nor, i));
+    col.setXYZ(i, rc_c.r, rc_c.g, rc_c.b);
+  }
+  return g;
+}
+// skin and hair tones: riders differ (picked by race number)
+const skins = ['#e2a878', '#c98d5e', '#f0c29c', '#8f5c3c', '#b47a50', '#e8b48c'];
+const hairs = ['#3a2a1e', '#1c1a18', '#6b4a2b', '#a87a44', '#2a221c', '#c9a46a'];
+
 const rainbow = (t) => new THREE.Color().setHSL((t * 0.6) % 1, 0.9, 0.6);
 
 // rider body: one skinned mesh (no seams at knees, elbows or neck). 15 bones, all children of a root at the
@@ -927,12 +975,6 @@ function skin(g, a, b, wa = 1) {
 }
 // share of the way from A to B for a point (0 at A, 1 at B)
 const along = (A, B) => { const d = B.clone().sub(A), l2 = d.lengthSq(), q = new THREE.Vector3(); return (p) => q.copy(p).sub(A).dot(d) / l2; };
-// jersey print uv: the torso spans the pattern, every other piece samples the white strip at the bottom
-function print_uv(g, torso) {
-  const uv = g.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, torso ? uv.getX(i) : 0.5, torso ? 0.07 + uv.getY(i) * 0.93 : 0.02);
-  return g;
-}
 
 // leg joints for a crank angle (rider space): hip, knee, ankle, shoe centre, pedal. knee from two-segment ik
 function leg_pose(angle, side, hx, hy) {
@@ -959,21 +1001,23 @@ function arm_pose(arm, body_pos, body_q) {
 
 // look: a jersey colour, or { jersey, pattern, pattern_color, frame, rim, helmet, shoe, flame, trail } (progress.js)
 // light: the sun direction vector for the projected shadow (null = no shadow)
-function make_rider(look, light = null) {
+function make_rider(look, light = null, num = 1) {
   const L = typeof look === 'string' ? { jersey: look } : look;
   const color = L.jersey;
   const g = new THREE.Group();
   const accent = '#' + new THREE.Color(color).offsetHSL(0, 0, -0.18).getHexString();
   const printed = L.pattern && L.pattern !== 'plain';
   const col = {
-    jersey: printed ? '#ffffff' : color, accent, rim: L.rim && L.rim !== 'auto' ? L.rim : accent,
+    jersey: '#ffffff', accent, rim: L.rim && L.rim !== 'auto' ? L.rim : accent,
     helmet: L.helmet && L.helmet !== 'auto' ? L.helmet : color, frame: L.frame || '#f2f2f2',
     tire: '#1b1b1f', skin: '#e2a878', shorts: '#1f2027', metal: '#a4aab2', white: L.pattern_color || '#ffffff', shoe: L.shoe || '#f5f5f5',
-    lens: '#2a2f3a', sleeve: color,
+    lens: '#2a2f3a', sleeve: color, sock: '#f4f4f0',
+    skin_tone: skins[num % skins.length], hair: hairs[(num * 7) % hairs.length],
   };
+  col.skin = col.skin_tone;
   // own materials per rider, so a rider can fade out near the camera
   const paint_mat = rider_mat({ vertexColors: true });
-  const body_mat = printed ? rider_mat({ vertexColors: true, map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : paint_mat;
+  const body_mat = rider_mat({ vertexColors: true, map: rider_texture(color, printed ? L.pattern : 'plain', L.pattern_color || '#ffffff', num) });
   const tube = new THREE.CylinderGeometry(1, 1, 1, 10);
   const bar = (c, r, a, b, rz) => piece(tube, c, bar_matrix(new THREE.Matrix4(), a, b, r, rz));
 
@@ -1021,46 +1065,66 @@ function make_rider(look, light = null) {
   const hip0 = v(...geo.hip), neck0 = v(0.3, 1.45);
   const B = bone_ids;
   const parts = [];
-  // add a piece with skin weights (and print uv: only the torso carries the pattern)
-  const add = (geom, a, b, wa, torso = false) => parts.push(print_uv(skin(geom, a, b, wa), torso));
-  const limb = (c, A, Bp, ra, rb) => piece(new THREE.CylinderGeometry(rb, ra, 1, 14, 4, true), c, bar_matrix(new THREE.Matrix4(), A, Bp, 1));
-  const ball = (c, at, sx, sy = sx, sz = sx) => piece(new THREE.SphereGeometry(1, 14, 10), c, tr(at, [0, 0, 0], [sx, sy, sz]));
+  // soft baked shading: undersides a little darker (reads as ambient occlusion, free at runtime)
+  const ao = (c, p, n) => c.multiplyScalar(0.8 + 0.1 * (n.y + 1));
+  // add a piece with skin weights, texture uv (torso / bib / white) and baked shading
+  const add = (geom, a, b, wa, kind = '') => parts.push(rider_uv(skin(recolor(geom, ao), a, b, wa), kind));
+  // limb with a muscle profile: [share of the length from A, radius] (lathe: smooth, bends well)
+  const shaped = (c, A, Bp, prof) => piece(new THREE.LatheGeometry(prof.map(([t, r]) => new THREE.Vector2(r, t - 0.5)), 16), c, bar_matrix(new THREE.Matrix4(), A, Bp, 1));
+  const ball = (c, at, sx, sy = sx, sz = sx) => piece(new THREE.SphereGeometry(1, 16, 12), c, tr(at, [0, 0, 0], [sx, sy, sz]));
+  const tint = (hex) => new THREE.Color(hex);
 
-  // torso + hips (torso bone), neck blending into the head, head with helmet, vents and sunglasses
-  add(ball(col.shorts, hip0, 0.155 * 1.15, 0.155 * 0.85, 0.155 * 1.05), B.torso, B.torso, 1);
-  add(piece(new THREE.CapsuleGeometry(0.15, 0.3, 6, 16), col.jersey, tr(v(0.03, 1.2), [-1.05, 0, 0], [1.12, 1, 0.82])), B.torso, B.torso, 1, true);
-  if (!printed) add(piece(new THREE.CylinderGeometry(0.153, 0.153, 0.07, 16, 1, true), col.white, tr(v(0.07, 1.23), [-1.05, 0, 0], [1.14, 1, 0.84])), B.torso, B.torso, 1);
+  // torso: sculpted (narrow waist, broad shoulders, flat back), darker side panels, the jersey from the texture
+  const torso_m = tr(v(0.03, 1.2), [-1.05, 0, 0], [1.18, 1, 0.8]);
+  const torso_prof = [[0, -0.31], [0.13, -0.3], [0.155, -0.22], [0.15, -0.1], [0.158, 0.04], [0.173, 0.15], [0.168, 0.23], [0.13, 0.29], [0.06, 0.315], [0, 0.32]];
+  const torso = piece(new THREE.LatheGeometry(torso_prof.map(([r, y]) => new THREE.Vector2(r, y)), 20), col.jersey, torso_m);
+  const panel = tint('#9da0a6');
+  add(recolor(torso, (c, p, n) => { if (Math.abs(n.x) > 0.75) c.multiply(panel); }), B.torso, B.torso, 1, 'torso');
+  // race number on the lower back (a curved patch following the jersey)
+  add(piece(new THREE.CylinderGeometry(0.161, 0.161, 0.15, 8, 1, true, -0.62, 1.24), '#ffffff', tr(new THREE.Vector3(0, -0.04, 0).applyMatrix4(torso_m), [-1.05, 0, 0], [1.18, 1, 0.8])), B.torso, B.torso, 1, 'bib');
+  // bib shorts (pelvis), collar
+  add(ball(col.shorts, hip0, 0.165, 0.13, 0.17), B.torso, B.torso, 1);
   const n0 = v(0.25, 1.38), n1 = v(0.31, 1.47), tn = along(n0, n1);
-  add(limb(col.skin, n0, n1, 0.05, 0.045), B.torso, B.head, (q) => 1 - sstep(0.1, 0.9, tn(q)));
-  add(ball(col.skin, v(0.37, 1.5), 0.095, 0.105, 0.105), B.head, B.head, 1);
-  add(piece(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), col.helmet, tr(v(0.34, 1.53), [0.25, 0, 0], [0.135, 0.12, 0.175])), B.head, B.head, 1);
-  for (const s of [-0.045, 0.045]) add(piece(new THREE.CapsuleGeometry(0.01, 0.09, 3, 6), col.white, tr(v(0.35, 1.635, s), [Math.PI / 2, 0, 0])), B.head, B.head, 1);
-  add(piece(new THREE.CapsuleGeometry(0.024, 0.13, 4, 10), col.lens, tr(v(0.455, 1.515), [0, 0, Math.PI / 2])), B.head, B.head, 1);
+  add(piece(new THREE.TorusGeometry(0.062, 0.02, 8, 18), col.accent, new THREE.Matrix4().compose(n0.clone().lerp(n1, 0.1),
+    new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n1.clone().sub(n0).normalize()), new THREE.Vector3(1.15, 1, 1))), B.torso, B.torso, 1);
+  add(shaped(col.skin, n0, n1, [[0, 0.052], [1, 0.046]]), B.torso, B.head, (q) => 1 - sstep(0.1, 0.9, tn(q)));
+  // head: face, ears, hair under the helmet, aero helmet with dark vents and a long tail, sunglasses
+  add(ball(col.skin, v(0.37, 1.5), 0.095, 0.108, 0.105), B.head, B.head, 1);
+  for (const s of [-1, 1]) add(ball(col.skin, v(0.35, 1.5, s * 0.098), 0.018, 0.03, 0.022), B.head, B.head, 1);
+  add(ball(col.hair, v(0.3, 1.49), 0.085, 0.075, 0.07), B.head, B.head, 1);
+  const vent = tint('#262a31');
+  add(recolor(piece(new THREE.SphereGeometry(1, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.6), col.helmet, tr(v(0.33, 1.53), [0.28, 0, 0], [0.138, 0.125, 0.19])),
+    (c, p, n) => { if (n.y > 0.3 && (Math.abs(p.x) < 0.012 || Math.abs(Math.abs(p.x) - 0.06) < 0.012)) c.multiply(vent); }), B.head, B.head, 1);
+  add(piece(new THREE.CapsuleGeometry(0.026, 0.135, 4, 12), col.lens, tr(v(0.455, 1.513), [0, 0, Math.PI / 2])), B.head, B.head, 1);
 
-  // legs: thigh and shin blend into each other around the knee, shoe on the foot bone, crank + pedal on the crank bone
+  // legs: shaped thighs (shorts with a coloured gripper band) and calves (white socks), shoes with dark soles
   const bind_angle = [0, Math.PI];
+  const sole = tint('#2a2c31'), band = tint(col.accent), sock = tint(col.sock);
   const legs = [-1, 1].map((s, i) => {
     const side = s * 0.12, P = leg_pose(bind_angle[i], side, ...geo.hip);
     const th = along(P.hip, P.knee), sh = along(P.knee, P.ankle);
-    add(limb(col.shorts, P.hip, P.knee, 0.078, 0.06), B.thigh[i], B.shin[i], (q) => 1 - 0.5 * sstep(0.7, 1, th(q)));
-    add(ball(col.skin, P.knee, 0.058), B.thigh[i], B.shin[i], 0.5);
-    add(limb(col.skin, P.knee, P.ankle, 0.055, 0.04), B.shin[i], B.thigh[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, sh(q)));
-    add(ball(col.shoe, P.shoe, 0.045, 0.035, 0.125), B.foot[i], B.foot[i], 1);
+    add(recolor(shaped(col.shorts, P.hip, P.knee, [[0, 0.088], [0.35, 0.083], [0.75, 0.068], [1, 0.058]]), (c, p) => { if (th(p) > 0.84) c.copy(band); }),
+      B.thigh[i], B.shin[i], (q) => 1 - 0.5 * sstep(0.7, 1, th(q)));
+    add(ball(col.skin, P.knee, 0.058, 0.062, 0.06), B.thigh[i], B.shin[i], 0.5);
+    add(recolor(shaped(col.skin, P.knee, P.ankle, [[0, 0.054], [0.2, 0.062], [0.45, 0.054], [0.75, 0.04], [1, 0.036]]), (c, p) => { if (sh(p) > 0.78) c.copy(sock); }),
+      B.shin[i], B.thigh[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, sh(q)));
+    add(recolor(ball(col.shoe, P.shoe, 0.046, 0.038, 0.13), (c, p, n) => { if (n.y < -0.35) c.copy(sole); }), B.foot[i], B.foot[i], 1);
     const bb = v(geo.bb[0], geo.bb[1], side * 0.7);
     add(bar(col.metal, 0.014, bb, P.pedal), B.crank[i], B.crank[i], 1);
     add(piece(new THREE.BoxGeometry(0.06, 0.012, 0.09), col.tire, tr(P.pedal.clone().setX(side * 0.95))), B.crank[i], B.crank[i], 1);
     return { side, i, bb, thigh_dir: P.knee.clone().sub(P.hip).normalize(), shin_dir: P.ankle.clone().sub(P.knee).normalize(), hip: P.hip, knee: P.knee, shoe: P.shoe };
   });
-  // arms: shoulder ball between torso and upper arm, elbow between upper arm and forearm, glove on the bars (root)
+  // arms: shoulders, sleeves with a band at the end, shaped forearms, gloves on the bars (root)
   const arms = [-1, 1].map((s, i) => {
     const arm = { side: s, i, shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.17).sub(hip0), hand: v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2) };
     const A = arm_pose(arm, hip0, new THREE.Quaternion());
     const tu = along(A.sh, A.el), tf = along(A.el, A.hand);
-    add(ball(col.sleeve, A.sh, 0.072), B.torso, B.upper[i], 0.5);
-    add(limb(col.sleeve, A.sh, A.el, 0.058, 0.047), B.upper[i], B.fore[i], (q) => 1 - 0.5 * sstep(0.7, 1, tu(q)));
+    add(ball(col.sleeve, A.sh, 0.074, 0.07, 0.074), B.torso, B.upper[i], 0.5);
+    add(recolor(shaped(col.sleeve, A.sh, A.el, [[0, 0.064], [0.35, 0.06], [1, 0.047]]), (c, p) => { if (tu(p) > 0.8) c.copy(band); }),
+      B.upper[i], B.fore[i], (q) => 1 - 0.5 * sstep(0.7, 1, tu(q)));
     add(ball(col.skin, A.el, 0.046), B.upper[i], B.fore[i], 0.5);
-    add(limb(col.skin, A.el, A.hand, 0.045, 0.035), B.fore[i], B.upper[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, tf(q)));
-    add(ball(col.tire, A.hand, 0.045, 0.04, 0.06), B.root, B.root, 1);
+    add(shaped(col.skin, A.el, A.hand, [[0, 0.046], [0.3, 0.048], [1, 0.034]]), B.fore[i], B.upper[i], (q) => 0.5 + 0.5 * sstep(0, 0.3, tf(q)));
+    add(ball(col.tire, A.hand, 0.046, 0.04, 0.062), B.root, B.root, 1);
     return Object.assign(arm, { sh: A.sh, el: A.el, upper_dir: A.el.clone().sub(A.sh).normalize(), fore_dir: A.hand.clone().sub(A.el).normalize() });
   });
 
@@ -1348,6 +1412,16 @@ export function create_kit(canvas, opts = {}) {
   }));
   sun_glow.scale.set(theme.stars ? 160 : 320, theme.stars ? 160 : 320, 1);
   scene.add(sun_glow);
+  // move the shadow camera in whole shadow-map texels (seen from the sun): shadows stop crawling and shimmering
+  const snap_x = new THREE.Vector3(), snap_y = new THREE.Vector3(), snap_d = new THREE.Vector3();
+  function snap_shadow(t) {
+    const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+    snap_d.copy(sun_off).normalize();
+    snap_x.crossVectors(up, snap_d).normalize();
+    snap_y.crossVectors(snap_d, snap_x);
+    const tx = t.dot(snap_x), ty = t.dot(snap_y);
+    t.addScaledVector(snap_x, Math.round(tx / texel) * texel - tx).addScaledVector(snap_y, Math.round(ty / texel) * texel - ty);
+  }
   const shadow_light = new THREE.Vector3();
   let shadow_alpha = 0.36;
   function update_shadow_light() {
@@ -2026,7 +2100,7 @@ export function create_kit(canvas, opts = {}) {
 
   const riders = [];
   function add_rider(color) {
-    const model = make_rider(color, shadow_light);
+    const model = make_rider(color, shadow_light, riders.length + 1);
     model.group.rotation.order = 'YXZ';
     scene.add(model.group);
     riders.push(model);
@@ -2521,6 +2595,7 @@ export function create_kit(canvas, opts = {}) {
     base.position.set(cx, road_y(cz) - 1.5, cz);
     const fz = f.focus_z;
     sun.target.position.set(road_x(fz - 45), road_y(fz - 45), fz - 45);
+    snap_shadow(sun.target.position);
     sun.position.copy(sun.target.position).add(sun_off);
     update_shadow_light();
     sun_glow.position.copy(sun_off).normalize().multiplyScalar(1500).add(camera.position);
@@ -2602,7 +2677,7 @@ export function rider_preview(canvas) {
   let model = null, raf = 0, last = performance.now(), crank = 0, alive = true;
   function set(look) {
     if (model) { scene.remove(model.group); dispose_rider(model); }
-    model = make_rider(look, preview_light);
+    model = make_rider(look, preview_light, 1);
     model.shadow.uniforms.plane_p.value.set(0, 0.004, 0);   // shadow on the turntable
     model.shadow.uniforms.alpha.value = 0.55;
     model.flame.visible = true;   // show off the nitro flame

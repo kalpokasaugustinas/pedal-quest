@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=37';
-import { create_world } from '../world.js?v=37';
-import { scenery_option } from '../kit3d.js?v=37';
-import { fmt_time, ordinal } from '../util.js?v=37';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=38';
+import { create_world } from '../world.js?v=38';
+import { scenery_option } from '../kit3d.js?v=38';
+import { fmt_time, ordinal } from '../util.js?v=38';
 
 export default {
   id: 'race',
