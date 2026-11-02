@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=34';
+import { seeded } from './util.js?v=35';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;
@@ -167,6 +167,8 @@ export const ambience = { rain: false, water: 0, crowd: 0, birds: false };
 let renderer = null;   // one renderer per canvas; each race builds a new scene
 // render resolution learned on this device (auto resolution below); the next game starts from it
 let learned_pr = null, pr_ceiling = null;
+// test hook: ?perf records draw calls + triangles of the last frame in window.pq_perf
+const perf = typeof location !== 'undefined' && location.search.includes('perf') ? (window.pq_perf = {}) : null;
 const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 // ---- helpers ----
@@ -213,8 +215,9 @@ function palette_color(list, r, out = tmp_color) {
   return out;
 }
 
+// matte low-poly material: lambert (diffuse only). standard at roughness ~1 looked the same but cost more per pixel
 function flat_mat(color, extra = {}) {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.95, metalness: 0, ...extra });
+  return new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 }
 
 // jitter vertices of a geometry for a hand-made faceted look (seeded). shared positions move together
@@ -589,7 +592,7 @@ function make_birds(scene) {
 }
 
 function make_wildlife(scene, theme) {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const rnd = seeded(31);
   // per chunk: an elk, two deer (a doe and a fawn) and two hikers; most stay hidden
   const slots = Array.from({ length: chunk_count }, () => {
@@ -627,7 +630,7 @@ function make_backdrop(scene, theme) {
   const rnd = seeded(42);
   const fog = new THREE.Color(theme.fog);
   // mountains are lit by the key light (strong facets) but skip scene fog; a light haze is baked in by distance
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, fog: false });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, fog: false });
   const ring = [
     ...Array.from({ length: 14 }, (_, i) => ({ a: (i / 14) * Math.PI * 2, r: 430 + rnd() * 120, h: 260 + rnd() * 220, w: 150 + rnd() * 80 })),
     ...Array.from({ length: 16 }, (_, i) => ({ a: (i / 16 + 0.03) * Math.PI * 2, r: 720 + rnd() * 200, h: 300 + rnd() * 260, w: 220 + rnd() * 120 })),
@@ -662,7 +665,7 @@ function make_backdrop(scene, theme) {
   // and slowly come closer as you ride; each fades in far away and out at the edges of its box, so wrapping never pops
   const clouds = new THREE.Group();
   for (let i = 0; i < cloud_box.n; i++) {
-    const cloud_mat = new THREE.MeshStandardMaterial({ color: theme.cloud, flatShading: true, roughness: 1, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow, transparent: true });
+    const cloud_mat = new THREE.MeshLambertMaterial({ color: theme.cloud, flatShading: true, fog: false, emissive: theme.cloud, emissiveIntensity: theme.cloud_glow, transparent: true });
     const parts = [];
     const n = 4 + Math.floor(rnd() * 3);
     for (let j = 0; j < n; j++) {
@@ -708,50 +711,108 @@ function make_backdrop(scene, theme) {
 
 
 // ---- riders: chunky low-poly cyclist on a road bike ----
+// few draw calls per rider (~6, was ~40): the bike (frame, tyres, saddle) and the upper body are merged
+// vertex-coloured meshes, every limb is one instance of a stretched prism in a single instanced mesh,
+// spokes (or a motion-blur disc at speed) per wheel. a rim light makes riders stand out from the scenery,
+// and the shadow is the rider's own silhouette projected onto the road along the sun (no shadow-map pass)
 
-// unit prism stretched between two points (tubes, limbs). 5 sides = visible facets
+// unit prism stretched between two points (tubes, limbs). 7 sides = visible facets
 const unit_cyl = new THREE.CylinderGeometry(1, 1, 1, 7);
 const y_axis = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3();
-function make_bar(material, radius, radius_z = radius) {
-  const m = new THREE.Mesh(unit_cyl, material);
-  m.userData.radius = radius;
-  m.userData.radius_z = radius_z;
-  m.castShadow = true;
-  return m;
-}
-function place_bar(mesh, a, b) {
+const bar_q = new THREE.Quaternion(), bar_s = new THREE.Vector3(), bar_p = new THREE.Vector3();
+const limb_m = new THREE.Matrix4();
+// matrix of a prism with radius r (rz in the other direction) from a to b
+function bar_matrix(out, a, b, r, rz = r) {
   tmp.subVectors(b, a);
   const len = tmp.length();
-  mesh.position.addVectors(a, b).multiplyScalar(0.5);
-  mesh.scale.set(mesh.userData.radius, len, mesh.userData.radius_z);
-  mesh.quaternion.setFromUnitVectors(y_axis, tmp.normalize());
+  bar_p.addVectors(a, b).multiplyScalar(0.5);
+  bar_q.setFromUnitVectors(y_axis, tmp.normalize());
+  bar_s.set(r, len, rz);
+  return out.compose(bar_p, bar_q, bar_s);
 }
+// matrix from position, rotation (euler) and scale
+const tr = (p, rot = [0, 0, 0], scl = [1, 1, 1]) => new THREE.Matrix4().compose(
+  p, new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(...scl));
 
 // side-view coordinates (forward f, up u, sideways s) -> rider-local 3d point
 const v = (f, u, s = 0) => new THREE.Vector3(s, u, -f);
 const wheel_r = 0.35;
 const geo = { bb: [-0.03, 0.3], hip: [-0.24, 1.0], shoulder: [0.24, 1.36], hand: [0.47, 1.0] };
 
-function make_wheel(mats) {
-  const w = new THREE.Group();
-  const tire = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.025, 0.035, 4, 12), mats.tire);
-  tire.rotation.y = Math.PI / 2;
-  tire.castShadow = true;
-  // deep carbon-style rim in the rider's colour
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(wheel_r - 0.085, 0.045, 3, 12), mats.rim);
-  rim.rotation.y = Math.PI / 2;
-  rim.scale.set(1, 1, 0.5);
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6), mats.metal);
-  hub.rotation.z = Math.PI / 2;
-  w.add(tire, rim, hub);
-  for (const rot of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
-    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.01, wheel_r * 2 - 0.16, 0.025), mats.metal);
-    spoke.rotation.x = rot;
-    w.add(spoke);
-  }
-  return w;
+// one rider piece: geometry moved into place and painted in its exact colour (merged later)
+function piece(geom, color, m) {
+  const g = geom.index ? geom.toNonIndexed() : geom.clone();
+  if (m) g.applyMatrix4(m);
+  const c = new THREE.Color(color);
+  const n = g.attributes.position.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
 }
+
+// rider material: matte lambert (cheaper than standard, same look at full roughness) + a rim light:
+// facets turning away from the camera catch a bit of sky light, so riders pop out of the background
+const rim = { color: { value: new THREE.Color('#fff2dc') }, strength: { value: 0.32 } };
+function rider_mat(extra = {}) {
+  const m = new THREE.MeshLambertMaterial({ flatShading: true, ...extra });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rim_color = rim.color;
+    sh.uniforms.rim_strength = rim.strength;
+    sh.fragmentShader = 'uniform vec3 rim_color;\nuniform float rim_strength;\n' + sh.fragmentShader.replace('#include <opaque_fragment>',
+      `float rim_f = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+      outgoingLight += rim_color * (rim_f * rim_f * rim_f) * rim_strength;
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'rider_rim';
+  return m;
+}
+
+// projected shadow: every vertex slides along the sun direction onto the road plane under the rider.
+// one tiny shader, drawn once per pixel (stencil) so overlapping parts don't stack up darker
+const shadow_vs = `
+uniform vec3 light;
+uniform vec3 plane_n;
+uniform vec3 plane_p;
+void main() {
+  mat4 m = modelMatrix;
+  #ifdef USE_INSTANCING
+  m = m * instanceMatrix;
+  #endif
+  vec4 wp = m * vec4(position, 1.0);
+  wp.xyz -= light * (dot(plane_n, wp.xyz - plane_p) / dot(plane_n, light));
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+const shadow_fs = `
+uniform float alpha;
+void main() { gl_FragColor = vec4(0.04, 0.05, 0.09, alpha); }`;
+function shadow_mat(light) {
+  return new THREE.ShaderMaterial({
+    uniforms: { light: { value: light }, plane_n: { value: new THREE.Vector3(0, 1, 0) }, plane_p: { value: new THREE.Vector3() }, alpha: { value: 0.35 } },
+    vertexShader: shadow_vs, fragmentShader: shadow_fs, transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+  });
+}
+// a shadow copy of a mesh: child of it (same transform), never culled (the shadow reaches past the mesh)
+function add_shadow(mesh, mat) {
+  const s = mesh.isInstancedMesh ? new THREE.InstancedMesh(mesh.geometry, mat, mesh.count) : new THREE.Mesh(mesh.geometry, mat);
+  if (mesh.isInstancedMesh) s.instanceMatrix = mesh.instanceMatrix;
+  s.frustumCulled = false;
+  s.renderOrder = -1;
+  mesh.add(s);
+  return s;
+}
+
+// motion-blur disc for fast wheels: a soft grey blur instead of spokes (also stops spokes strobing)
+let blur_tex = null;
+const blur_texture = () => blur_tex ??= canvas_texture(64, 64, (g, w) => {
+  const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  gr.addColorStop(0, 'rgba(160,165,175,.75)'); gr.addColorStop(0.18, 'rgba(160,165,175,.75)'); gr.addColorStop(0.24, 'rgba(150,155,165,.18)');
+  gr.addColorStop(0.85, 'rgba(150,155,165,.28)'); gr.addColorStop(1, 'rgba(150,155,165,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, w);
+});
 
 // jersey print: pattern in a second colour on the jersey colour (cylinder uv: u around the body, v along it)
 function jersey_texture(base, pat, color) {
@@ -771,106 +832,117 @@ function jersey_texture(base, pat, color) {
 }
 const rainbow = (t) => new THREE.Color().setHSL((t * 0.6) % 1, 0.9, 0.6);
 
+// limb instances: per leg thigh, shin, crank, shoe (0-7), per arm upper, forearm, glove (8-13)
+const limb_count = 14;
+
 // look: a jersey colour, or { jersey, pattern, pattern_color, frame, rim, helmet, shoe, flame, trail } (progress.js)
-function make_rider(look) {
+// light: the sun direction vector for the projected shadow (null = no shadow)
+function make_rider(look, light = null) {
   const L = typeof look === 'string' ? { jersey: look } : look;
   const color = L.jersey;
   const g = new THREE.Group();
-  const c = new THREE.Color(color);
-  const accent = c.clone().offsetHSL(0, 0, -0.18);
+  const accent = '#' + new THREE.Color(color).offsetHSL(0, 0, -0.18).getHexString();
   const printed = L.pattern && L.pattern !== 'plain';
+  const col = {
+    jersey: color, accent, rim: L.rim && L.rim !== 'auto' ? L.rim : accent,
+    helmet: L.helmet && L.helmet !== 'auto' ? L.helmet : color, frame: L.frame || '#f2f2f2',
+    tire: '#17171a', skin: '#e9b27f', shorts: '#1f2027', metal: '#9aa0a8', white: L.pattern_color || '#ffffff', shoe: L.shoe || '#f5f5f5',
+  };
   // own materials per rider, so a rider can fade out near the camera
-  const mats = {
-    jersey: flat_mat(color),
-    print: printed ? flat_mat('#ffffff', { map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : null,
-    accent: flat_mat(accent),
-    rim: flat_mat(L.rim && L.rim !== 'auto' ? L.rim : accent),
-    helmet: flat_mat(L.helmet && L.helmet !== 'auto' ? L.helmet : color),
-    frame: flat_mat(L.frame || '#f2f2f2'),
-    tire: flat_mat('#17171a'),
-    skin: flat_mat('#e9b27f'),
-    shorts: flat_mat('#1f2027'),
-    metal: flat_mat('#9aa0a8'),
-    white: flat_mat(L.pattern_color || '#ffffff'),
-    shoe: flat_mat(L.shoe || '#f5f5f5'),
-  };
-  if (!mats.print) delete mats.print;
-  const add_bar = (mat, r, a, b, rz) => {
-    const m = make_bar(mat, r, rz);
-    if (a) place_bar(m, a, b);
-    g.add(m);
-    return m;
-  };
+  const paint_mat = rider_mat({ vertexColors: true });
+  const limb_mat = rider_mat();
+  const print_mat = printed ? rider_mat({ map: jersey_texture(color, L.pattern, L.pattern_color || '#ffffff') }) : null;
+  const bar = (c, r, a, b, rz) => piece(unit_cyl, c, bar_matrix(new THREE.Matrix4(), a, b, r, rz));
 
+  // ---- bike: wheels (tyre, deep rim, hub), frame tubes, fork, stem, bars, seat post, saddle ----
+  const bike = [];
+  for (const f of [-0.52, 0.52]) {
+    const c = v(f, wheel_r);
+    bike.push(piece(new THREE.TorusGeometry(wheel_r - 0.025, 0.035, 4, 12), col.tire, tr(c, [0, Math.PI / 2, 0])));
+    bike.push(piece(new THREE.TorusGeometry(wheel_r - 0.085, 0.045, 3, 12), col.rim, tr(c, [0, Math.PI / 2, 0], [1, 1, 0.5])));
+    bike.push(piece(new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6), col.metal, tr(c, [0, 0, Math.PI / 2])));
+  }
+  const p = { rear: v(-0.52, 0.35), bb: v(...geo.bb), seat: v(-0.2, 0.86), head: v(0.38, 0.86), head_low: v(0.42, 0.68), front: v(0.52, 0.35) };
+  bike.push(
+    bar(col.frame, 0.024, p.rear, p.bb), bar(col.frame, 0.03, p.bb, p.seat), bar(col.frame, 0.02, p.seat, p.rear),
+    bar(col.frame, 0.03, p.seat, p.head), bar(col.frame, 0.038, p.bb, p.head_low),
+    bar(col.accent, 0.035, p.head_low, v(0.4, 0.94)),            // head tube
+    bar(col.accent, 0.022, p.head_low, p.front),                  // fork
+    bar(col.accent, 0.022, v(0.4, 0.94), v(0.47, 0.98)),          // stem
+    bar(col.tire, 0.018, v(0.47, 0.98, -0.21), v(0.47, 0.98, 0.21)),   // handlebar
+    ...[-1, 1].map((s) => bar(col.tire, 0.018, v(0.47, 0.98, s * 0.21), v(0.55, 0.88, s * 0.21))),   // drops
+    bar(col.metal, 0.016, p.seat, v(-0.24, 0.98)),                // seat post
+    piece(new THREE.BoxGeometry(0.13, 0.05, 0.28), col.tire, tr(v(-0.22, 1.0))),   // saddle
+  );
+  const bike_mesh = new THREE.Mesh(merge_painted(bike), paint_mat);
+  g.add(bike_mesh);
+
+  // spokes per wheel (they turn), with a blur disc that takes over at speed
+  const blur_mat = new THREE.MeshBasicMaterial({ map: blur_texture(), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const spoke_geo = merge_painted([0, Math.PI / 3, (2 * Math.PI) / 3].map((rot) =>
+    piece(new THREE.BoxGeometry(0.01, wheel_r * 2 - 0.16, 0.025), col.metal, tr(new THREE.Vector3(), [rot, 0, 0]))));
+  const blur_geo = new THREE.CircleGeometry(wheel_r - 0.06, 16).rotateY(Math.PI / 2);
   const wheels = [-0.52, 0.52].map((f) => {
-    const w = make_wheel(mats);
+    const w = new THREE.Group();
     w.position.copy(v(f, wheel_r));
+    w.add(new THREE.Mesh(spoke_geo, paint_mat));
+    const blur = new THREE.Mesh(blur_geo, blur_mat);
+    blur.visible = false;
+    w.add(blur);
     g.add(w);
     return w;
   });
 
-  // frame: chunky tubes, top tube sloping, fork + stem in the accent colour
-  const p = { rear: v(-0.52, 0.35), bb: v(...geo.bb), seat: v(-0.2, 0.86), head: v(0.38, 0.86), head_low: v(0.42, 0.68), front: v(0.52, 0.35) };
-  const f = mats.frame;
-  add_bar(f, 0.024, p.rear, p.bb);
-  add_bar(f, 0.03, p.bb, p.seat);
-  add_bar(f, 0.02, p.seat, p.rear);
-  add_bar(f, 0.03, p.seat, p.head);
-  add_bar(f, 0.038, p.bb, p.head_low);
-  add_bar(mats.accent, 0.035, p.head_low, v(0.4, 0.94));          // head tube
-  add_bar(mats.accent, 0.022, p.head_low, p.front);                // fork
-  add_bar(mats.accent, 0.022, v(0.4, 0.94), v(0.47, 0.98));        // stem
-  add_bar(mats.tire, 0.018, v(0.47, 0.98, -0.21), v(0.47, 0.98, 0.21));   // handlebar
-  for (const s of [-1, 1]) add_bar(mats.tire, 0.018, v(0.47, 0.98, s * 0.21), v(0.55, 0.88, s * 0.21));   // drops
-  add_bar(mats.metal, 0.016, p.seat, v(-0.24, 0.98));              // seat post
-  const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.28), mats.tire);
-  saddle.position.copy(v(-0.22, 1.0));
-  g.add(saddle);
-
-  // upper body: its own group pivoting at the hips, so it can lean, rise out of the saddle and rock.
-  // parts are built in rider coordinates, then re-based on the hip pivot
-  const body = new THREE.Group();
-  const add_body = (mesh) => { mesh.castShadow = true; body.add(mesh); return mesh; };
-  const torso = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.58, 8), mats.print || mats.jersey));
-  torso.position.copy(v(0.02, 1.2));
-  torso.rotation.x = -1.05;   // lean forward
-  torso.scale.set(1.15, 1, 0.8);
-  const stripe = add_body(new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.175, 0.07, 8), mats.white));
-  stripe.position.copy(v(0.06, 1.23));
-  stripe.rotation.x = -1.05;
-  stripe.scale.set(1.16, 1, 0.81);
-  stripe.visible = !mats.print;   // the chest band is the 'plain' pattern
-  const hips = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), mats.shorts));
-  hips.position.copy(v(...geo.hip));
-  hips.scale.set(1.15, 0.8, 1);
-  // head: skin, faceted aero helmet in the rider colour with a white vent and a dark visor
-  const head = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), mats.skin));
-  head.position.copy(v(0.36, 1.5));
-  const helmet = add_body(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 1), mats.helmet));
-  helmet.position.copy(v(0.33, 1.56));
-  helmet.scale.set(0.95, 0.7, 1.35);
-  const vent = add_body(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.3), mats.white));
-  vent.position.copy(v(0.32, 1.66));
-  const visor = add_body(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), mats.tire));
-  visor.position.copy(v(0.46, 1.5));
+  // ---- upper body: one group pivoting at the hips (lean, rise out of the saddle, rock) ----
   const hip0 = v(...geo.hip);
-  for (const ch of body.children) ch.position.sub(hip0);
+  const at = (f, u, s = 0) => v(f, u, s).sub(hip0);   // body-local point
+  const torso_m = tr(at(0.02, 1.2), [-1.05, 0, 0], [1.15, 1, 0.8]);
+  const torso_geo = new THREE.CylinderGeometry(0.15, 0.19, 0.58, 10);
+  const upper = [
+    piece(new THREE.IcosahedronGeometry(0.16, 1), col.shorts, tr(at(...geo.hip), [0, 0, 0], [1.15, 0.8, 1])),   // hips
+    piece(new THREE.IcosahedronGeometry(0.11, 1), col.skin, tr(at(0.36, 1.5))),                                 // head
+    piece(new THREE.IcosahedronGeometry(0.15, 1), col.helmet, tr(at(0.33, 1.56), [0, 0, 0], [0.95, 0.7, 1.35])),   // aero helmet
+    piece(new THREE.BoxGeometry(0.05, 0.03, 0.3), col.white, tr(at(0.32, 1.66))),                               // helmet vent
+    piece(new THREE.BoxGeometry(0.2, 0.05, 0.06), col.tire, tr(at(0.46, 1.5))),                                 // visor
+  ];
+  if (!printed) {
+    upper.push(piece(torso_geo, col.jersey, torso_m));
+    // chest band: the 'plain' pattern
+    upper.push(piece(new THREE.CylinderGeometry(0.162, 0.175, 0.07, 10), col.white, tr(at(0.06, 1.23), [-1.05, 0, 0], [1.16, 1, 0.81])));
+  }
+  const body = new THREE.Group();
+  const body_mesh = new THREE.Mesh(merge_painted(upper), paint_mat);
+  body.add(body_mesh);
+  let torso_mesh = null;
+  if (printed) {
+    // printed jersey: its own mesh with the pattern texture
+    torso_mesh = new THREE.Mesh(torso_geo, print_mat);
+    torso_mesh.applyMatrix4(torso_m);
+    body.add(torso_mesh);
+  }
   body.position.copy(hip0);
   g.add(body);
 
-  // arms: shoulder follows the body, hand stays on the hoods, elbow from a simple two-bone ik
-  const arms = [-1, 1].map((s) => {
-    const glove = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), mats.tire);
-    glove.position.copy(v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2));
-    g.add(glove);
-    return {
-      side: s,
-      shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.19).sub(hip0),
-      hand: glove.position.clone(),
-      upper: add_bar(mats.jersey, 0.055),
-      fore: add_bar(mats.skin, 0.042),
-    };
+  // ---- limbs: one instanced mesh, posed every frame (legs from the crank, arms by two-bone ik) ----
+  const limbs = new THREE.InstancedMesh(unit_cyl, limb_mat, limb_count);
+  limbs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  limbs.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 1.4);   // limbs move: fixed generous bounds
+  const leg_cols = [col.shorts, col.skin, col.metal, col.shoe];
+  const arm_cols = [col.jersey, col.skin, col.tire];
+  const legs = [-1, 1].map((s, i) => ({ side: s * 0.12, idx: i * 4 }));
+  const arms = [-1, 1].map((s, i) => ({
+    side: s, idx: 8 + i * 3,
+    shoulder_local: v(geo.shoulder[0], geo.shoulder[1], s * 0.19).sub(hip0),
+    hand: v(geo.hand[0] + 0.03, geo.hand[1] - 0.01, s * 0.2),
+  }));
+  const c3 = new THREE.Color();
+  legs.forEach((l) => leg_cols.forEach((c, k) => limbs.setColorAt(l.idx + k, c3.set(c))));
+  arms.forEach((a) => {
+    arm_cols.forEach((c, k) => limbs.setColorAt(a.idx + k, c3.set(c)));
+    // glove: a short fat prism on the hood
+    limbs.setMatrixAt(a.idx + 2, bar_matrix(limb_m, a.hand.clone().add(new THREE.Vector3(0, 0, 0.04)), a.hand.clone().add(new THREE.Vector3(0, 0, -0.04)), 0.045));
   });
+  g.add(limbs);
 
   // nitro flame behind the rear wheel, visible only while boosting
   const flame = new THREE.Mesh(
@@ -882,31 +954,30 @@ function make_rider(look) {
   flame.visible = false;
   g.add(flame);
 
-  // legs: thigh + calf posed from the crank angle every frame, shoe on the pedal
-  const legs = [-1, 1].map((s) => {
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.24), mats.shoe);
-    shoe.castShadow = true;
-    g.add(shoe);
-    return {
-      side: s * 0.12,
-      thigh: add_bar(mats.shorts, 0.075, null, null, 0.07),
-      shin: add_bar(mats.skin, 0.05),
-      crank: add_bar(mats.metal, 0.016),
-      shoe,
-    };
-  });
+  // projected shadow of bike, body and limbs
+  const shadow = light ? shadow_mat(light) : null;
+  if (shadow) for (const m of [bike_mesh, body_mesh, torso_mesh, limbs]) if (m) add_shadow(m, shadow);
+
   // the bike group sits inside a root group: the root is placed on the road, the bike rolls inside it
   const root = new THREE.Group();
   root.add(g);
-  return {
-    group: root, bike: g, body, arms, wheels, legs, flame, mats: Object.values(mats), faded: false, look: L,
+  const model = {
+    group: root, bike: g, body, arms, legs, limbs, wheels, flame, shadow, look: L, faded: false,
+    mats: [paint_mat, limb_mat, print_mat].filter(Boolean),
+    extra_mats: [blur_mat, flame.material, shadow].filter(Boolean),   // not faded with the rider
     // smoothed animation state
     anim: { effort: 0.6, stand: 0, coast: 0, strain: 0, prev_v: 0, accel: 0, t: Math.random() * 10 },
   };
+  animate_rider(model, { watts: 150, v: 8, crank: 0 }, 0, 200, false);   // first pose
+  return model;
+}
+// free a rider's materials (geometry is freed with the scene or here by the caller)
+function dispose_rider(model) {
+  for (const m of [...model.mats, ...model.extra_mats]) { if (m.map && m.map !== blur_tex) m.map.dispose(); m.dispose(); }
 }
 
 // thigh + shin from hip to pedal; knee from two-segment inverse kinematics (side view, up positive)
-function pose_leg(leg, angle, hx = geo.hip[0], hy = geo.hip[1]) {
+function pose_leg(model, leg, angle, hx = geo.hip[0], hy = geo.hip[1]) {
   const crank_len = 0.17, seg = 0.46;
   const [bx, by] = geo.bb;
   const fx = bx + crank_len * Math.cos(angle);
@@ -917,16 +988,16 @@ function pose_leg(leg, angle, hx = geo.hip[0], hy = geo.hip[1]) {
   const bend = Math.sqrt(seg * seg - half * half);
   const ux = dx / d, uy = dy / d;
   const kx = hx + ux * half - uy * bend, ky = hy + uy * half + ux * bend;
-  const s = leg.side;
-  place_bar(leg.thigh, v(hx, hy, s), v(kx, ky, s));
-  place_bar(leg.shin, v(kx, ky, s), v(fx, fy + 0.03, s));
-  place_bar(leg.crank, v(bx, by, s), v(fx, fy, s));
-  leg.shoe.position.copy(v(fx + 0.03, fy + 0.02, s * 1.15));
+  const s = leg.side, L = model.limbs, i = leg.idx;
+  L.setMatrixAt(i, bar_matrix(limb_m, v(hx, hy, s), v(kx, ky, s), 0.075, 0.07));          // thigh
+  L.setMatrixAt(i + 1, bar_matrix(limb_m, v(kx, ky, s), v(fx, fy + 0.03, s), 0.05));       // shin
+  L.setMatrixAt(i + 2, bar_matrix(limb_m, v(bx, by, s), v(fx, fy, s), 0.016));             // crank
+  L.setMatrixAt(i + 3, bar_matrix(limb_m, v(fx - 0.09, fy + 0.02, s * 1.15), v(fx + 0.15, fy + 0.02, s * 1.15), 0.042, 0.032));   // shoe
 }
 
 // arm: shoulder (moves with the body) to the fixed hand; elbow bends out and down
 const arm_tmp = { sh: new THREE.Vector3(), d: new THREE.Vector3(), n: new THREE.Vector3(), el: new THREE.Vector3() };
-function pose_arm(arm, body) {
+function pose_arm(model, arm, body) {
   const seg = 0.3;
   const { sh, d, n, el } = arm_tmp;
   sh.copy(arm.shoulder_local).applyQuaternion(body.quaternion).add(body.position);
@@ -939,8 +1010,8 @@ function pose_arm(arm, body) {
   n.set(arm.side * 0.3, -1, 0.25);
   n.addScaledVector(d, -n.dot(d)).normalize();
   el.copy(sh).addScaledVector(d, half).addScaledVector(n, bend);
-  place_bar(arm.upper, sh, el);
-  place_bar(arm.fore, el, arm.hand);
+  model.limbs.setMatrixAt(arm.idx, bar_matrix(limb_m, sh, el, 0.055));
+  model.limbs.setMatrixAt(arm.idx + 1, bar_matrix(limb_m, el, arm.hand, 0.042));
 }
 
 // body language from effort: ref_watts = what this rider can hold comfortably (ftp / bot average).
@@ -974,8 +1045,9 @@ function animate_rider(model, r, dt, ref_watts, boost) {
   const breathe = Math.sin(a.t * (1.6 + 6 * a.strain)) * (0.006 + 0.012 * a.strain);
   b.position.set(stroke * 0.03 * a.stand, hy + breathe, -hx);
   // legs follow the hips (standing lifts them), arms follow the shoulders
-  model.legs.forEach((leg, i) => pose_leg(leg, crank + i * Math.PI, hx, hy));
-  for (const arm of model.arms) pose_arm(arm, b);
+  model.legs.forEach((leg, i) => pose_leg(model, leg, crank + i * Math.PI, hx, hy));
+  for (const arm of model.arms) pose_arm(model, arm, b);
+  model.limbs.instanceMatrix.needsUpdate = true;
 }
 
 // ---- wind streaks: short lines rushing past the camera, stronger with speed and nitro ----
@@ -1122,6 +1194,16 @@ export function create_kit(canvas, opts = {}) {
   sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
   const sun_off = new THREE.Vector3(...theme.key_dir);
+  // rider shadows follow the sun: direction (kept above 17° so they don't stretch forever) and darkness
+  const shadow_light = new THREE.Vector3();
+  let shadow_alpha = 0.36;
+  function update_shadow_light() {
+    shadow_light.copy(sun_off).normalize();
+    if (shadow_light.y < 0.3) { shadow_light.y = 0.3; shadow_light.normalize(); }
+    shadow_alpha = 0.36 * Math.min(1, Math.max(0.3, sun.intensity / 2.4));
+  }
+  update_shadow_light();
+  rim.color.value.set(theme.hemi[0]);   // rim light in the sky colour
 
   // far ground under everything (beyond the terrain grid), same colour as the fog
   const base = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshBasicMaterial({ color: theme.fog }));
@@ -1273,7 +1355,7 @@ export function create_kit(canvas, opts = {}) {
     tex.wrapS = THREE.ClampToEdgeWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    road_mats[k] = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
+    road_mats[k] = new THREE.MeshLambertMaterial({ map: tex });
   }
 
   // ribbon along a centre-line function: points every `step` m from z0 down to z1 (z1 < z0)
@@ -1307,7 +1389,7 @@ export function create_kit(canvas, opts = {}) {
   const props = make_props(scene, theme);
   const camps = opts.camps === false ? null : make_camps(scene, theme);
   const wild = opts.wildlife === false ? null : make_wildlife(scene, theme);
-  const terrain_mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 });
+  const terrain_mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const chunks = Array.from({ length: chunk_count }, (_, slot) => {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), terrain_mat);
     mesh.receiveShadow = true;
@@ -1545,10 +1627,16 @@ export function create_kit(canvas, opts = {}) {
       o.frustumCulled = false;
     });
     const rt = new THREE.WebGLRenderTarget(1, 1);
+    // riders fading near the camera use a transparent variant of their shader: compile it now too
+    const rider_mats = riders.flatMap((r) => r.mats);
+    const set_clear = (on) => { for (const m of rider_mats) { m.transparent = on; m.needsUpdate = true; } };
     try {
       renderer.setRenderTarget(rt);
       renderer.render(scene, camera);
+      set_clear(true);
+      renderer.render(scene, camera);
     } catch { /* warm-up is only an optimisation */ }
+    set_clear(false);
     renderer.setRenderTarget(null);
     rt.dispose();
     for (const [o, vis, cull] of changed) { o.visible = vis; o.frustumCulled = cull; }
@@ -1579,7 +1667,7 @@ export function create_kit(canvas, opts = {}) {
 
   const dust_n = 500;
   const dust = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0),
-    new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1, transparent: true, opacity: 0.6, depthWrite: false }), dust_n);
+    new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true, transparent: true, opacity: 0.6, depthWrite: false }), dust_n);
   dust.frustumCulled = false;
   scene.add(dust);
   for (let i = 0; i < dust_n; i++) dust.setMatrixAt(i, hidden);
@@ -1703,7 +1791,7 @@ export function create_kit(canvas, opts = {}) {
 
   const riders = [];
   function add_rider(color) {
-    const model = make_rider(color);
+    const model = make_rider(color, shadow_light);
     model.group.rotation.order = 'YXZ';
     scene.add(model.group);
     riders.push(model);
@@ -1712,7 +1800,7 @@ export function create_kit(canvas, opts = {}) {
 
   function remove_rider(model) {
     scene.remove(model.group);
-    model.mats.forEach((m) => { m.map?.dispose(); m.dispose(); });
+    dispose_rider(model);
     const i = riders.indexOf(model);
     if (i >= 0) riders.splice(i, 1);
   }
@@ -1746,7 +1834,20 @@ export function create_kit(canvas, opts = {}) {
     model.group.position.set(x, s.y ?? road_y(s.z), s.z);
     model.group.rotation.y = heading(s.z) + (s.yaw ?? 0);
     model.group.rotation.x = pitch(s.z);
-    for (const w of model.wheels) w.rotation.x = (s.dist ?? -s.z) / wheel_r;
+    // wheels: spokes when slow, a blur disc when they would strobe
+    const turn = (s.dist ?? -s.z) / wheel_r;
+    const spin = dt > 0 && model.turn !== undefined ? Math.abs(turn - model.turn) / dt : 0;
+    model.turn = turn;
+    const fast = spin > 28;
+    for (const w of model.wheels) { w.rotation.x = turn; w.children[0].visible = !fast; w.children[1].visible = fast; }
+    model.extra_mats[0].opacity = s.fade ?? 1;
+    // projected shadow on the road plane under the rider (follows the climb angle)
+    if (model.shadow) {
+      const u = model.shadow.uniforms, a = pitch(s.z);
+      u.plane_p.value.set(x, road_y(s.z) + 0.02, s.z);
+      u.plane_n.value.set(0, Math.cos(a), Math.sin(a));
+      u.alpha.value = shadow_alpha * (s.fade ?? 1);
+    }
     animate_rider(model, s, dt, s.ref, !!s.boost);
     // tyre dust (gravel / dirt) or smoke (asphalt) when pushing 2x ftp; a big cloud at 3x
     const effort = (s.watts ?? 0) / Math.max(s.ref || 150, 50);
@@ -1783,7 +1884,12 @@ export function create_kit(canvas, opts = {}) {
     const fade = s.fade ?? 1;
     const faded = fade < 0.999;
     if (faded || model.faded) {
-      for (const m of model.mats) { m.transparent = faded; m.opacity = faded ? fade : 1; m.depthWrite = !faded; }
+      for (const m of model.mats) {
+        // switching to transparent needs a program change (three only re-checks it on needsUpdate)
+        if (m.transparent !== faded) { m.transparent = faded; m.needsUpdate = true; }
+        m.opacity = faded ? fade : 1;
+        m.depthWrite = !faded;
+      }
       model.faded = faded;
     }
   }
@@ -2024,7 +2130,7 @@ export function create_kit(canvas, opts = {}) {
   }
 
   // villages: a few houses by the road every ~2.5 km; a bigger one with a cheering crowd at a finish arch
-  const house_mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const house_mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const village_gap = 2500;
   const villages = new Map();
   function add_houses(g, z_mid, len, count, rnd) {
@@ -2064,7 +2170,7 @@ export function create_kit(canvas, opts = {}) {
   const crowd = [];
   function add_crowd(z) {
     const rnd = seeded(Math.round(-z) + 5);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const g = new THREE.Group();
     for (const side of [-1, 1]) {
       const fence = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 70), flat_mat('#e8e8e8'));
@@ -2137,7 +2243,9 @@ export function create_kit(canvas, opts = {}) {
     const fz = f.focus_z;
     sun.target.position.set(road_x(fz - 45), road_y(fz - 45), fz - 45);
     sun.position.copy(sun.target.position).add(sun_off);
+    update_shadow_light();
     renderer.render(scene, camera);
+    if (perf) perf.main = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
     if (f.mirror) render_mirror(f.mirror);
     adapt_resolution();
   }
@@ -2204,6 +2312,7 @@ export function rider_preview(canvas) {
   const sun = new THREE.DirectionalLight('#fff2dd', 2.4);
   sun.position.set(-3, 5, 4);
   scene.add(sun);
+  const preview_light = sun.position.clone().normalize();
   const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.12, 24), flat_mat('#2c3a48'));
   disc.position.y = -0.06;
   scene.add(disc);
@@ -2212,8 +2321,10 @@ export function rider_preview(canvas) {
   cam.lookAt(0, 0.75, 0);
   let model = null, raf = 0, last = performance.now(), crank = 0, alive = true;
   function set(look) {
-    if (model) { scene.remove(model.group); model.mats.forEach((m) => { m.map?.dispose(); m.dispose(); }); }
-    model = make_rider(look);
+    if (model) { scene.remove(model.group); dispose_rider(model); }
+    model = make_rider(look, preview_light);
+    model.shadow.uniforms.plane_p.value.set(0, 0.004, 0);   // shadow on the turntable
+    model.shadow.uniforms.alpha.value = 0.55;
     model.flame.visible = true;   // show off the nitro flame
     scene.add(model.group);
   }

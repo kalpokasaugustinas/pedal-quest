@@ -1,7 +1,7 @@
 // game-style setup controls: section headers with icons, number tiles, difficulty stars, a power gauge,
 // and painted scenery cards (a tiny landscape per theme, drawn once and cached).
 // the markup keeps the .seg / .stepper + data-key / data-i / data-d hooks that main.js wires up.
-import { themes, surprise_id } from './kit3d.js?v=34';
+import { themes, surprise_id } from './kit3d.js?v=35';
 
 // icon per option key (falls back to a diamond)
 const icons = {
