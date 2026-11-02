@@ -1,27 +1,28 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=41';
-import { control } from './ble.js?v=41';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=41';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=41';
-import { stats_html } from './stats.js?v=41';
-import { set_rider_mass, steady_speed } from './physics.js?v=41';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=41';
-import * as ride_log from './ride_log.js?v=41';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=41';
-import * as daily from './daily.js?v=41';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=41';
-import { rider_preview, ambience } from './kit3d.js?v=41';
-import { start_menu3d } from './menu3d.js?v=41';
-import { option_html } from './menu_ui.js?v=41';
-import race from './games/race.js?v=41';
-import crossroads from './games/crossroads.js?v=41';
-import summit from './games/summit.js?v=41';
-import pulse from './games/pulse.js?v=41';
-import spinbeat from './games/spinbeat.js?v=41';
-import escape from './games/escape.js?v=41';
-import sprint from './games/sprint.js?v=41';
-import workout from './games/workout.js?v=41';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=42';
+import { control } from './ble.js?v=42';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=42';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=42';
+import { stats_html } from './stats.js?v=42';
+import { set_rider_mass, steady_speed } from './physics.js?v=42';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=42';
+import * as ride_log from './ride_log.js?v=42';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=42';
+import * as daily from './daily.js?v=42';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=42';
+import { rider_preview, ambience } from './kit3d.js?v=42';
+import { start_menu3d } from './menu3d.js?v=42';
+import { english_voices, speak } from './commentary.js?v=42';
+import { option_html } from './menu_ui.js?v=42';
+import race from './games/race.js?v=42';
+import crossroads from './games/crossroads.js?v=42';
+import summit from './games/summit.js?v=42';
+import pulse from './games/pulse.js?v=42';
+import spinbeat from './games/spinbeat.js?v=42';
+import escape from './games/escape.js?v=42';
+import sprint from './games/sprint.js?v=42';
+import workout from './games/workout.js?v=42';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -195,6 +196,7 @@ function show_profile() {
   $('p-sound').checked = profile.sound;
   $('p-music').checked = profile.music;
   $('p-comm').checked = profile.commentator !== false;
+  fill_voices();
   // music track: shuffle (a new song each ride) or one favourite
   $('p-track').innerHTML = `<option value="shuffle">🔀 Shuffle</option>` + music_tracks().map(([id, name, style]) => `<option value="${id}">${name} (${style})</option>`).join('');
   $('p-track').value = profile.track || 'shuffle';
@@ -251,6 +253,18 @@ $('p-music').onchange = () => {
 $('p-comm').onchange = () => {
   profile.commentator = $('p-comm').checked;
   save_profile();
+};
+// commentator voice: the phone's own english voices (they load late on some devices)
+function fill_voices() {
+  const vs = english_voices();
+  $('p-voice').innerHTML = '<option value="">Auto (male if available)</option>' + vs.map((v) => `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name.replace(/</g, '&lt;')} (${v.lang})</option>`).join('');
+  $('p-voice').value = vs.some((v) => v.name === profile.voice) ? profile.voice : '';
+}
+if ('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged', fill_voices);
+$('p-voice').onchange = () => { profile.voice = $('p-voice').value; save_profile(); };
+$('p-voice-test').onclick = () => {
+  speechSynthesis?.cancel();
+  speak("And they're off! Steve attacks straight away, but you're right on his wheel. Two hundred metres to go, sprint now!", $('p-voice').value, true);
 };
 // in a ride: skip to another song
 $('btn-song').onclick = () => { if (next_song()) show_song(true); };

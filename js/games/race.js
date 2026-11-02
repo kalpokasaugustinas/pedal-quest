@@ -1,9 +1,9 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=41';
-import { create_world } from '../world.js?v=41';
-import { scenery_option } from '../kit3d.js?v=41';
-import { fmt_time, ordinal } from '../util.js?v=41';
-import { create_commentator, place_word, one } from '../commentary.js?v=41';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=42';
+import { create_world } from '../world.js?v=42';
+import { scenery_option } from '../kit3d.js?v=42';
+import { fmt_time, ordinal } from '../util.js?v=42';
+import { create_commentator, place_word, one } from '../commentary.js?v=42';
 
 export default {
   id: 'race',
@@ -56,7 +56,7 @@ function create(env) {
   const dots = [...$('progress').children];
 
   // commentator: narrates overtakes, attacks, nitro, the gaps and your numbers (captions + voice)
-  const cm = env.profile.commentator === false ? null : create_commentator($('screen-play'), { voice: env.profile.sound !== false });
+  const cm = env.profile.commentator === false ? null : create_commentator($('screen-play'), { voice: env.profile.sound !== false, voice_name: env.profile.voice || '' });
   const talk = { started: false, order: null, order_t: 0, marks: new Set(), quiet_t: 14, draft_t: 0, boosting: new Set(), top_v: 0, cad: 0, hr: null };
   const cap = (t) => t[0].toUpperCase() + t.slice(1);
   const style_line = { attacker: 'itching to attack', sitter: 'sitting on wheels, waiting', diesel: 'riding a steady tempo', chaser: 'ready to chase anything', sprinter: 'saving it all for the sprint' };

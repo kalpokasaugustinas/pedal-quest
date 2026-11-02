@@ -2,19 +2,33 @@
 // device's built-in text-to-speech voice. lines are rate-limited; a more important line can cut in.
 // priority: 1 colour (stats, gaps), 2 action (overtakes, attacks, nitro), 3 must say (start, finish, last metres)
 
-export function create_commentator(parent, { voice = true } = {}) {
+// english voices on this device (the phone's own text-to-speech), for the voice picker
+export function english_voices() {
+  return ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []).filter((v) => /^en/i.test(v.lang));
+}
+// a likely male voice by name (devices don't report gender; names like daniel / george / guy / ryan give it away)
+const male_hint = /male|daniel|george|guy|ryan|thomas|oliver|arthur|james|david|mark|rishi|aaron|fred|gbd|gbb|rjs|iol/i;
+
+// speak one line with a voice name ('' = best male-sounding english voice). excited lines are faster and brighter
+export function speak(text, voice_name = '', excited = false) {
+  if (!('speechSynthesis' in window)) return;
+  const vs = english_voices();
+  const v = vs.find((x) => x.name === voice_name)
+    || vs.find((x) => /en-GB/i.test(x.lang) && male_hint.test(x.name)) || vs.find((x) => male_hint.test(x.name))
+    || vs.find((x) => /en-GB/i.test(x.lang)) || vs[0];
+  // a commentator, not a robot: a touch lower, quicker and livelier when something happens
+  const u = new SpeechSynthesisUtterance(text.replace(/[^\p{L}\p{N}\s.,!?'%-]/gu, ''));
+  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-GB';
+  u.rate = excited ? 1.14 : 1.03;
+  u.pitch = excited ? 1.02 : 0.92;
+  window.speechSynthesis.speak(u);
+}
+
+export function create_commentator(parent, { voice = true, voice_name = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'commentary hidden';
   parent.appendChild(el);
   const synth = voice && 'speechSynthesis' in window ? window.speechSynthesis : null;
-  let speaker = null;
-  // an english voice, preferring a british one (sounds like a cycling commentator)
-  const pick_voice = () => {
-    const vs = synth?.getVoices() || [];
-    speaker = vs.find((v) => /en-GB/i.test(v.lang) && /male|daniel|george|uk english male/i.test(v.name))
-      || vs.find((v) => /en-GB/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
-  };
-  if (synth) { pick_voice(); synth.onvoiceschanged = pick_voice; }
 
   let busy_until = 0, hide_t = 0, last_prio = 0;
   const said = new Map();   // key -> time last said (don't repeat the same kind of line too often)
@@ -35,13 +49,7 @@ export function create_commentator(parent, { voice = true } = {}) {
     if (synth) {
       try {
         if (prio >= 2) synth.cancel();   // action interrupts colour
-        const u = new SpeechSynthesisUtterance(text.replace(/[^\p{L}\p{N}\s.,!?'%-]/gu, ''));
-        if (speaker) u.voice = speaker;
-        u.lang = speaker?.lang || 'en-GB';
-        u.rate = prio >= 2 ? 1.12 : 1.02;
-        u.pitch = 1;
-        u.volume = 1;
-        synth.speak(u);
+        speak(text, voice_name, prio >= 2);
       } catch { /* no speech on this device */ }
     }
     return true;

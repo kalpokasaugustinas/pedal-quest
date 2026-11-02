@@ -2,7 +2,7 @@
 // in the account, so they show up on the phone and the pc. same firebase project and method as muscle map:
 // one firestore document per user (users/<uid>), pedal quest keeps its data in its own field of that document.
 // without sign-in (or from file://) nothing leaves the browser.
-import { all_data, apply_data, set_store_hook } from './util.js?v=41';
+import { all_data, apply_data, set_store_hook } from './util.js?v=42';
 
 // web app config from the firebase console (public identifiers, not secrets; access is limited by the firestore rules)
 const firebase_config = {
