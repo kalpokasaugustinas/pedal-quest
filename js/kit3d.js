@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=39';
+import { seeded } from './util.js?v=40';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;

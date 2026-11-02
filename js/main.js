@@ -1,27 +1,27 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=39';
-import { control } from './ble.js?v=39';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=39';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=39';
-import { stats_html } from './stats.js?v=39';
-import { set_rider_mass, steady_speed } from './physics.js?v=39';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, update_ride, stop_ride } from './sfx.js?v=39';
-import * as ride_log from './ride_log.js?v=39';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=39';
-import * as daily from './daily.js?v=39';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=39';
-import { rider_preview, ambience } from './kit3d.js?v=39';
-import { start_menu3d } from './menu3d.js?v=39';
-import { option_html } from './menu_ui.js?v=39';
-import race from './games/race.js?v=39';
-import crossroads from './games/crossroads.js?v=39';
-import summit from './games/summit.js?v=39';
-import pulse from './games/pulse.js?v=39';
-import spinbeat from './games/spinbeat.js?v=39';
-import escape from './games/escape.js?v=39';
-import sprint from './games/sprint.js?v=39';
-import workout from './games/workout.js?v=39';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=40';
+import { control } from './ble.js?v=40';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=40';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=40';
+import { stats_html } from './stats.js?v=40';
+import { set_rider_mass, steady_speed } from './physics.js?v=40';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, update_ride, stop_ride } from './sfx.js?v=40';
+import * as ride_log from './ride_log.js?v=40';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=40';
+import * as daily from './daily.js?v=40';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=40';
+import { rider_preview, ambience } from './kit3d.js?v=40';
+import { start_menu3d } from './menu3d.js?v=40';
+import { option_html } from './menu_ui.js?v=40';
+import race from './games/race.js?v=40';
+import crossroads from './games/crossroads.js?v=40';
+import summit from './games/summit.js?v=40';
+import pulse from './games/pulse.js?v=40';
+import spinbeat from './games/spinbeat.js?v=40';
+import escape from './games/escape.js?v=40';
+import sprint from './games/sprint.js?v=40';
+import workout from './games/workout.js?v=40';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];

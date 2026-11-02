@@ -76,8 +76,9 @@ const layers = {
 
 const hz = (m) => 440 * 2 ** ((m - 69) / 12);
 
-// play one track. ctx = AudioContext, out = destination node. returns { update(dt, cadence, effort), stop() }
-export function create_music(ctx, out, id) {
+// play one track. ctx = AudioContext, out = destination node, start_bar = where the song starts (previews).
+// returns { update(dt, cadence, effort), stop() }
+export function create_music(ctx, out, id, start_bar = 0) {
   const T = tracks[id] || tracks.golden_hour;
   // ---- mix bus: instruments -> (duck) -> master -> compressor -> out, with reverb and echo sends ----
   const master = ctx.createGain();
@@ -275,7 +276,7 @@ export function create_music(ctx, out, id) {
   }
 
   // ---- sequencer ----
-  let next = ctx.currentTime + 0.15, step = 0, bpm_now = 90, beat_len = 60 / 90, effort_now = 0.6, alive = true;
+  let next = ctx.currentTime + 0.15, step = start_bar * 16, bpm_now = 90, beat_len = 60 / 90, effort_now = 0.6, alive = true;
   const chord_at = (bar) => T.chords[Math.floor(bar / T.bars_per_chord) % T.chords.length];
   const tone_of = (chord, i) => chord[i % chord.length] + 12 * Math.floor(i / chord.length);   // chord tone i, octaves up
   const vel = (c) => (c === 'X' ? 1 : c === 'x' ? 0.8 : c === 'o' ? 0.35 : 0);
