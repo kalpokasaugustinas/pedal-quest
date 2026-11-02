@@ -1,5 +1,5 @@
 // daily challenge: one game + settings + goal per calendar day (same for everyone on that day), with a streak
-import { load, store, seeded } from './util.js?v=42';
+import { load, store, seeded } from './util.js?v=43';
 
 const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)];
 const round10 = (w) => Math.max(50, Math.min(500, Math.round(w / 10) * 10));
@@ -11,7 +11,7 @@ const pool = [
     const f = pick(rnd, [0.75, 0.75, 1]);
     return { game: 'race', opts: { km, rivals: f }, text: `${km} km vs ${f === 1 ? 'Hard' : 'Normal'} bots (${round10(ftp * f)} W)`, goal: 'Win the race', check: (fl) => fl.win };
   },
-  () => ({ game: 'crossroads', opts: { stages: 5, stage_min: 2 }, text: '5 stages × 2 min', goal: 'Every stage clean', check: (fl) => fl.clean_all }),
+  () => ({ game: 'crossroads', opts: { stages: 12, stage_s: 30 }, text: '12 stages × 30 s', goal: 'Every stage clean', check: (fl) => fl.clean_all }),
   (rnd) => {
     const climb = pick(rnd, ['pine', 'eagle', 'rollers']);
     return { game: 'summit', opts: { climb }, text: 'Climb of the day', goal: 'Reach the top', check: () => true };

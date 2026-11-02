@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=42';
+import { seeded } from './util.js?v=43';
 
 // how much faster the world flies by than the physics speed (speed, distance and watts numbers are unchanged)
 export const vis_scale = 5;
@@ -2686,8 +2686,9 @@ export function create_kit(canvas, opts = {}) {
   let mirror_frame = null;
   function render_mirror(m) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    const mw = Math.round(Math.min(w * 0.62, 340)), mh = Math.round(mw / 2.4);
-    const mx = Math.round((w - mw) / 2), my = Math.round(m.top ?? 70);
+    // portrait: centred under the hud. landscape: top-right corner, so it never covers your rider
+    const mw = Math.round(portrait ? Math.min(w * 0.62, 340) : Math.min(w * 0.3, 300)), mh = Math.round(mw / 2.4);
+    const mx = portrait ? Math.round((w - mw) / 2) : w - mw - 12, my = Math.round(portrait ? (m.top ?? 70) : Math.min(m.top ?? 70, 64));
     const yaw = heading(m.z);
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const x = road_x(m.z), y = road_y(m.z);

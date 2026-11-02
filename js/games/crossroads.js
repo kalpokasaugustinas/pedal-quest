@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=42';
-import { step_speed } from '../physics.js?v=42';
-import { rand, clamp, fmt_clock } from '../util.js?v=42';
+import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=43';
+import { step_speed } from '../physics.js?v=43';
+import { rand, clamp, fmt_clock } from '../util.js?v=43';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -15,7 +15,8 @@ const themes = [
   { name: 'Alpine Pass', surface: 'gravel', sky: ['#5d93d6', '#eaf2fb'], far: '#e9eef5', near: '#8aa0b3', ground: '#6f8f5a', road: '#3f4146', dash: '#ffffff' },
 ];
 
-const choose_s = 15;          // seconds to pick a path
+// seconds to pick a path: short stages get a short (game-like) decision window
+const choose_time = (stage_s) => Math.min(15, Math.max(7, Math.round(stage_s * 0.27)));
 const on_target_ratio = 0.95; // 3 s average must be at least 95% of the target
 const clean_share = 0.9;      // 90% of the stage on target = clean stage
 const max_streak = 5;         // streak multiplier caps at x1.5
@@ -46,7 +47,7 @@ export default {
   tagline: 'Pick a path every stage. Watts vs points: do the math.',
   uses: ['power', 'cadence'],
   how: [
-    'Each stage the road forks into 3 paths. Pick one (tap a card) within 15 s or before you reach the fork. Every path shows the watts to hold and the points it pays.',
+    'Each stage the road forks into 3 paths. Pick one (tap a card) before the choice timer runs out or you reach the fork. Every path shows the watts to hold and the points it pays.',
     'Points per watt differ on every path, so the best deal isn’t always obvious. Do the math!',
     'Hold your 3-second average at 95%+ of the target. You get the path’s points × the share of time on target.',
     'Clean stage (90%+ on target) grows your streak multiplier: ×1.1, ×1.2 … up to ×1.5. A missed stage resets it.',
@@ -55,19 +56,20 @@ export default {
     'Pick nothing in time and you get the easiest path.',
   ],
   options: [
-    { key: 'stages', label: 'Stages', choices: [[5, '5'], [8, '8'], [12, '12']], def: 5 },
-    { key: 'stage_min', label: 'Stage length', choices: [[1, '1 min'], [2, '2 min'], [3, '3 min']], def: 2 },
+    { key: 'stages', label: 'Stages', choices: [[8, '8'], [12, '12'], [20, '20']], def: 12 },
+    { key: 'stage_s', label: 'Stage length', choices: [[30, '30 s'], [60, '1 min'], [120, '2 min']], def: 30 },
     scenery_option('valley'),
   ],
-  setup_html: (o, profile) => `<p class="small">Path targets are based on your FTP (${profile.ftp} W): easy 55–72%, medium 75–92%, hard 95–120%. Total ride ≈ ${o.stages * o.stage_min + Math.round(o.stages * 0.25)} min.</p>`,
-  board: (o) => ({ key: `crossroads_${o.stages}x${o.stage_min}`, label: `Top scores · ${o.stages} stages × ${o.stage_min} min`, lower: false, fmt: (s) => `${s} pts` }),
+  setup_html: (o, profile) => `<p class="small">Path targets are based on your FTP (${profile.ftp} W): easy 55–72%, medium 75–92%, hard 95–120%. ${choose_time(o.stage_s)} s to choose each path. Total ride ≈ ${Math.round((o.stages * (o.stage_s + choose_time(o.stage_s) * 0.6)) / 60)} min.</p>`,
+  board: (o) => ({ key: `crossroads_${o.stages}x${o.stage_s}s`, label: `Top scores · ${o.stages} stages × ${o.stage_s < 60 ? `${o.stage_s} s` : `${o.stage_s / 60} min`}`, lower: false, fmt: (s) => `${s} pts` }),
   create,
 };
 
 function create(env) {
   const $ = (id) => document.getElementById(id);
   const ftp = env.profile.ftp;
-  const stage_s = env.opts.stage_min * 60;
+  const stage_s = env.opts.stage_s;
+  const choose_s = choose_time(stage_s);
   const st = {
     stage: 0, phase: 'choose', t_phase: 0, paths: make_paths(ftp), path: null,
     avg_w: 0, on_target: 0, total: 0, streak: 0, log: [],
@@ -152,10 +154,11 @@ function create(env) {
   }
 
   env.hud.innerHTML = `
-    <div class="gh-row">
-      <div class="gh-big" id="cr-total">0</div>
-      <div><div id="cr-stage" class="gh-title"></div><div id="cr-sub" class="gh-sub"></div></div>
-    </div>`;
+    <div class="cr-tiles">
+      <div class="cr-tile pts"><small>POINTS</small><b id="cr-total">0</b><i id="cr-live"></i></div>
+      <div class="cr-tile clock" id="cr-clock-tile"><small id="cr-clock-label">CHOOSE</small><b id="cr-clock">0</b><i id="cr-clock-sub"></i></div>
+    </div>
+    <div id="cr-stage" class="gh-title"></div><div id="cr-sub" class="gh-sub"></div>`;
   env.bottom.innerHTML = `
     <div class="target">
       <div class="target-row"><span id="cr-target"></span><span id="cr-avg"></span></div>
@@ -176,7 +179,7 @@ function create(env) {
             <span class="path-p">${p.points} pts</span>
           </button>`).join('')}
         </div>
-        <div class="choice-foot">Streak ×${(1 + 0.1 * st.streak).toFixed(1)} · ${stage_s / 60} min per stage</div>
+        <div class="choice-foot">Streak ×${(1 + 0.1 * st.streak).toFixed(1)} · ${stage_s < 60 ? `${stage_s} s` : `${stage_s / 60} min`} per stage</div>
       </div>`;
     env.overlay.querySelectorAll('.path').forEach((b) => { b.onclick = () => pick(+b.dataset.i); });
   }
@@ -212,7 +215,7 @@ function create(env) {
       name: st.path.theme.name, mystery: st.path.mystery, watts: st.path.watts, offered: st.path.points,
       share, mult, pts, clean, value: value(st.path), best_value: value(best), best_name: best.theme.name,
     });
-    env.big_text(`+${pts}${clean ? ' ✓' : ''}`, 1400, clean ? 'good' : '');
+    points_pop(pts, clean, mult);
     env.sfx(clean ? 'good' : 'warn');
     st.stage += 1;
     if (st.stage >= env.opts.stages) {
@@ -224,6 +227,18 @@ function create(env) {
     st.phase = 'choose';
     st.t_phase = 0;
     show_choice();
+  }
+
+  // big colourful "+points" that pops up and floats away after each stage
+  function points_pop(pts, clean, mult) {
+    const el = document.createElement('div');
+    el.className = `pts-pop ${clean ? 'clean' : pts > 0 ? 'some' : 'none'}`;
+    el.innerHTML = `<b>+${pts}</b><small>${clean ? `CLEAN STAGE${st.streak > 1 ? ` · STREAK ×${(1 + 0.1 * st.streak).toFixed(1)}` : ''}` : pts > 0 ? 'PARTIAL' : 'MISSED'}</small>`;
+    $('screen-play').appendChild(el);   // not the overlay: the next choice cards replace that
+    setTimeout(() => el.remove(), 2200);
+    // the points tile bumps too
+    const t = $('cr-total');
+    t.classList.remove('bump'); void t.offsetWidth; t.classList.add('bump');
   }
 
   const game = {
@@ -238,7 +253,7 @@ function create(env) {
       st.time += dt;
       st.t_phase += dt;
       st.energy += input.watts * dt;
-      st.avg_w += (input.watts - st.avg_w) * Math.min(1, dt / 3);   // ~3 s rolling average
+      st.avg_w = input.watts3 ?? st.avg_w + (input.watts - st.avg_w) * Math.min(1, dt / 3);   // 3 s average
       st.flash = Math.max(0, st.flash - dt);
       if (st.phase === 'choose') {
         // out of time, or arrived at the fork without choosing
@@ -252,7 +267,7 @@ function create(env) {
       const z = rider_z();
       const speed = st.v * vis;
       kit.place_rider(me, { z, x: 0, watts: st.watts, v: st.v, crank: st.crank, dist: st.x * vis, ref: ftp }, dt);
-      kit.chase({ z, speed, smooth: 5 }, dt);
+      kit.chase({ z, speed }, dt);   // same chase distance as the race
       kit.frame(dt, { focus_z: z, speed });
       update_hud();
     },
@@ -266,8 +281,14 @@ function create(env) {
     const mult = (1 + 0.1 * st.streak).toFixed(1);
     if (st.phase === 'choose') {
       const to_fork = Math.max(0, Math.round((rider_z() - fork.z) / vis));
-      $('cr-stage').textContent = `Stage ${st.stage + 1}/${env.opts.stages} · crossroads in ${to_fork} m`;
-      $('cr-sub').textContent = `streak ×${mult} · ${Math.ceil(choose_s - st.t_phase)} s to choose`;
+      const left_s = Math.max(0, Math.ceil(choose_s - st.t_phase));
+      $('cr-stage').textContent = `Stage ${st.stage + 1}/${env.opts.stages} · fork in ${to_fork} m`;
+      $('cr-sub').textContent = `streak ×${mult}`;
+      $('cr-clock-label').textContent = 'CHOOSE PATH';
+      $('cr-clock').textContent = `${left_s}s`;
+      $('cr-clock-sub').textContent = `then ${stage_s < 60 ? `${stage_s} s` : fmt_clock(stage_s)} stage`;
+      $('cr-clock-tile').className = `cr-tile clock choose${left_s <= 3 ? ' hurry' : ''}`;
+      $('cr-live').textContent = '';
       $('cr-target').textContent = 'Choose a path…';
       $('cr-avg').textContent = `${Math.round(st.avg_w)} W avg`;
       $('cr-fill').style.width = '0%';
@@ -277,8 +298,14 @@ function create(env) {
     }
     const share = st.on_target / stage_s;
     const live = Math.round(st.path.points * share * (1 + 0.1 * st.streak));
+    const left = Math.max(0, stage_s - st.t_phase);
     $('cr-stage').textContent = `Stage ${st.stage + 1}/${env.opts.stages} · ${st.path.theme.name}`;
-    $('cr-sub').textContent = `${fmt_clock(stage_s - st.t_phase)} left · streak ×${mult} · +${live} so far`;
+    $('cr-sub').textContent = `streak ×${mult}`;
+    $('cr-clock-label').textContent = 'NEXT CHOICE IN';
+    $('cr-clock').textContent = left < 60 ? `${Math.ceil(left)}s` : fmt_clock(left);
+    $('cr-clock-sub').textContent = `of ${stage_s < 60 ? `${stage_s} s` : fmt_clock(stage_s)}`;
+    $('cr-clock-tile').className = `cr-tile clock${left <= 5 ? ' hurry' : ''}`;
+    $('cr-live').textContent = `+${live} this stage`;
     $('cr-target').textContent = `Target ${st.path.watts} W (≥ ${Math.round(st.path.watts * on_target_ratio)})`;
     $('cr-avg').textContent = `3 s avg ${Math.round(st.avg_w)} W`;
     $('cr-fill').style.width = `${clamp(share, 0, 1) * 100}%`;

@@ -572,3 +572,51 @@ button.big:active { transform: translateY(5px); box-shadow: 0 1px 0 #b36b00, 0 4
 .commentary::before { content: '🎙️ '; }
 .commentary.hidden { display: block !important; opacity: 0; }
 @media (orientation: landscape) and (max-height: 500px) { .commentary { font-size: 13px; } }
+
+/* crossroads: big points + clock tiles, "+points" popup after each stage */
+.cr-tiles { display: flex; gap: 8px; margin-bottom: 6px; }
+.cr-tile { min-width: 108px; padding: 6px 12px 7px; border-radius: 14px; background: rgba(10,15,22,.62); border: 1px solid rgba(255,255,255,.1); text-shadow: none; }
+.cr-tile small { display: block; font-size: 10px; letter-spacing: 1.4px; font-weight: 800; color: #9fb0c0; }
+.cr-tile b { display: block; font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.cr-tile i { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: #9be7a0; min-height: 15px; }
+.cr-tile.pts b { color: #ffd54f; }
+.cr-tile.clock b { color: #fff; }
+.cr-tile.clock i { color: #9fb0c0; }
+.cr-tile.choose { border-color: rgba(255,213,79,.6); }
+.cr-tile.choose b { color: #ffe082; }
+.cr-tile.hurry { border-color: #ff5252; animation: hurry .5s ease-in-out infinite alternate; }
+.cr-tile.hurry b { color: #ff8a80; }
+@keyframes hurry { to { box-shadow: 0 0 16px rgba(255,82,82,.6); } }
+#cr-total.bump { animation: bump .6s cubic-bezier(.2,1.6,.4,1); }
+@keyframes bump { 40% { transform: scale(1.35); color: #7ee08a; } }
+.pts-pop { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 4;
+  animation: pts-pop 2.1s cubic-bezier(.2,1.4,.4,1) forwards; }
+.pts-pop b { display: block; font-family: var(--display); font-weight: 400; font-size: min(96px, 22vw); line-height: 1;
+  background: linear-gradient(180deg, #fff59d, #ffb300 55%, #ff6f00); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)) drop-shadow(0 0 18px rgba(255,180,0,.55)); }
+.pts-pop.clean b { background-image: linear-gradient(180deg, #ccff90, #69f0ae 50%, #00c853); filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)) drop-shadow(0 0 20px rgba(105,240,174,.6)); }
+.pts-pop.none b { background-image: linear-gradient(180deg, #ffcdd2, #ef5350); filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)); }
+.pts-pop small { display: block; margin-top: 4px; font-family: var(--display); font-size: 15px; letter-spacing: 1.5px; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
+@keyframes pts-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  30% { transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; transform: translate(-50%, -60%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -95%) scale(.9); }
+}
+
+/* transition card between menus and games */
+.transition { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: radial-gradient(ellipse at 50% 40%, #1d2b3c, #070b12 75%); transition: opacity .5s ease; }
+.transition.off { opacity: 0; pointer-events: none; }
+.tr-card { width: min(420px, 100%); text-align: center; transform: translateY(0); transition: transform .5s ease; }
+.transition.off .tr-card { transform: translateY(16px); }
+.tr-icon { font-size: 64px; line-height: 1; animation: tr-bob 1.2s ease-in-out infinite; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
+@keyframes tr-bob { 50% { transform: translateY(-8px) rotate(-4deg); } }
+.tr-title { margin-top: 14px; font-family: var(--display); font-size: 34px; text-transform: uppercase; font-style: italic; letter-spacing: .5px; color: #fff; }
+.tr-sub { margin-top: 4px; color: #9fb0c0; font-size: 14px; }
+.tr-bar { margin: 20px auto 0; height: 10px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; }
+.tr-bar i { display: block; height: 100%; width: 0; border-radius: 5px;
+  background: repeating-linear-gradient(45deg, #ffb300 0 12px, #ffd54f 12px 24px); background-size: 34px 34px; animation: tr-stripes .6s linear infinite; }
+@keyframes tr-stripes { to { background-position: 34px 0; } }
+.tr-tip { margin-top: 18px; font-size: 13px; line-height: 1.45; color: #cfd8e0; min-height: 38px; }

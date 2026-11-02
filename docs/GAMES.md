@@ -36,6 +36,7 @@ Every game's results screen also shows **Your ride**: a power + heart rate chart
 ### 🏁 Race
 - Rival strength: Easy (50% of your FTP), Normal (75%), Hard (100%), Extreme (125%). You race 5 bots at 80% to 120% of that.
 - Bots: each has a style (Steve attacker, Henry wheel sucker, Lukas diesel, Marta chaser, Olivia sprinter). Tactics: attack when you fade next to them (your 10 s power < 85% of your 60 s power), follow your surges, chase when your gap grows, the odd test attack, ease off on a wheel (sitters). Energy budget: bank = avg W × time − energy spent. Cruising runs at 97% plus a slow wave and pays back any overdraft over ~90 s; tactics need credit (max 25 s × avg W of debt); the final sprint (from the style's kick point) spends exactly the bank. Simulated race averages land within 1% of the target. Tactics near you get a callout, the leaderboard shows ⚔️ attack / 🎯 chase / 🧲 follow. Nitro at 50% of a perfect player's rate.
+- Power display: the big W number and target checks use a 3 s average (`input.watts3`); physics uses raw watts. Transitions: a loading card (game, preload progress, a how-to tip) fades into the countdown; a "Counting your ride…" card leads to the results. A tap on the play screen re-enters fullscreen after switching apps.
 - Commentator (`js/commentary.js`, profile toggle): captions above the bottom HUD plus the device's text-to-speech voice (en-GB preferred, muted when Sounds is off). Calls the start, lead changes, your overtakes, bot swaps near you or at the front, attacks, nitro, drafting, halfway / final km / 200 m, the finish; in quiet moments your numbers (avg W and % FTP, cadence, HR, top speed), the gaps, or a rival's style. Lines are rate-limited with priorities (action cuts in over colour). ♪ button in the play HUD skips to another song.
 - Nitro: HR at or above a target line (`HR ≥ 152`), no upper limit, so chasing nitro never asks you to ease off. The line is set 1–3 bpm under your smoothed HR (15 s), first 20 s into the race (HR needs time to rise), again after every nitro, and reset to your current HR after 25 s below it. Floor 65% of max HR (soft pedalling charges nothing). 30 s above fills the bar; below it the charge waits (no drain). A full bar gives +80 W for 3 s. The skill: don't fade.
 - Look: low-poly, flat-shaded 3D with a strong side key light, low ambient and ACES tone mapping (deep colours, contrasty facets). Faceted terrain chunks recycled around the camera, instanced layered pines / round trees / rocks / grass tufts / roadside posts, big two-peak mountains with snow caps, lit clouds drifting on the wind (and slowly coming closer as you ride; they fade at the edges of their box so wrapping never pops), boulder piles, wildlife and hikers (see below), campfires with tents (2 pooled warm point lights + additive ground glow), soft shadows, fog. Scenery option: 🎲 Surprise me (default), Sunny meadow, Misty valley, Starry night (fixed themes = summer, clear, no landmarks).
@@ -68,7 +69,8 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Scoring: path points × share of the stage with your 3 s average ≥ 95% of the target × streak multiplier.
 - A clean stage (≥ 90% on target) adds +0.1 to the multiplier, up to ×1.5. A missed stage resets it.
 - Mystery path (25% of stages): watts hidden until you commit, pays 1.5×.
-- Pick nothing in 15 s (or reach the fork without choosing) and you get the easiest path.
+- Stages: 8 / 12 / 20, each 30 s / 1 min / 2 min (default 12 × 30 s). Choice window = 27% of the stage, 7–15 s (8 s for 30 s stages). Pick nothing in time (or reach the fork) and you get the easiest path.
+- HUD: big POINTS tile (+ live points this stage) and a clock tile (CHOOSE PATH countdown, then NEXT CHOICE IN; red pulse in the last seconds). A big "+points" pops after each stage (green = clean, gold = partial, red = missed). Camera = race chase distance.
 
 ### ⛰️ Summit
 - 4 climbs are defined as `[length, grade]` segments.
@@ -96,6 +98,7 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Every km, a shelter pushes the storm back 25 m.
 
 ### ⚡ Sprint Cup
+- Rivals start an attack 20 m behind at your speed (no free momentum), so whoever pushes more watts gains; the 👻 ghost keeps a +2 m/s head start (same watts as last time ≈ a tie). In landscape the attack mirror sits top-right.
 - One continuous race. After 15 s, rivals attack one by one (3 / 5 / 8 attacks), with 25–40 s of random calm between attacks and a warning 3 s before.
 - An attacker starts 20 m behind you, 3 m/s faster (steady riding always gets passed: you have to answer; ~1.5–1.75× FTP for 22 s holds a Club attack, ~2× for Racer / Pro), and surges to peak in 3 s, then fades towards 75%. Peak = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × rider strength (0.9 → 1.15, +8% each time the roster comes round).
 - Still ahead after 22 s = held off: 100 points + 10 per meter of lead. Passed by 5 m = lost (0 points). The race goes on either way.

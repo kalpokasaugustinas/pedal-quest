@@ -1,28 +1,28 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=42';
-import { control } from './ble.js?v=42';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=42';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=42';
-import { stats_html } from './stats.js?v=42';
-import { set_rider_mass, steady_speed } from './physics.js?v=42';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=42';
-import * as ride_log from './ride_log.js?v=42';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=42';
-import * as daily from './daily.js?v=42';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=42';
-import { rider_preview, ambience } from './kit3d.js?v=42';
-import { start_menu3d } from './menu3d.js?v=42';
-import { english_voices, speak } from './commentary.js?v=42';
-import { option_html } from './menu_ui.js?v=42';
-import race from './games/race.js?v=42';
-import crossroads from './games/crossroads.js?v=42';
-import summit from './games/summit.js?v=42';
-import pulse from './games/pulse.js?v=42';
-import spinbeat from './games/spinbeat.js?v=42';
-import escape from './games/escape.js?v=42';
-import sprint from './games/sprint.js?v=42';
-import workout from './games/workout.js?v=42';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=43';
+import { control } from './ble.js?v=43';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=43';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=43';
+import { stats_html } from './stats.js?v=43';
+import { set_rider_mass, steady_speed } from './physics.js?v=43';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=43';
+import * as ride_log from './ride_log.js?v=43';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=43';
+import * as daily from './daily.js?v=43';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=43';
+import { rider_preview, ambience } from './kit3d.js?v=43';
+import { start_menu3d } from './menu3d.js?v=43';
+import { english_voices, speak } from './commentary.js?v=43';
+import { option_html } from './menu_ui.js?v=43';
+import race from './games/race.js?v=43';
+import crossroads from './games/crossroads.js?v=43';
+import summit from './games/summit.js?v=43';
+import pulse from './games/pulse.js?v=43';
+import spinbeat from './games/spinbeat.js?v=43';
+import escape from './games/escape.js?v=43';
+import sprint from './games/sprint.js?v=43';
+import workout from './games/workout.js?v=43';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -266,6 +266,10 @@ $('p-voice-test').onclick = () => {
   speechSynthesis?.cancel();
   speak("And they're off! Steve attacks straight away, but you're right on his wheel. Two hundred metres to go, sprint now!", $('p-voice').value, true);
 };
+// back from another app: chrome leaves fullscreen and only a tap may re-enter it. any tap on the game does
+$('screen-play').addEventListener('pointerdown', () => {
+  if (phase !== 'idle' && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+});
 // in a ride: skip to another song
 $('btn-song').onclick = () => { if (next_song()) show_song(true); };
 $('p-track').onchange = () => {
@@ -433,6 +437,8 @@ function start_game() {
   $('demo').classList.toggle('hidden', !demo && !hr_slider);
   $('in-watts').value = 0;
 
+  // loading card with the game, a progress bar (the preload below) and a tip from its how-to
+  transition(true, { icon: current.icon, title: current.name, sub: 'Getting the world ready…', tip: current.how[Math.floor(Math.random() * current.how.length)] });
   // a fresh canvas per game: a canvas can't switch between webgl (3d) and 2d
   $('canvas-slot').innerHTML = '<canvas class="game-canvas"></canvas>';
   const canvas = $('canvas-slot').firstChild;
@@ -463,9 +469,25 @@ function start_game() {
   phase = 'loading';
   load_frames = 0;
   phase_end = performance.now() + 1500;
-  show_big_text('Loading…', 0, 'callout');
+  load_t0 = performance.now();
   last_ts = performance.now();
   requestAnimationFrame(loop);
+}
+
+// full-screen transition card: { icon, title, sub, tip, fill (0..1, or 'auto' = fills in ms) }
+let load_t0 = 0;
+function transition(on, o = {}) {
+  const el = $('transition');
+  if (!on) { el.classList.add('off'); return; }
+  $('tr-icon').textContent = o.icon || '🚴';
+  $('tr-title').textContent = o.title || '';
+  $('tr-sub').textContent = o.sub || '';
+  $('tr-tip').innerHTML = o.tip ? `💡 ${o.tip}` : '';
+  const fill = $('tr-fill');
+  fill.style.transition = 'none';
+  fill.style.width = '0%';
+  if (o.auto) { void fill.offsetWidth; fill.style.transition = `width ${o.auto}ms linear`; fill.style.width = '100%'; }
+  el.classList.remove('off');
 }
 
 // current inputs: trainer (or demo sliders) + hr (strap, trainer-relayed, or demo slider)
@@ -481,8 +503,13 @@ function read_input(ts) {
   }
   let hr = sensors.hr;
   if (hr === null && !$('demo-hr').classList.contains('hidden')) hr = +$('in-hr').value;
-  return { watts, cadence, hr };
+  // 3-second average power: what the big W number shows and what targets compare against (raw jumps a lot)
+  w_hist.push([ts, watts]);
+  while (w_hist.length && ts - w_hist[0][0] > 3000) w_hist.shift();
+  const watts3 = w_hist.reduce((s, x) => s + x[1], 0) / w_hist.length;
+  return { watts, watts3, cadence, hr };
 }
+const w_hist = [];   // [time ms, watts] of the last 3 s
 
 function loop(ts) {
   if (phase === 'idle' || !instance) return;
@@ -502,9 +529,11 @@ function loop(ts) {
   if (phase === 'loading') {
     instance.render(0, input);
     load_frames += 1;
+    $('tr-fill').style.width = `${Math.min(100, Math.min((ts - load_t0) / 1500, load_frames / 40) * 100)}%`;
     if (ts > phase_end && load_frames >= 40) {
       phase = 'countdown';
       phase_end = ts + 3000;
+      transition(false);   // fades out into the countdown
     }
     requestAnimationFrame(loop);
     return;
@@ -545,7 +574,10 @@ function loop(ts) {
       }
     }
     if (phase === 'ending' && ts > phase_end) {
-      finish_game();
+      // results card, then the results screen fades in behind it
+      phase = 'leaving';
+      transition(true, { icon: '🏁', title: instance.done_text === 'FINISH' ? 'Finished!' : instance.done_text || 'Finished!', sub: 'Counting your ride…', auto: 900 });
+      setTimeout(() => { finish_game(); transition(false); }, 950);
       return;
     }
   }
@@ -568,7 +600,7 @@ function track_hud_top(ts) {
 }
 
 function update_metrics(input) {
-  $('m-watts').textContent = Math.round(input.watts);
+  $('m-watts').textContent = Math.round(input.watts3);
   const v = instance.speed ? instance.speed() : null;
   $('m-speed').textContent = v === null ? '--' : (v * 3.6).toFixed(1);
   $('m-cad').textContent = Math.round(input.cadence);
@@ -719,9 +751,13 @@ $('btn-again').onclick = start_game;
 $('btn-setup').onclick = () => { daily_run = null; render_setup(); show('screen-setup'); };
 $('btn-quit').onclick = () => {
   if (phase === 'play' && run && run.secs > 20 && !confirm('Quit this game? Progress will be lost.')) return;
-  leave_play();
-  render_setup();
-  show('screen-setup');
+  transition(true, { icon: '🏠', title: 'Back to the menu', auto: 350 });
+  setTimeout(() => {
+    leave_play();
+    render_setup();
+    show('screen-setup');
+    transition(false);
+  }, 380);
 };
 
 // keyboard controls for demo mode on a pc: arrows = watts, [ ] = cadence, - + = heart rate

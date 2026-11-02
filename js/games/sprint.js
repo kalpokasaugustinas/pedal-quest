@@ -1,9 +1,9 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=42';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=42';
-import { step_speed } from '../physics.js?v=42';
-import { clamp, fmt_clock, load, store } from '../util.js?v=42';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=43';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=43';
+import { step_speed } from '../physics.js?v=43';
+import { clamp, fmt_clock, load, store } from '../util.js?v=43';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -22,7 +22,7 @@ const attack_s = 22;         // an attack lasts this long; still in front at the
 // ghosts: your own earlier attempts. a ghost replays the watts you pushed in the same attack of your strongest
 // run (per number of attacks). it starts a bit faster than you, so the same effort as last time ends level:
 // you have to ride harder than your past self to hold it off.
-const ghost_bonus = 2;       // m/s head start speed (vs +3 for rivals); same watts as last time ≈ a tie at the end
+const ghost_bonus = 2;       // m/s head start speed (rivals get none); same watts as last time ≈ a tie at the end
 const ghost_color = '#b3e5fc';
 const ghost_key = (attacks) => `pq_sprint_ghost_${attacks}`;
 const short_date = (d) => new Date(`${d}T12:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -113,7 +113,9 @@ function create(env) {
 
   function start_attack() {
     const a = attacker_for(st.n);
-    const rider = { ...a, x: st.p.x - start_behind, v: st.p.v + (a.ghost ? ghost_bonus : 3), crank: 0, watts: 0, t: 0, model: kit.add_rider(a.color), lane: (st.n % 2 ? 1 : -1) * 0.9 };
+    // rivals start at your speed: whoever pushes more watts gains (no free momentum). the ghost keeps a small
+    // head start, so the same watts as last time end level
+    const rider = { ...a, x: st.p.x - start_behind, v: st.p.v + (a.ghost ? ghost_bonus : 0), crank: 0, watts: 0, t: 0, model: kit.add_rider(a.color), lane: (st.n % 2 ? 1 : -1) * 0.9 };
     if (st.rec) finish_rec();
     st.rec = { w: [], acc: 0, t: 0 };
     st.riders.push(rider);

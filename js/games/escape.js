@@ -1,9 +1,9 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
 import * as THREE from 'three';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=42';
-import { step_speed } from '../physics.js?v=42';
-import { clamp, fmt_clock } from '../util.js?v=42';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=43';
+import { step_speed } from '../physics.js?v=43';
+import { clamp, fmt_clock } from '../util.js?v=43';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km
@@ -234,7 +234,7 @@ function create(env) {
     $('es-gap').style.color = gap < 25 ? '#ff8a80' : gap < 50 ? '#ffd54f' : '';
     $('es-sub').textContent = `${(st.x / 1000).toFixed(2)} km · ${st.checkpoints} shelters`;
     const sw = Math.round(storm_watts());
-    const you = Math.round(input.watts);
+    const you = Math.round(input.watts3 ?? input.watts);
     $('es-storm').textContent = `Storm ${sw} W · you ${you} W ${you >= sw ? '▲' : '▼'}`;
     $('es-storm').style.color = you >= sw ? '#7ee08a' : '#ff8a80';
     $('es-cp').textContent = `shelter in ${Math.round(st.next_cp - st.x)} m`;
