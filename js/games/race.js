@@ -1,9 +1,10 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=44';
-import { create_world } from '../world.js?v=44';
-import { scenery_option } from '../kit3d.js?v=44';
-import { fmt_time, ordinal } from '../util.js?v=44';
-import { create_commentator, place_word, one } from '../commentary.js?v=44';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=45';
+import { create_world } from '../world.js?v=45';
+import { scenery_option } from '../kit3d.js?v=45';
+import { fmt_time, ordinal } from '../util.js?v=45';
+import { create_commentator, place_word, one } from '../commentary.js?v=45';
+import { pop, jset } from '../juice.js?v=45';
 
 export default {
   id: 'race',
@@ -40,7 +41,7 @@ function create(env) {
 
   env.hud.innerHTML = `
     <div class="race-top">
-      <div id="h-pos" class="pos bignum gold"></div>
+      <div id="h-pos" class="pos juicy gold num"></div>
       <div class="hud-mid">
         <div id="progress" class="progress">${race.riders.map((r) => `<span class="dot${r.is_player ? ' me' : ''}" style="background:${r.color}"></span>`).join('')}</div>
         <div class="hud-sub"><span id="h-left" class="bignum sm"></span> <span id="h-draft" class="draft hidden"></span></div>
@@ -163,6 +164,9 @@ function create(env) {
         game.done = true;
         game.done_text = 'FINISH';
         const pos = standings(race).indexOf(race.player) + 1;
+        game.done_text = ' ';   // the place pops instead of FINISH
+        game.done_title = `${ordinal(pos)} place!`;
+        pop($('screen-play'), pos === 1 ? '1ST!' : `${ordinal(pos).toUpperCase()}`, { color: pos === 1 ? 'gold' : pos <= 3 ? 'purple' : 'blue', sub: pos === 1 ? 'WINNER!' : pos <= 3 ? 'PODIUM!' : 'FINISHED', sub_color: 'gold', ms: 2600 });
         cm?.say(pos === 1 ? one('You win it! What a ride!', 'Victory! Nobody could touch you today!') : `You cross the line in ${place_word(pos)}.`, 3);
       }
     },
@@ -175,7 +179,7 @@ function create(env) {
     result,
   };
 
-  let lb_t = 0;
+  let lb_t = 0, last_pos = 0;
   function render_leaderboard(order, p) {
     const me = order.indexOf(p);
     const rows = [...new Set([0, me - 1, me, me + 1])].filter((i) => i >= 0 && i < order.length).sort((a, b) => a - b);
@@ -191,7 +195,11 @@ function create(env) {
   function update_hud() {
     const order = standings(race);
     const p = race.player;
-    $('h-pos').textContent = `${order.indexOf(p) + 1}/${race.riders.length}`;
+    const pos_now = order.indexOf(p) + 1;
+    jset($('h-pos'), `${pos_now}/${race.riders.length}`);
+    // moving up a place: a green pop (after the start shuffle)
+    if (last_pos && pos_now < last_pos && race.time > 4 && !game.done) pop($('screen-play'), `▲ ${ordinal(pos_now).toUpperCase()}`, { color: 'green', size: 'md', top: '30%', ms: 1500 });
+    last_pos = pos_now;
     $('h-left').innerHTML = `${(Math.max(0, race.distance_m - p.x) / 1000).toFixed(2)}<small>km</small>`;
     $('h-draft').classList.toggle('hidden', p.draft < 0.02);
     $('h-draft').textContent = `💨 −${Math.round(p.draft * 100)}%`;

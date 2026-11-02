@@ -1,9 +1,9 @@
 // summit: time-trial up a climb. the trainer's resistance follows the gradient (ftms simulation mode)
 // and a ghost of your best run rides along
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=44';
-import { create_kit, scenery_option } from '../kit3d.js?v=44';
-import { step_speed } from '../physics.js?v=44';
-import { clamp, fmt_time, load, store } from '../util.js?v=44';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=45';
+import { create_kit, scenery_option } from '../kit3d.js?v=45';
+import { step_speed } from '../physics.js?v=45';
+import { clamp, fmt_time, load, store } from '../util.js?v=45';
 
 // climbs as [length m, grade %] segments
 const climbs = {

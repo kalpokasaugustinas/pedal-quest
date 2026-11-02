@@ -1,8 +1,9 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=44';
-import { step_speed } from '../physics.js?v=44';
-import { rand, clamp, fmt_clock } from '../util.js?v=44';
+import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=45';
+import { step_speed } from '../physics.js?v=45';
+import { rand, clamp, fmt_clock } from '../util.js?v=45';
+import { roller, pop, jset } from '../juice.js?v=45';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -156,8 +157,8 @@ function create(env) {
   // just two big numbers: points (gold) and the clock (yellow while choosing, white riding, red at the end)
   env.hud.innerHTML = `
     <div class="duo">
-      <span id="cr-total" class="bignum gold">0</span><span id="cr-streak" class="streak"></span>
-      <span id="cr-clock" class="bignum clock"></span>
+      <span id="cr-total" class="juicy num">0</span><span id="cr-streak" class="juicy orange num sm"></span>
+      <span id="cr-clock" class="juicy blue num clock"></span>
     </div>`;
   env.bottom.innerHTML = `
     <div class="target" id="cr-target-box">
@@ -227,17 +228,15 @@ function create(env) {
     show_choice();
   }
 
-  // big colourful "+points" that pops up and floats away after each stage
-  function points_pop(pts, clean, mult) {
-    const el = document.createElement('div');
-    el.className = `pts-pop ${clean ? 'clean' : pts > 0 ? 'some' : 'none'}`;
-    el.innerHTML = `<b>+${pts}</b><small>${clean ? `CLEAN STAGE${st.streak > 1 ? ` · STREAK ×${(1 + 0.1 * st.streak).toFixed(1)}` : ''}` : pts > 0 ? 'PARTIAL' : 'MISSED'}</small>`;
-    $('screen-play').appendChild(el);   // not the overlay: the next choice cards replace that
-    setTimeout(() => el.remove(), 2200);
-    // the points tile bumps too
-    const t = $('cr-total');
-    t.classList.remove('bump'); void t.offsetWidth; t.classList.add('bump');
+  // big glossy "+400 PTS" that bursts with sparkles after each stage (on the play screen: the overlay gets replaced)
+  function points_pop(pts, clean) {
+    pop($('screen-play'), `+${pts} PTS`, {
+      color: pts > 0 ? 'purple' : 'red',
+      sub: clean ? (st.streak > 1 ? `CLEAN! 🔥×${(1 + 0.1 * st.streak).toFixed(1)}` : 'CLEAN!') : pts > 0 ? 'PARTIAL' : 'MISSED',
+      sub_color: clean ? 'green' : pts > 0 ? 'gold' : 'red',
+    });
   }
+  const total_roll = roller(document.getElementById('cr-total'));   // the total rolls up after each stage
 
   const game = {
     done: false,
@@ -275,19 +274,19 @@ function create(env) {
   };
 
   function update_hud() {
-    $('cr-total').textContent = st.total;
-    $('cr-streak').textContent = st.streak ? `🔥×${(1 + 0.1 * st.streak).toFixed(1)}` : '';
+    total_roll.set(st.total);
+    jset($('cr-streak'), st.streak ? `×${(1 + 0.1 * st.streak).toFixed(1)}` : '');
     const clock = $('cr-clock');
     if (st.phase === 'choose') {
       const left_s = Math.max(0, Math.ceil(choose_s - st.t_phase));
-      clock.textContent = left_s;
-      clock.className = `bignum clock choose${left_s <= 3 ? ' hurry' : ''}`;
+      jset(clock, left_s);
+      clock.className = `juicy num clock ${left_s <= 3 ? 'red hurry' : 'gold'}`;
       $('cr-target-box').classList.add('hidden');
       return;
     }
     const left = Math.max(0, stage_s - st.t_phase);
-    clock.textContent = left < 60 ? Math.ceil(left) : fmt_clock(left);
-    clock.className = `bignum clock${left <= 5 ? ' hurry' : ''}`;
+    jset(clock, left < 60 ? Math.ceil(left) : fmt_clock(left));
+    clock.className = `juicy num clock ${left <= 5 ? 'red hurry' : 'blue'}`;
     $('cr-target-box').classList.remove('hidden');
     const share = st.on_target / stage_s;
     const ok = st.avg_w >= st.path.watts * on_target_ratio;

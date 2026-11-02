@@ -646,3 +646,53 @@ button.big:active { transform: translateY(5px); box-shadow: 0 1px 0 #b36b00, 0 4
 .hold-clock.last { color: #69f0ae; text-shadow: 0 4px 0 rgba(0,0,0,.5), 0 0 3px #000, 0 0 26px rgba(105,240,174,.6); animation: hurry-num .5s ease-in-out infinite alternate; }
 .hold-clock.danger { color: #ff6e6e; text-shadow: 0 4px 0 rgba(0,0,0,.5), 0 0 3px #000, 0 0 26px rgba(255,82,82,.6); }
 @media (orientation: landscape) and (max-height: 500px) { .bignum { font-size: 34px; } .hold-clock { font-size: 72px; } }
+
+/* ---- juice: glossy outlined game text (points, places, records, timers) ---- */
+.juicy { position: relative; display: inline-block; padding: 0 .1em; font-family: var(--display); font-style: italic; font-weight: 400;
+  letter-spacing: 1px; line-height: 1.08; white-space: nowrap;
+  --j1: #ffd6ff; --j2: #e040fb; --j3: #8e24aa; --jo: #2b0638; --jg: rgba(224,64,251,.5);
+  /* the element itself is the thick dark outline; ::after lays the glossy gradient on top */
+  color: var(--jo); -webkit-text-fill-color: var(--jo); -webkit-text-stroke: .17em var(--jo); text-shadow: none;
+  filter: drop-shadow(0 3px 0 var(--jo)) drop-shadow(0 0 10px var(--jg)); }
+.juicy::after { content: attr(data-t); position: absolute; inset: 0; padding: inherit; -webkit-text-stroke: 0;
+  background: linear-gradient(180deg, var(--j1) 0%, var(--j2) 50%, var(--j3) 100%); -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent; }
+.juicy.gold { --j1: #fffde7; --j2: #ffd54f; --j3: #ff8f00; --jo: #4a2500; --jg: rgba(255,193,7,.5); }
+.juicy.green { --j1: #f1ffd6; --j2: #76ff03; --j3: #00a152; --jo: #0b3a12; --jg: rgba(118,255,3,.45); }
+.juicy.red { --j1: #ffe0e0; --j2: #ff5252; --j3: #c62828; --jo: #3a0a0a; --jg: rgba(255,82,82,.5); }
+.juicy.blue { --j1: #ffffff; --j2: #80d8ff; --j3: #0288d1; --jo: #062a44; --jg: rgba(64,196,255,.45); }
+.juicy.orange { --j1: #fff3e0; --j2: #ffab40; --j3: #e65100; --jo: #3e1a00; --jg: rgba(255,145,0,.5); }
+.juicy.num { font-size: 46px; }
+.juicy.num.sm { font-size: 26px; }
+.juicy.hurry { animation: hurry-num .45s ease-in-out infinite alternate; }
+.j-bump { animation: j-bump .55s cubic-bezier(.2,1.8,.4,1); }
+@keyframes j-bump { 35% { transform: scale(1.4) rotate(-5deg); } }
+
+/* "+400 PTS" pop with sparkles */
+.j-pop { position: absolute; left: 50%; transform: translate(-50%, -50%); z-index: 6; pointer-events: none; text-align: center;
+  animation: j-pop 2s cubic-bezier(.2,1.4,.4,1) forwards; }
+.j-pop .juicy { display: block; width: max-content; margin: 0 auto; font-size: min(86px, 20vw); }
+.j-pop.md .juicy { font-size: min(50px, 12vw); }
+.j-pop .juicy.sub { font-size: min(30px, 7.5vw); margin-top: 2px; }
+@keyframes j-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(-14deg); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.22) rotate(4deg); }
+  26% { transform: translate(-50%, -50%) scale(1) rotate(-2deg); }
+  72% { opacity: 1; transform: translate(-50%, -62%) scale(1) rotate(0); }
+  100% { opacity: 0; transform: translate(-50%, -105%) scale(.92); }
+}
+.spark { position: absolute; left: 50%; top: 45%; font-style: normal; font-size: 20px; pointer-events: none; opacity: 0;
+  animation: spark .9s ease-out forwards; text-shadow: 0 0 8px currentColor; }
+.spark.purple { color: #ea80fc; } .spark.gold { color: #ffe57f; } .spark.green { color: #b2ff59; } .spark.red { color: #ff8a80; } .spark.blue { color: #80d8ff; }
+@keyframes spark {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(.4); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.3) rotate(200deg); }
+}
+
+/* stamp slammed onto a panel (new record, level up) */
+.panel { position: relative; }
+.j-stamp { position: absolute; right: 8px; top: -18px; z-index: 3; font-size: 26px; transform: rotate(-8deg);
+  animation: j-stamp .55s cubic-bezier(.2,1.7,.4,1) .35s both; }
+@keyframes j-stamp { from { opacity: 0; transform: scale(3.2) rotate(-24deg); } to { opacity: 1; transform: scale(1) rotate(-8deg); } }
+#r-title.juicy { font-size: 40px; margin: 10px 0 6px; }
+.hold-clock.juicy { color: transparent; text-shadow: none; }

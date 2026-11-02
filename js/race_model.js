@@ -1,5 +1,5 @@
 // race state: riders (player + bots), bot power model, standings
-import { step_speed } from './physics.js?v=44';
+import { step_speed } from './physics.js?v=45';
 
 // bot roster: name, color, strength relative to the chosen base watts and riding style
 const roster = [

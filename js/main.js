@@ -1,28 +1,29 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=44';
-import { control } from './ble.js?v=44';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=44';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=44';
-import { stats_html } from './stats.js?v=44';
-import { set_rider_mass, steady_speed } from './physics.js?v=44';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=44';
-import * as ride_log from './ride_log.js?v=44';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=44';
-import * as daily from './daily.js?v=44';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=44';
-import { rider_preview, ambience } from './kit3d.js?v=44';
-import { start_menu3d } from './menu3d.js?v=44';
-import { english_voices, speak } from './commentary.js?v=44';
-import { option_html } from './menu_ui.js?v=44';
-import race from './games/race.js?v=44';
-import crossroads from './games/crossroads.js?v=44';
-import summit from './games/summit.js?v=44';
-import pulse from './games/pulse.js?v=44';
-import spinbeat from './games/spinbeat.js?v=44';
-import escape from './games/escape.js?v=44';
-import sprint from './games/sprint.js?v=44';
-import workout from './games/workout.js?v=44';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=45';
+import { control } from './ble.js?v=45';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=45';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=45';
+import { stats_html } from './stats.js?v=45';
+import { set_rider_mass, steady_speed } from './physics.js?v=45';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=45';
+import * as ride_log from './ride_log.js?v=45';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=45';
+import * as daily from './daily.js?v=45';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=45';
+import { rider_preview, ambience } from './kit3d.js?v=45';
+import { start_menu3d } from './menu3d.js?v=45';
+import { english_voices, speak } from './commentary.js?v=45';
+import { roller, stamp, juicify } from './juice.js?v=45';
+import { option_html } from './menu_ui.js?v=45';
+import race from './games/race.js?v=45';
+import crossroads from './games/crossroads.js?v=45';
+import summit from './games/summit.js?v=45';
+import pulse from './games/pulse.js?v=45';
+import spinbeat from './games/spinbeat.js?v=45';
+import escape from './games/escape.js?v=45';
+import sprint from './games/sprint.js?v=45';
+import workout from './games/workout.js?v=45';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -576,7 +577,7 @@ function loop(ts) {
     if (phase === 'ending' && ts > phase_end) {
       // results card, then the results screen fades in behind it
       phase = 'leaving';
-      transition(true, { icon: '🏁', title: instance.done_text === 'FINISH' ? 'Finished!' : instance.done_text || 'Finished!', sub: 'Counting your ride…', auto: 900 });
+      transition(true, { icon: '🏁', title: instance.done_title || (instance.done_text === 'FINISH' ? 'Finished!' : instance.done_text?.trim() || 'Finished!'), sub: 'Counting your ride…', auto: 900 });
       setTimeout(() => { finish_game(); transition(false); }, 950);
       return;
     }
@@ -659,7 +660,9 @@ function finish_game() {
     ({ list, rank } = board_add(b, { score: res.score, text: b.fmt(res.score), note: res.note || '', date: new Date().toISOString().slice(0, 10) }));
   }
   last_result = res;
+  $('r-title').className = '';
   $('r-title').textContent = res.title;
+  juicify($('r-title'), (res.flags?.pos ?? 9) <= 3 || res.flags?.win ? 'gold' : 'purple');
   $('r-sub').textContent = res.sub || '';
   $('r-body').innerHTML = res.body || '';
   $('r-ride').innerHTML = ride_log.ride_html(profile.ftp);
@@ -680,6 +683,10 @@ function finish_game() {
   // pedal points + level
   const pp = award({ secs: ran.secs, km: ran.km, flags: res.flags, rank, daily_new, badges: fresh.length });
   $('r-pp').innerHTML = award_html(pp);
+  // the pp you earned rolls up; a level up gets a stamp
+  const pp_b = $('r-pp').querySelector('.pp-head b');
+  if (pp && pp_b) { pp_b.className = 'juicy num sm'; setTimeout(() => roller(pp_b, (n) => `+${n} PP`, 900).set(pp.gained), 450); }
+  if (pp && pp.after.level > pp.before.level) stamp($('r-pp').querySelector('.panel') || $('r-pp'), 'LEVEL UP!', 'purple');
   if (pp && pp.after.level > pp.before.level) setTimeout(() => sfx('finish'), 900);
   render_rider_sum();
   // optional result actions (e.g. the ramp test's "set my ftp"): buttons that change the profile
@@ -696,7 +703,9 @@ function finish_game() {
     };
     $('r-body').appendChild(btn);
   }
-  $('r-board-label').textContent = b.label + (rank === 0 ? ' · new record! 🎉' : rank > 0 ? ` · you placed #${rank + 1}` : '');
+  $('r-board-label').textContent = b.label + (rank > 0 ? ` · you placed #${rank + 1}` : '');
+  $('r-board').parentElement.querySelector('.j-stamp')?.remove();
+  if (rank === 0) stamp($('r-board').parentElement, 'NEW RECORD!', 'gold');
   $('r-board').innerHTML = board_html(b, list, rank);
   render_nav();
   show('screen-results');

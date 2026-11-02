@@ -1,9 +1,10 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=44';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=44';
-import { step_speed } from '../physics.js?v=44';
-import { clamp, fmt_clock, load, store } from '../util.js?v=44';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=45';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=45';
+import { step_speed } from '../physics.js?v=45';
+import { clamp, fmt_clock, load, store } from '../util.js?v=45';
+import { roller, pop, jset } from '../juice.js?v=45';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -101,7 +102,8 @@ function create(env) {
   };
 
   // score top-left; during an attack a big countdown on the left (hold on!), mirror + power bars on the right
-  env.hud.innerHTML = `<div class="duo"><span id="sp-big" class="bignum gold">0</span><span id="sp-n" class="streak"></span></div>`;
+  env.hud.innerHTML = `<div class="duo"><span id="sp-big" class="juicy num">0</span><span id="sp-n" class="juicy orange num sm"></span></div>`;
+  const score_roll = roller(document.getElementById('sp-big'));
   const hold = document.createElement('div');
   hold.className = 'hold-clock hidden';
   env.overlay.appendChild(hold);
@@ -153,7 +155,8 @@ function create(env) {
     const pts = held ? 100 + Math.round(Math.max(0, lead) * 10) : 0;
     st.score += pts;
     st.log.push({ n: st.n + 1, rival: r.rival, color: r.color, held, lead, peak: st.attack_peak, rival_peak: r.peak, pts });
-    env.big_text(held ? `HELD OFF +${pts}` : `${r.rival} got away`, 1500, held ? 'good' : 'bad');
+    if (held) pop(document.getElementById('screen-play'), `+${pts} PTS`, { sub: 'HELD OFF!', sub_color: 'green' });
+    else pop(document.getElementById('screen-play'), `${r.rival.toUpperCase()} ESCAPED`, { color: 'red', size: 'md' });
     env.sfx(held ? 'perfect' : 'bad');
     st.cur = null;
     st.n += 1;
@@ -281,12 +284,12 @@ function create(env) {
   }
 
   function update_hud(input) {
-    $('sp-big').textContent = `${st.score}`;
-    $('sp-n').textContent = `⚔️ ${Math.min(st.n + (st.phase === 'attack' ? 1 : 0), total)}/${total}`;
+    score_roll.set(st.score);
+    jset($('sp-n'), `⚔ ${Math.min(st.n + (st.phase === 'attack' ? 1 : 0), total)}/${total}`);
     if (st.phase === 'attack' && st.cur) {
       const lead = st.p.x - st.cur.x, left = Math.ceil(attack_s - st.t_phase);
-      hold.textContent = left;
-      hold.className = `hold-clock${left <= 5 ? ' last' : ''}${lead < 3 ? ' danger' : ''}`;
+      jset(hold, left);
+      hold.className = `hold-clock juicy ${lead < 3 ? 'red hurry' : left <= 5 ? 'green hurry' : 'gold'}`;
       $('sp-box').classList.remove('hidden');
       $('sp-a').textContent = lead >= 0 ? `🛡️ ${lead.toFixed(1)} m` : `⚠️ ${(-lead).toFixed(1)} m`;
       $('sp-a').style.color = lead >= 0 ? '#7ee08a' : '#ff8a80';
