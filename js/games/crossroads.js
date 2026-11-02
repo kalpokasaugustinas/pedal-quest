@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, scenery_option, curve_x } from '../kit3d.js?v=32';
-import { step_speed } from '../physics.js?v=32';
-import { rand, clamp, fmt_clock } from '../util.js?v=32';
+import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=33';
+import { step_speed } from '../physics.js?v=33';
+import { rand, clamp, fmt_clock } from '../util.js?v=33';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -75,8 +75,8 @@ function create(env) {
   };
 
   // ---- 3d world: the road bends into the chosen path at every fork ----
-  const vis = 2.5;                 // visual speed multiplier
-  const fork_ahead = 230;          // a new fork appears this far ahead (visual m)
+  const vis = vis_scale;                 // visual speed multiplier
+  const fork_ahead = 92 * vis;     // a new fork appears 92 m ahead (same warning time at any visual speed)
   const branch_w = 26, branch_len = 90;   // branches spread 26 m sideways over 90 m
   const bends = [];                // { z, dx } road bends (one per chosen path)
   const surfaces = [{ z: Infinity, surf: 'asphalt' }];

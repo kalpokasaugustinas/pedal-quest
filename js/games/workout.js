@@ -3,10 +3,10 @@
 // it rides like a solo spin with other riders around: on a hard interval there is someone ahead to reel in,
 // on a recovery someone rolls past you. nothing official, they just make the intervals feel like a ride.
 // the plan is painted on the road ahead (zone colour) with a board at each interval; only a thin strip on screen
-import { overlay_2d, round_rect, label } from '../draw2d.js?v=32';
-import { create_kit, scenery_option } from '../kit3d.js?v=32';
-import { step_speed, steady_speed } from '../physics.js?v=32';
-import { clamp, fmt_clock } from '../util.js?v=32';
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=33';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=33';
+import { step_speed, steady_speed } from '../physics.js?v=33';
+import { clamp, fmt_clock } from '../util.js?v=33';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -93,7 +93,7 @@ export default {
 function create(env) {
   const $ = (id) => document.getElementById(id);
   // 3d ride through the scenery (speed from the shared physics); chart on a 2d layer on top
-  const vis = 2.5;
+  const vis = vis_scale;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery });
   const me = kit.add_rider(env.look);
   const view = overlay_2d(env.overlay);

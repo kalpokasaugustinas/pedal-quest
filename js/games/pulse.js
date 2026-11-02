@@ -1,9 +1,9 @@
 // pulse pilot: your heart rate is your altitude. fly a winged bicycle through gates set at target bpm.
 // hr reacts slowly to effort, so you have to plan ahead: start pushing (or easing off) well before each gate
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=32';
-import { step_speed } from '../physics.js?v=32';
-import { clamp, rand } from '../util.js?v=32';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=33';
+import { step_speed } from '../physics.js?v=33';
+import { clamp, rand } from '../util.js?v=33';
 
 const gate_spacing = 320;   // meters between gates (~35 s at 33 km/h)
 const perfect_bpm = 2;      // |hr - target| <= 2 -> perfect
@@ -134,7 +134,7 @@ function create(env) {
   }
 
   // ---- 3d: a flying bike over the low-poly valley, gates as frames at bpm heights ----
-  const vis = 2.5;
+  const vis = vis_scale;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery, posts: false });
   const alt_lo = 6, alt_hi = 46;   // meters above the road for view_lo .. view_hi bpm
   const y_of = (bpm) => alt_lo + ((clamp(bpm, view_lo, view_hi) - view_lo) / (view_hi - view_lo)) * (alt_hi - alt_lo);

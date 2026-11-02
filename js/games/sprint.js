@@ -1,9 +1,9 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=32';
-import { create_kit, scenery_option } from '../kit3d.js?v=32';
-import { step_speed } from '../physics.js?v=32';
-import { clamp, fmt_clock, load, store } from '../util.js?v=32';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=33';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=33';
+import { step_speed } from '../physics.js?v=33';
+import { clamp, fmt_clock, load, store } from '../util.js?v=33';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -221,7 +221,7 @@ function create(env) {
   };
 
   // ---- 3d: one long winding road; attackers keep their real gap to you, the camera pulls back during attacks ----
-  const vis = 2.5;
+  const vis = vis_scale;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery });
   const me = kit.add_rider(env.look);
   const view = overlay_2d(env.overlay);   // duel bars on top of the 3d view

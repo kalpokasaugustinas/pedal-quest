@@ -3,13 +3,13 @@
 // black. every few shots the scenery re-rolls (season, weather, villages...) behind the black.
 // light on phones: fixed low resolution, ~30 fps, stopped while a game runs or the tab is hidden.
 // falls back to the 2d scene (menu_bg.js) when webgl is not available.
-import { create_kit, surprise_id } from './kit3d.js?v=32';
-import { start_menu_bg } from './menu_bg.js?v=32';
+import { create_kit, surprise_id } from './kit3d.js?v=33';
+import { start_menu_bg } from './menu_bg.js?v=33';
 
-const shot_s = 7.5;          // seconds per shot
-const fade_s = 0.7;          // fade out / in through black
-const shots_per_world = 4;   // re-roll the scenery after this many shots
-const group_v = 10;          // visual speed of the group (m/s)
+const shot_s = 4.5;          // seconds per shot
+const fade_s = 0.4;          // fade out / in through black
+const shots_per_world = 5;   // re-roll the scenery after this many shots
+const group_v = 20;          // visual speed of the group (m/s), like the games' 5x visual speed
 const phone = matchMedia('(pointer: coarse)').matches;
 
 // the group: you plus four riders around you (gap = metres behind you, x = side offset)
@@ -35,21 +35,21 @@ const shots = {
   // tracking beside the group, the riders slowly overtake the camera
   side: {
     fov: 42, run(kit, s, t, pz) {
-      const p = at(kit, pz + 3 - t * 0.9, s.side * 8, 1.3); kit.camera.position.set(p.x, p.y, p.z);
+      const p = at(kit, pz + 4 - t * 2, s.side * 8, 1.3); kit.camera.position.set(p.x, p.y, p.z);
       const l = at(kit, pz - 1, 0, 1.0); kit.camera.lookAt(l.x, l.y, l.z);
     },
   },
   // low in front of the group, looking back at the riders coming at you
   front: {
     fov: 50, run(kit, s, t, pz) {
-      const p = at(kit, pz - 10 + t * 0.3, s.side * 1.6, 0.6); kit.camera.position.set(p.x, p.y, p.z);
+      const p = at(kit, pz - 11 + t * 0.8, s.side * 1.6, 0.6); kit.camera.position.set(p.x, p.y, p.z);
       const l = at(kit, pz + 1.5, 0, 1.1); kit.camera.lookAt(l.x, l.y, l.z);
     },
   },
   // fixed roadside camera ahead: the group rides towards it and past it, the camera pans along
   roadside: {
     fov: 34, run(kit, s, t, pz) {
-      s.z ??= pz - 48;
+      s.z ??= pz - 55;
       const p = at(kit, s.z, s.side * 6.5, 1.6); kit.camera.position.set(p.x, p.y, p.z);
       const l = at(kit, pz, 0, 1.0); kit.camera.lookAt(l.x, l.y, l.z);
     },
@@ -57,7 +57,7 @@ const shots = {
   // drone high behind, the landscape opens up ahead
   drone: {
     fov: 55, run(kit, s, t, pz) {
-      const p = at(kit, pz + 14 - t * 0.5, s.side * 5, 13 + t * 0.6); kit.camera.position.set(p.x, p.y, p.z);
+      const p = at(kit, pz + 14 - t * 1.2, s.side * (5 + t * 1.5), 12 + t * 1.6); kit.camera.position.set(p.x, p.y, p.z);
       const l = at(kit, pz - 12, 0, 0); kit.camera.lookAt(l.x, l.y, l.z);
     },
   },
@@ -119,9 +119,9 @@ export function start_menu3d(container, get_look) {
     sh.run(kit, shot, shot_t, pz, dt);
     // riders: each drifts a little forward and back and side to side
     pack.forEach((r, i) => {
-      const z = pz + r.gap + Math.sin(d * 0.013 + i * 1.7) * 1.2;
+      const z = pz + r.gap + Math.sin(d * 0.0065 + i * 1.7) * 1.2;
       kit.place_rider(models[i], {
-        z, x: r.x + Math.sin(d * 0.009 + i) * 0.4, watts: 190 + i * 15, v: group_v, crank: crank + i * 1.3, dist: -z, ref: 200,
+        z, x: r.x + Math.sin(d * 0.0045 + i) * 0.4, watts: 190 + i * 15, v: group_v, crank: crank + i * 1.3, dist: -z, ref: 200,
         fade: sh.wind ? kit.fade_for(z, pz) : 1,
       }, dt);
     });

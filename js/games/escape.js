@@ -1,9 +1,9 @@
 // escape: an endless chase. a storm front rides the same physics as you and gets stronger every minute.
 // how long can you stay ahead? every km you reach a shelter checkpoint that pushes the storm back
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=32';
-import { step_speed } from '../physics.js?v=32';
-import { clamp, fmt_clock } from '../util.js?v=32';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=33';
+import { step_speed } from '../physics.js?v=33';
+import { clamp, fmt_clock } from '../util.js?v=33';
 
 const start_gap = 60;          // meters head start
 const checkpoint_m = 1000;     // a shelter every km
@@ -114,7 +114,7 @@ function create(env) {
   };
 
   // ---- 3d: the camera rides ahead looking back at you; the storm wall rolls in behind ----
-  const vis = 2.5;
+  const vis = vis_scale;
   const kit = create_kit(env.canvas, { theme: env.opts.scenery });
   const me = kit.add_rider(env.look);
   const base_light = { hemi: kit.hemi.intensity, sun: kit.sun.intensity, fog: kit.scene.fog.color.clone(), near: kit.scene.fog.near, far: kit.scene.fog.far };
