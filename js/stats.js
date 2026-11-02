@@ -1,5 +1,5 @@
 // stats tab: the active player's totals, most played game, best result per game, all-time power / hr records
-import { load, fmt_clock, player_board_keys } from './util.js?v=33';
+import { load, fmt_clock, player_board_keys } from './util.js?v=34';
 
 const hm = (secs) => `${Math.floor(secs / 3600)} h ${Math.floor((secs % 3600) / 60)} min`;
 const tile = (k, v, sub = '') => `<div class="st-tile"><small>${k}</small><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;

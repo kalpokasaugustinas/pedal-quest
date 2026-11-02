@@ -1,8 +1,8 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { bot_lineup, create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg, styles } from '../race_model.js?v=33';
-import { create_world } from '../world.js?v=33';
-import { scenery_option } from '../kit3d.js?v=33';
-import { fmt_time, ordinal } from '../util.js?v=33';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=34';
+import { create_world } from '../world.js?v=34';
+import { scenery_option } from '../kit3d.js?v=34';
+import { fmt_time, ordinal } from '../util.js?v=34';
 
 export default {
   id: 'race',
@@ -24,8 +24,6 @@ export default {
     { key: 'base_watts', label: 'Rival strength', type: 'stepper', min: 50, max: 500, step: 10, unit: 'W', def: 150 },
     scenery_option('meadow'),
   ],
-  setup_html: (o) => `<ul class="rivals">${bot_lineup(o.base_watts).reverse()
-    .map((b) => `<li><span class="dot" style="background:${b.color}"></span>${b.name} <small>${styles[b.style].label}</small><span class="w">~${b.avg_watts} W avg</span></li>`).join('')}</ul>`,
   board: (o) => ({ key: `race_${o.km}km`, label: `Best times · ${o.km} km`, lower: true, fmt: fmt_time }),
   create,
 };

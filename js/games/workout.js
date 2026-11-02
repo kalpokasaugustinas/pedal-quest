@@ -3,10 +3,10 @@
 // it rides like a solo spin with other riders around: on a hard interval there is someone ahead to reel in,
 // on a recovery someone rolls past you. nothing official, they just make the intervals feel like a ride.
 // the plan is painted on the road ahead (zone colour) with a board at each interval; only a thin strip on screen
-import { overlay_2d, round_rect, label } from '../draw2d.js?v=33';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=33';
-import { step_speed, steady_speed } from '../physics.js?v=33';
-import { clamp, fmt_clock } from '../util.js?v=33';
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=34';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=34';
+import { step_speed, steady_speed } from '../physics.js?v=34';
+import { clamp, fmt_clock } from '../util.js?v=34';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });

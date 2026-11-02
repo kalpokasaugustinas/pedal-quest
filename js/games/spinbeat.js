@@ -1,8 +1,8 @@
 // spin beat: a rhythm game for your legs. target cadence blocks scroll down a highway,
 // keep your cadence inside them to score; hitting in a row builds a combo multiplier
 import * as THREE from 'three';
-import { create_kit, scenery_option } from '../kit3d.js?v=33';
-import { clamp, seeded } from '../util.js?v=33';
+import { create_kit, scenery_option } from '../kit3d.js?v=34';
+import { clamp, seeded } from '../util.js?v=34';
 
 // tracks are generated from a fixed seed, so the same track is the same every time (fair leaderboards)
 const tracks = {

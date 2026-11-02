@@ -1,7 +1,7 @@
 // progression: pedal points (pp) from riding, levels, and the cyclist look you unlock with them.
 // pp = 10 per km + bonuses (finish, podium, personal best, daily challenge, new badges, solid workout).
 // stored per player: pq_pp { total, last }, pq_look { slot: item id }
-import { load, store } from './util.js?v=33';
+import { load, store } from './util.js?v=34';
 
 // pp needed to go from level n to n+1: 100, 150, 200, ... (level 5 at 700 pp, level 10 at 2700 pp)
 const step = (n) => 100 + 50 * (n - 1);

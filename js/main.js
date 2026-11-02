@@ -1,27 +1,27 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=33';
-import { control } from './ble.js?v=33';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=33';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=33';
-import { stats_html } from './stats.js?v=33';
-import { set_rider_mass, steady_speed } from './physics.js?v=33';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=33';
-import * as ride_log from './ride_log.js?v=33';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=33';
-import * as daily from './daily.js?v=33';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=33';
-import { rider_preview, ambience } from './kit3d.js?v=33';
-import { start_menu3d } from './menu3d.js?v=33';
-import { option_html } from './menu_ui.js?v=33';
-import race from './games/race.js?v=33';
-import crossroads from './games/crossroads.js?v=33';
-import summit from './games/summit.js?v=33';
-import pulse from './games/pulse.js?v=33';
-import spinbeat from './games/spinbeat.js?v=33';
-import escape from './games/escape.js?v=33';
-import sprint from './games/sprint.js?v=33';
-import workout from './games/workout.js?v=33';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=34';
+import { control } from './ble.js?v=34';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=34';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=34';
+import { stats_html } from './stats.js?v=34';
+import { set_rider_mass, steady_speed } from './physics.js?v=34';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=34';
+import * as ride_log from './ride_log.js?v=34';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=34';
+import * as daily from './daily.js?v=34';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=34';
+import { rider_preview, ambience } from './kit3d.js?v=34';
+import { start_menu3d } from './menu3d.js?v=34';
+import { option_html } from './menu_ui.js?v=34';
+import race from './games/race.js?v=34';
+import crossroads from './games/crossroads.js?v=34';
+import summit from './games/summit.js?v=34';
+import pulse from './games/pulse.js?v=34';
+import spinbeat from './games/spinbeat.js?v=34';
+import escape from './games/escape.js?v=34';
+import sprint from './games/sprint.js?v=34';
+import workout from './games/workout.js?v=34';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -213,7 +213,7 @@ function render_sensors() {
     el.className = `st ${status_class(sensors.status[kind])}`;
   }
   render_rider_sum();
-  $('mode-note').textContent = sensors.trainer
+  if ($('how-mode')) $('how-mode').textContent = sensors.trainer
     ? 'Trainer connected: your watts drive the game.'
     : 'No trainer connected: games run in demo mode with sliders for watts, cadence and heart rate.';
 }
@@ -268,12 +268,20 @@ function render_setup() {
   const o = game_opts(g);
   $('g-title').textContent = `${g.icon} ${g.name}`;
   $('g-tagline').textContent = g.tagline;
-  $('g-how').innerHTML = g.how.map((t) => `<li>${t}</li>`).join('');
+  // game extras: notes (p.small) go into how to play, visuals (e.g. the workout profile) stay on the screen
+  const extra = document.createElement('div');
+  extra.innerHTML = g.setup_html ? g.setup_html(o, profile) : '';
+  const notes = [...extra.querySelectorAll('p.small')].map((p) => { p.remove(); return p.innerHTML; });
+  $('g-how').innerHTML = g.how.map((t) => `<li>${t}</li>`).join('')
+    + notes.map((t) => `<li class="how-note">${t}</li>`).join('')
+    + '<li class="how-note" id="how-mode"></li>'
+    + '<li class="how-note">FTP, max HR and weight (rider panel) scale every game: FTP sizes targets and rivals, max HR sets heart rate zones, weight sets how fast your watts move you.</li>'
+    + '<li class="how-note">Trouble connecting? <a href="test.html">Connection test page</a></li>';
   $('g-needs').innerHTML = needs_html(g);
 
   // game-style sections (menu_ui.js), then the game's own extras (rival lineup, workout profile...)
   $('g-options').innerHTML = g.options.map((opt) => option_html(opt, o[opt.key], profile)).join('')
-    + (g.setup_html ? `<div class="opt-extra">${g.setup_html(o, profile)}</div>` : '');
+    + (extra.innerHTML.trim() ? `<div class="opt-extra">${extra.innerHTML}</div>` : '');
 
   $('g-options').querySelectorAll('.seg').forEach((seg) => {
     const opt = g.options.find((x) => x.key === seg.dataset.key);
