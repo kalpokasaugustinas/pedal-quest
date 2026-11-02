@@ -1,8 +1,8 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=43';
-import { step_speed } from '../physics.js?v=43';
-import { rand, clamp, fmt_clock } from '../util.js?v=43';
+import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=44';
+import { step_speed } from '../physics.js?v=44';
+import { rand, clamp, fmt_clock } from '../util.js?v=44';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -153,15 +153,15 @@ function create(env) {
     fork.trails = st.paths.map((p, k) => (k === i ? null : kit.add_trail(fork.pts[k], 2.6, p.theme.surface))).filter(Boolean);
   }
 
+  // just two big numbers: points (gold) and the clock (yellow while choosing, white riding, red at the end)
   env.hud.innerHTML = `
-    <div class="cr-tiles">
-      <div class="cr-tile pts"><small>POINTS</small><b id="cr-total">0</b><i id="cr-live"></i></div>
-      <div class="cr-tile clock" id="cr-clock-tile"><small id="cr-clock-label">CHOOSE</small><b id="cr-clock">0</b><i id="cr-clock-sub"></i></div>
-    </div>
-    <div id="cr-stage" class="gh-title"></div><div id="cr-sub" class="gh-sub"></div>`;
+    <div class="duo">
+      <span id="cr-total" class="bignum gold">0</span><span id="cr-streak" class="streak"></span>
+      <span id="cr-clock" class="bignum clock"></span>
+    </div>`;
   env.bottom.innerHTML = `
-    <div class="target">
-      <div class="target-row"><span id="cr-target"></span><span id="cr-avg"></span></div>
+    <div class="target" id="cr-target-box">
+      <div class="target-row"><span id="cr-target" class="aim"></span><span id="cr-avg"></span></div>
       <div class="meter"><div id="cr-fill" class="meter-fill"></div><div class="meter-mark" style="left:${clean_share * 100}%"></div></div>
     </div>`;
 
@@ -170,7 +170,6 @@ function create(env) {
     place_fork();
     env.overlay.innerHTML = `
       <div class="choice dock" style="bottom:${env.insets().bottom + 8}px">
-        <div class="choice-title">Stage ${st.stage + 1}/${env.opts.stages}: choose your path <span id="cr-count" class="choice-count"></span></div>
         <div class="choice-paths">${st.paths.map((p, i) => `
           <button class="path" data-i="${i}" style="--c:${p.theme.tag || p.theme.near}">
             <span class="path-dir">${['⬅', '⬆', '➡'][i]}</span>
@@ -179,7 +178,6 @@ function create(env) {
             <span class="path-p">${p.points} pts</span>
           </button>`).join('')}
         </div>
-        <div class="choice-foot">Streak ×${(1 + 0.1 * st.streak).toFixed(1)} · ${stage_s < 60 ? `${stage_s} s` : `${stage_s / 60} min`} per stage</div>
       </div>`;
     env.overlay.querySelectorAll('.path').forEach((b) => { b.onclick = () => pick(+b.dataset.i); });
   }
@@ -278,38 +276,26 @@ function create(env) {
 
   function update_hud() {
     $('cr-total').textContent = st.total;
-    const mult = (1 + 0.1 * st.streak).toFixed(1);
+    $('cr-streak').textContent = st.streak ? `🔥×${(1 + 0.1 * st.streak).toFixed(1)}` : '';
+    const clock = $('cr-clock');
     if (st.phase === 'choose') {
-      const to_fork = Math.max(0, Math.round((rider_z() - fork.z) / vis));
       const left_s = Math.max(0, Math.ceil(choose_s - st.t_phase));
-      $('cr-stage').textContent = `Stage ${st.stage + 1}/${env.opts.stages} · fork in ${to_fork} m`;
-      $('cr-sub').textContent = `streak ×${mult}`;
-      $('cr-clock-label').textContent = 'CHOOSE PATH';
-      $('cr-clock').textContent = `${left_s}s`;
-      $('cr-clock-sub').textContent = `then ${stage_s < 60 ? `${stage_s} s` : fmt_clock(stage_s)} stage`;
-      $('cr-clock-tile').className = `cr-tile clock choose${left_s <= 3 ? ' hurry' : ''}`;
-      $('cr-live').textContent = '';
-      $('cr-target').textContent = 'Choose a path…';
-      $('cr-avg').textContent = `${Math.round(st.avg_w)} W avg`;
-      $('cr-fill').style.width = '0%';
-      const c = $('cr-count');
-      if (c) c.textContent = `${Math.ceil(choose_s - st.t_phase)} s`;
+      clock.textContent = left_s;
+      clock.className = `bignum clock choose${left_s <= 3 ? ' hurry' : ''}`;
+      $('cr-target-box').classList.add('hidden');
       return;
     }
-    const share = st.on_target / stage_s;
-    const live = Math.round(st.path.points * share * (1 + 0.1 * st.streak));
     const left = Math.max(0, stage_s - st.t_phase);
-    $('cr-stage').textContent = `Stage ${st.stage + 1}/${env.opts.stages} · ${st.path.theme.name}`;
-    $('cr-sub').textContent = `streak ×${mult}`;
-    $('cr-clock-label').textContent = 'NEXT CHOICE IN';
-    $('cr-clock').textContent = left < 60 ? `${Math.ceil(left)}s` : fmt_clock(left);
-    $('cr-clock-sub').textContent = `of ${stage_s < 60 ? `${stage_s} s` : fmt_clock(stage_s)}`;
-    $('cr-clock-tile').className = `cr-tile clock${left <= 5 ? ' hurry' : ''}`;
-    $('cr-live').textContent = `+${live} this stage`;
-    $('cr-target').textContent = `Target ${st.path.watts} W (≥ ${Math.round(st.path.watts * on_target_ratio)})`;
-    $('cr-avg').textContent = `3 s avg ${Math.round(st.avg_w)} W`;
+    clock.textContent = left < 60 ? Math.ceil(left) : fmt_clock(left);
+    clock.className = `bignum clock${left <= 5 ? ' hurry' : ''}`;
+    $('cr-target-box').classList.remove('hidden');
+    const share = st.on_target / stage_s;
+    const ok = st.avg_w >= st.path.watts * on_target_ratio;
+    $('cr-target').textContent = `🎯 ${st.path.watts} W`;
+    $('cr-avg').textContent = ok ? '✓' : '▲';
+    $('cr-avg').style.color = ok ? '#7ee08a' : '#ff8a80';
     $('cr-fill').style.width = `${clamp(share, 0, 1) * 100}%`;
-    $('cr-fill').classList.toggle('bad', st.avg_w < st.path.watts * on_target_ratio);
+    $('cr-fill').classList.toggle('bad', !ok);
   }
 
   function result() {

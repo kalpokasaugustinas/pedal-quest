@@ -1,9 +1,9 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=43';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=43';
-import { step_speed } from '../physics.js?v=43';
-import { clamp, fmt_clock, load, store } from '../util.js?v=43';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=44';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=44';
+import { step_speed } from '../physics.js?v=44';
+import { clamp, fmt_clock, load, store } from '../util.js?v=44';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -100,14 +100,14 @@ function create(env) {
     return { ...r, peak: ftp * env.opts.level * r.strength * (1 + 0.08 * Math.floor(n / roster.length)) };
   };
 
-  env.hud.innerHTML = `
-    <div class="gh-row">
-      <div class="gh-big" id="sp-big">0</div>
-      <div><div id="sp-title" class="gh-title"></div><div id="sp-sub" class="gh-sub"></div></div>
-    </div>`;
+  // score top-left; during an attack a big countdown on the left (hold on!), mirror + power bars on the right
+  env.hud.innerHTML = `<div class="duo"><span id="sp-big" class="bignum gold">0</span><span id="sp-n" class="streak"></span></div>`;
+  const hold = document.createElement('div');
+  hold.className = 'hold-clock hidden';
+  env.overlay.appendChild(hold);
   env.bottom.innerHTML = `
-    <div class="target">
-      <div class="target-row"><span id="sp-a"></span><span id="sp-b"></span></div>
+    <div class="target" id="sp-box">
+      <div class="target-row"><span id="sp-a" class="aim"></span><span id="sp-b"></span></div>
       <div class="meter"><div id="sp-fill" class="meter-fill"></div></div>
     </div>`;
 
@@ -246,19 +246,27 @@ function create(env) {
     const speed = p.v * vis;
     kit.chase({ z: pz, back: cam_back, height: 2 + (cam_back - 4) * 0.33, look_y: 0.2, speed, smooth: 6 }, dt);
     // rear-view mirror during attacks: watch them come
-    const mirror = st.phase === 'attack' && st.cur ? { z: pz, top: env.insets().top + 96, look_z: pz - (st.cur.x - p.x) + 6 } : null;
+    const mirror = st.phase === 'attack' && st.cur ? { z: pz, top: mirror_rect().y, look_z: pz - (st.cur.x - p.x) + 6 } : null;
     if (!mirror) kit.hide_mirror();
     kit.frame(dt, { focus_z: pz, speed, mirror });
 
     view.clear();
-    if (st.phase === 'attack' && st.cur) draw_power_duel(view.ctx, view.w, env.insets().top + 24, input);
+    if (st.phase === 'attack' && st.cur) draw_power_duel(view.ctx, input);
+  }
+
+  // where the rear-view mirror sits (same rule as kit3d): portrait centred under the hud, landscape top-right
+  function mirror_rect() {
+    const w = view.w, portrait = kit.portrait, top = env.insets().top + 8;
+    const mw = Math.round(portrait ? Math.min(w * 0.62, 340) : Math.min(w * 0.3, 300));
+    return { x: portrait ? Math.round((w - mw) / 2) : w - mw - 12, y: portrait ? top : Math.min(top, 64), w: mw, h: Math.round(mw / 2.4) };
   }
 
   // live power duel: your watts vs the attacker's (watch them fade!)
-  function draw_power_duel(ctx, w, top, input) {
-    const r = st.cur;
+  // stacked right under the mirror, same width
+  function draw_power_duel(ctx, input) {
+    const r = st.cur, m = mirror_rect();
     const scale = Math.max(r.peak * 1.3, input.watts, 100);
-    const bw = Math.min(w - 40, 520), x = (w - bw) / 2;
+    const bw = m.w, x = m.x, top = m.y + m.h + 10;
     const bar = (y, value, color, name) => {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       round_rect(ctx, x, y, bw, 26, 8);
@@ -268,31 +276,28 @@ function create(env) {
       ctx.fill();
       label(ctx, `${name} ${Math.round(value)} W`, x + 10, y + 14, 14, '#fff', 'left');
     };
-    bar(top, input.watts, '#f9a825', 'You');
-    bar(top + 34, r.watts, r.color, r.rival);
+    bar(top, input.watts3 ?? input.watts, '#f9a825', 'You');
+    bar(top + 32, r.watts, r.color, r.rival);
   }
 
   function update_hud(input) {
     $('sp-big').textContent = `${st.score}`;
-    const held = st.log.filter((l) => l.held).length;
+    $('sp-n').textContent = `⚔️ ${Math.min(st.n + (st.phase === 'attack' ? 1 : 0), total)}/${total}`;
     if (st.phase === 'attack' && st.cur) {
-      const lead = st.p.x - st.cur.x;
-      $('sp-title').textContent = `Attack ${st.n + 1}/${total}: ${st.cur.rival}`;
-      $('sp-sub').textContent = `hold on ${Math.ceil(attack_s - st.t_phase)} s · held off ${held}`;
-      $('sp-a').textContent = lead >= 0 ? `${st.cur.rival} ${lead.toFixed(1)} m behind` : `${st.cur.rival} ${(-lead).toFixed(1)} m ahead!`;
+      const lead = st.p.x - st.cur.x, left = Math.ceil(attack_s - st.t_phase);
+      hold.textContent = left;
+      hold.className = `hold-clock${left <= 5 ? ' last' : ''}${lead < 3 ? ' danger' : ''}`;
+      $('sp-box').classList.remove('hidden');
+      $('sp-a').textContent = lead >= 0 ? `🛡️ ${lead.toFixed(1)} m` : `⚠️ ${(-lead).toFixed(1)} m`;
       $('sp-a').style.color = lead >= 0 ? '#7ee08a' : '#ff8a80';
-      $('sp-b').textContent = `${Math.round(input.watts)} W`;
+      $('sp-b').textContent = st.cur.rival;
+      $('sp-b').style.color = st.cur.color;
       // meter: how far you are from being passed (full = safe)
       $('sp-fill').style.width = `${clamp((lead + pass_margin) / (start_behind + pass_margin), 0, 1) * 100}%`;
       $('sp-fill').classList.toggle('bad', lead < 3);
     } else {
-      $('sp-title').textContent = st.n < total ? `Race · next: ${attacker_for(st.n).rival}` : 'Race';
-      $('sp-sub').textContent = `${st.n}/${total} attacks · held off ${held} · ${fmt_clock(st.time)}`;
-      $('sp-a').textContent = 'Ride steady, save your legs';
-      $('sp-a').style.color = '';
-      $('sp-b').textContent = `${Math.round(input.watts)} W`;
-      $('sp-fill').style.width = '0%';
-      $('sp-fill').classList.remove('bad');
+      hold.className = 'hold-clock hidden';
+      $('sp-box').classList.add('hidden');
     }
   }
 

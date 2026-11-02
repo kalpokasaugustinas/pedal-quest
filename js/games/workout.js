@@ -3,10 +3,10 @@
 // it rides like a solo spin with other riders around: on a hard interval there is someone ahead to reel in,
 // on a recovery someone rolls past you. nothing official, they just make the intervals feel like a ride.
 // the plan is painted on the road ahead (zone colour) with a board at each interval; only a thin strip on screen
-import { overlay_2d, round_rect, label } from '../draw2d.js?v=43';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=43';
-import { step_speed, steady_speed } from '../physics.js?v=43';
-import { clamp, fmt_clock } from '../util.js?v=43';
+import { overlay_2d, round_rect, label } from '../draw2d.js?v=44';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=44';
+import { step_speed, steady_speed } from '../physics.js?v=44';
+import { clamp, fmt_clock } from '../util.js?v=44';
 
 // segment helpers: durations in seconds, power as a share of ftp (ramp = from -> to)
 const steady = (dur, pct, name) => ({ dur, from: pct, to: pct, name });
@@ -132,14 +132,11 @@ function create(env) {
     return s ? s.w0 + (s.w1 - s.w0) * ((t - s.t) / s.dur) : 0;
   };
 
-  env.hud.innerHTML = `
-    <div class="gh-row">
-      <div class="gh-big" id="wo-target">--</div>
-      <div><div id="wo-title" class="gh-title"></div><div id="wo-sub" class="gh-sub"></div></div>
-    </div>`;
+  // target watts (big, zone colour) and the time left; a big status word at the bottom
+  env.hud.innerHTML = `<div class="duo"><span id="wo-target" class="bignum">--</span><span id="wo-time" class="bignum clock"></span></div>`;
   env.bottom.innerHTML = `
     <div class="target">
-      <div class="target-row"><span id="wo-next"></span><span id="wo-hit"></span></div>
+      <div class="target-row"><span id="wo-hit" class="aim"></span><span id="wo-next"></span></div>
       <div class="meter"><div id="wo-fill" class="meter-fill"></div><div class="meter-mark" style="left:66.6%"></div></div>
     </div>`;
 
@@ -372,15 +369,12 @@ function create(env) {
   function update_hud(input) {
     const s = seg_at(st.time);
     const tgt = Math.round(target_at(st.time));
-    $('wo-target').textContent = tgt ? `${tgt} W` : '--';
-    $('wo-title').textContent = `${plan.name}${erg ? ' · ERG' : ''}`;
-    const pct = Math.round(((st.on_s + st.close_s * 0.5) / Math.max(1, st.time)) * 100);
-    $('wo-sub').textContent = is_test
-      ? `${fmt_clock(st.time)} · best 1 min ${Math.round(st.best_1m)} W`
-      : `${fmt_clock(Math.max(0, total - st.time))} left · ${pct}% on target`;
+    $('wo-target').innerHTML = tgt ? `${tgt}<small>W</small>` : '--';
+    $('wo-target').style.color = tgt ? zone_color(tgt / ftp) : '';
+    $('wo-time').textContent = is_test ? fmt_clock(st.time) : fmt_clock(Math.max(0, total - st.time));
     const next = s ? segs[segs.indexOf(s) + 1] : null;
-    $('wo-next').textContent = next ? `Next: ${next.name} ${Math.round(next.w0)}${next.w1 !== next.w0 ? `→${Math.round(next.w1)}` : ''} W` : 'Last interval';
-    $('wo-hit').textContent = { on: 'ON TARGET', close: 'CLOSE', low: 'push ▲', high: 'ease ▼' }[st.hit] || '';
+    $('wo-next').textContent = next ? `▶ ${Math.round(next.w0)} W in ${fmt_clock(Math.max(0, next.t - st.time))}` : '🏁';
+    $('wo-hit').textContent = { on: '✓ ON TARGET', close: '≈ CLOSE', low: '▲ PUSH', high: '▼ EASE' }[st.hit] || '';
     $('wo-hit').style.color = { on: '#7ee08a', close: '#ffd54f' }[st.hit] || '#ff8a80';
     // meter: target sits at 2/3 of the bar
     $('wo-fill').style.width = `${clamp(st.avg3 / Math.max(tgt, 1) / 1.5, 0, 1) * 100}%`;

@@ -1,9 +1,9 @@
 // race: you vs 5 bots in a 3d world. your watts drive your rider, holding hr in a window charges nitro
-import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=43';
-import { create_world } from '../world.js?v=43';
-import { scenery_option } from '../kit3d.js?v=43';
-import { fmt_time, ordinal } from '../util.js?v=43';
-import { create_commentator, place_word, one } from '../commentary.js?v=43';
+import { create_race, update_race, standings, finish_remaining, avg_watts, nitro_cfg } from '../race_model.js?v=44';
+import { create_world } from '../world.js?v=44';
+import { scenery_option } from '../kit3d.js?v=44';
+import { fmt_time, ordinal } from '../util.js?v=44';
+import { create_commentator, place_word, one } from '../commentary.js?v=44';
 
 export default {
   id: 'race',
@@ -40,16 +40,16 @@ function create(env) {
 
   env.hud.innerHTML = `
     <div class="race-top">
-      <div id="h-pos" class="pos"></div>
+      <div id="h-pos" class="pos bignum gold"></div>
       <div class="hud-mid">
         <div id="progress" class="progress">${race.riders.map((r) => `<span class="dot${r.is_player ? ' me' : ''}" style="background:${r.color}"></span>`).join('')}</div>
-        <div class="hud-sub"><span id="h-time"></span> · <span id="h-left"></span> <span id="h-draft" class="draft hidden"></span></div>
+        <div class="hud-sub"><span id="h-left" class="bignum sm"></span> <span id="h-draft" class="draft hidden"></span></div>
       </div>
     </div>`;
   env.overlay.innerHTML = '<div id="boost-fx" class="boost-fx hidden"></div><ol id="leaderboard" class="leaderboard"></ol>';
   env.bottom.innerHTML = `
     <div id="nitro" class="nitro">
-      <span class="nitro-label">NITRO</span>
+      <span class="nitro-label">🔥</span>
       <div class="nitro-bar"><div id="nitro-fill" class="nitro-fill"></div></div>
       <span id="nitro-range" class="nitro-range"></span>
     </div>`;
@@ -177,7 +177,10 @@ function create(env) {
 
   let lb_t = 0;
   function render_leaderboard(order, p) {
-    $('leaderboard').innerHTML = order.map((r, i) => {
+    const me = order.indexOf(p);
+    const rows = [...new Set([0, me - 1, me, me + 1])].filter((i) => i >= 0 && i < order.length).sort((a, b) => a - b);
+    $('leaderboard').innerHTML = rows.map((i) => {
+      const r = order[i];
       const gap = Math.round(r.x - p.x);
       const gap_text = r.is_player ? '' : (gap >= 0 ? `+${gap} m` : `${gap} m`);
       const fire = (r.nitro.boost_left > 0 ? ' 🔥' : '') + (r.tactic ? { attack: ' ⚔️', chase: ' 🎯', follow: ' 🧲' }[r.tactic.kind] : '');
@@ -189,10 +192,9 @@ function create(env) {
     const order = standings(race);
     const p = race.player;
     $('h-pos').textContent = `${order.indexOf(p) + 1}/${race.riders.length}`;
-    $('h-time').textContent = fmt_time(p.finish_time ?? race.time);
-    $('h-left').textContent = `${(Math.max(0, race.distance_m - p.x) / 1000).toFixed(2)} km left`;
+    $('h-left').innerHTML = `${(Math.max(0, race.distance_m - p.x) / 1000).toFixed(2)}<small>km</small>`;
     $('h-draft').classList.toggle('hidden', p.draft < 0.02);
-    $('h-draft').textContent = `💨 draft −${Math.round(p.draft * 100)}%`;
+    $('h-draft').textContent = `💨 −${Math.round(p.draft * 100)}%`;
     race.riders.forEach((r, i) => {
       dots[i].style.left = `${Math.min(100, (r.x / race.distance_m) * 100)}%`;
     });
@@ -208,7 +210,7 @@ function create(env) {
     $('nitro').classList.toggle('in-range', !boosting && n.in_range && last_hr !== null);
     $('nitro').classList.toggle('off', last_hr === null);
     $('nitro-fill').style.width = `${(boosting ? n.boost_left / nitro_cfg.boost_s : n.charge) * 100}%`;
-    $('nitro-range').textContent = last_hr === null ? 'needs HR strap' : (n.target ? `HR ≥ ${n.target}` : 'HR warming up');
+    $('nitro-range').textContent = last_hr === null ? '❤️ —' : (n.target ? `❤️ ${n.target}+` : '❤️ …');
     $('boost-fx').classList.toggle('hidden', !boosting);
   }
 

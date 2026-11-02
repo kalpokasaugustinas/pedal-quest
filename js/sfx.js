@@ -1,7 +1,7 @@
 // sound made with web audio (no files to load): short effects, ride ambience (wind with your speed, rain,
 // rivers, birds, a cheering finish crowd) and generated songs (music.js) whose tempo follows your cadence.
 // unlock() must run inside a tap, otherwise mobile browsers keep audio muted
-import { create_music, track_ids, tracks } from './music.js?v=43';
+import { create_music, track_ids, tracks } from './music.js?v=44';
 let audio = null;
 let enabled = true;
 let music_on = true;
