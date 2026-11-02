@@ -1,34 +1,35 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=31';
-import { control } from './ble.js?v=31';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=31';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=31';
-import { stats_html } from './stats.js?v=31';
-import { set_rider_mass, steady_speed } from './physics.js?v=31';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=31';
-import * as ride_log from './ride_log.js?v=31';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=31';
-import * as daily from './daily.js?v=31';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=31';
-import { rider_preview, ambience } from './kit3d.js?v=31';
-import { start_menu_bg } from './menu_bg.js?v=31';
-import race from './games/race.js?v=31';
-import crossroads from './games/crossroads.js?v=31';
-import summit from './games/summit.js?v=31';
-import pulse from './games/pulse.js?v=31';
-import spinbeat from './games/spinbeat.js?v=31';
-import escape from './games/escape.js?v=31';
-import sprint from './games/sprint.js?v=31';
-import workout from './games/workout.js?v=31';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=32';
+import { control } from './ble.js?v=32';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=32';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=32';
+import { stats_html } from './stats.js?v=32';
+import { set_rider_mass, steady_speed } from './physics.js?v=32';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, update_ride, stop_ride } from './sfx.js?v=32';
+import * as ride_log from './ride_log.js?v=32';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=32';
+import * as daily from './daily.js?v=32';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=32';
+import { rider_preview, ambience } from './kit3d.js?v=32';
+import { start_menu3d } from './menu3d.js?v=32';
+import { option_html } from './menu_ui.js?v=32';
+import race from './games/race.js?v=32';
+import crossroads from './games/crossroads.js?v=32';
+import summit from './games/summit.js?v=32';
+import pulse from './games/pulse.js?v=32';
+import spinbeat from './games/spinbeat.js?v=32';
+import escape from './games/escape.js?v=32';
+import sprint from './games/sprint.js?v=32';
+import workout from './games/workout.js?v=32';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
 const main_games = ['race', 'crossroads', 'sprint', 'workout'];
 const $ = (id) => document.getElementById(id);
 
-// animated cycling scene behind the menus (stopped while a game runs)
-const menu_bg = start_menu_bg($('menu-bg'), look);
+// the game world behind the menus with cinematic camera shots (stopped while a game runs)
+const menu_bg = start_menu3d($('menu-bg'), look);
 
 // test helper: ?warp=20 runs game time 20x faster (physics stays stable via sub-steps)
 const warp = clamp(+new URLSearchParams(location.search).get('warp') || 1, 1, 100);
@@ -60,7 +61,8 @@ function save_opts(g, o) { store(`pq_opts_${g.id}`, o); }
 // ---- leaderboards: top 10 per board key ----
 function board_html(b, list, rank) {
   if (!list.length) return '<li class="empty">No results yet. Be the first!</li>';
-  return list.map((e, i) => `<li class="${i === rank ? 'new' : ''}"><span class="b-pos">${i + 1}</span><span class="b-score">${b.fmt(e.score)}</span><span class="b-note">${e.note || ''}</span><span class="b-date">${e.date}</span></li>`).join('');
+  // top 3 get medals
+  return list.map((e, i) => `<li class="${i === rank ? 'new' : ''}${i < 3 ? ` podium p${i + 1}` : ''}"><span class="b-pos">${['🥇', '🥈', '🥉'][i] || i + 1}</span><span class="b-score">${b.fmt(e.score)}</span><span class="b-note">${e.note || ''}</span><span class="b-date">${e.date}</span></li>`).join('');
 }
 
 function board_add(b, entry) {
@@ -269,14 +271,9 @@ function render_setup() {
   $('g-how').innerHTML = g.how.map((t) => `<li>${t}</li>`).join('');
   $('g-needs').innerHTML = needs_html(g);
 
-  $('g-options').innerHTML = g.options.map((opt) => {
-    if (opt.type === 'stepper') {
-      return `<div class="label">${opt.label}</div>
-        <div class="stepper" data-key="${opt.key}"><button data-d="-1" aria-label="less">−</button><span>${o[opt.key]} ${opt.unit}</span><button data-d="1" aria-label="more">+</button></div>`;
-    }
-    return `<div class="label">${opt.label}</div>
-      <div class="seg${opt.wide ? ' wide' : ''}" data-key="${opt.key}">${opt.choices.map(([v, text], i) => `<button data-i="${i}" class="${v === o[opt.key] ? 'on' : ''}">${text}</button>`).join('')}</div>`;
-  }).join('') + (g.setup_html ? g.setup_html(o, profile) : '');
+  // game-style sections (menu_ui.js), then the game's own extras (rival lineup, workout profile...)
+  $('g-options').innerHTML = g.options.map((opt) => option_html(opt, o[opt.key], profile)).join('')
+    + (g.setup_html ? `<div class="opt-extra">${g.setup_html(o, profile)}</div>` : '');
 
   $('g-options').querySelectorAll('.seg').forEach((seg) => {
     const opt = g.options.find((x) => x.key === seg.dataset.key);

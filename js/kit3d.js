@@ -4,7 +4,7 @@
 // and riders with body language.
 // three scenery themes (meadow, valley, night).
 import * as THREE from 'three';
-import { seeded } from './util.js?v=31';
+import { seeded } from './util.js?v=32';
 
 export const chunk_len = 120;              // terrain chunk length (visual meters)
 const chunk_count = 11;                    // chunks alive at once: 1 behind the camera, 10 ahead (~1.2 km)
@@ -1068,12 +1068,15 @@ export function create_kit(canvas, opts = {}) {
   const flat_zones = [];   // { x, z, r }: clearings where the hills flatten out (e.g. a crossroads)
 
   if (!renderer || renderer.domElement !== canvas) {
+    // free the old canvas's gl context (each game and the menu backdrop get a fresh canvas)
+    renderer?.forceContextLoss();
     renderer?.dispose();
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   }
   // auto resolution: start at 1.5x (or what this device managed last game), step down when frames come late
   const pr_max = Math.min(window.devicePixelRatio || 1, 2), pr_min = Math.min(1, pr_max);
-  let pr = learned_pr ?? Math.min(pr_max, 1.5);
+  // opts.pixel_ratio: fixed resolution, no auto tuning (the menu backdrop: its 30 fps cap would look like lag)
+  let pr = opts.pixel_ratio ?? learned_pr ?? Math.min(pr_max, 1.5);
   renderer.setPixelRatio(pr);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;   // pcf + radius = soft, blurred shadow edges
@@ -1633,6 +1636,7 @@ export function create_kit(canvas, opts = {}) {
   const kit_t0 = performance.now();
   const frame_ms = [];
   function adapt_resolution() {
+    if (opts.pixel_ratio) return;
     const now = performance.now();
     if (last_frame) { frame_ms.push(now - last_frame); if (frame_ms.length > 120) frame_ms.shift(); }
     last_frame = now;
