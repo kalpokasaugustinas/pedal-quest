@@ -98,7 +98,7 @@ Every game is drawn with `js/kit3d.js`, one low-poly world: `create_kit(canvas, 
 - Every km, a shelter pushes the storm back 25 m.
 
 ### ⚡ Sprint Cup
-- Rivals start an attack 20 m behind at your speed (no free momentum), so whoever pushes more watts gains; the 👻 ghost keeps a +2 m/s head start (same watts as last time ≈ a tie). In landscape the attack mirror sits top-right.
+- Rivals start an attack 7 m behind at your speed (no free momentum): you have to match their watts; 3 m ahead of you = passed. The 👻 ghost keeps a +0.7 m/s head start (same watts as last time ≈ a tie). Same chase camera as the race; the mirror (top-right in landscape) shows the attacker.
 - One continuous race. After 15 s, rivals attack one by one (3 / 5 / 8 attacks), with 25–40 s of random calm between attacks and a warning 3 s before.
 - An attacker starts 20 m behind you, 3 m/s faster (steady riding always gets passed: you have to answer; ~1.5–1.75× FTP for 22 s holds a Club attack, ~2× for Racer / Pro), and surges to peak in 3 s, then fades towards 75%. Peak = FTP × level (Club 1.4, Racer 1.7, Pro 2.0) × rider strength (0.9 → 1.15, +8% each time the roster comes round).
 - Still ahead after 22 s = held off: 100 points + 10 per meter of lead. Passed by 5 m = lost (0 points). The race goes on either way.

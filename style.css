@@ -696,3 +696,11 @@ button.big:active { transform: translateY(5px); box-shadow: 0 1px 0 #b36b00, 0 4
 @keyframes j-stamp { from { opacity: 0; transform: scale(3.2) rotate(-24deg); } to { opacity: 1; transform: scale(1) rotate(-8deg); } }
 #r-title.juicy { font-size: 40px; margin: 10px 0 6px; }
 .hold-clock.juicy { color: transparent; text-shadow: none; }
+
+/* big callouts (countdown, GO!, attacks, nitro, paused) in the glossy game style */
+.countdown { flex-direction: column; gap: 6px; }
+.countdown .juicy { text-transform: uppercase; animation: cd-pop .5s cubic-bezier(.2,1.6,.4,1); }
+.countdown .juicy.cd-sub { font-size: .32em; }
+.countdown.callout .juicy.cd-sub { font-size: .7em; }
+@keyframes cd-pop { from { transform: scale(.25) rotate(-10deg); opacity: 0; } 60% { transform: scale(1.15) rotate(3deg); opacity: 1; } }
+.countdown.paused { background: rgba(5,8,14,.45); }

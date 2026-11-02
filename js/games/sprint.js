@@ -1,10 +1,10 @@
 // sprint cup: one continuous race. rivals come up from behind one after another and attack you;
 // answer each attack and hold them off. every rival you keep behind scores, the ones who pass you don't
-import { overlay_2d, label, round_rect } from '../draw2d.js?v=45';
-import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=45';
-import { step_speed } from '../physics.js?v=45';
-import { clamp, fmt_clock, load, store } from '../util.js?v=45';
-import { roller, pop, jset } from '../juice.js?v=45';
+import { overlay_2d, label, round_rect } from '../draw2d.js?v=46';
+import { create_kit, vis_scale, scenery_option } from '../kit3d.js?v=46';
+import { step_speed } from '../physics.js?v=46';
+import { clamp, fmt_clock, load, store } from '../util.js?v=46';
+import { roller, pop, jset } from '../juice.js?v=46';
 
 // the attackers, in order; they come round again (stronger) on longer races
 const roster = [
@@ -16,14 +16,14 @@ const roster = [
 ];
 const first_gap_s = 15;      // calm riding before the first attack
 const gap_s = [25, 40];      // random calm time between attacks (so you can't time them)
-const start_behind = 20;     // an attacker appears this far behind you (m)
-const pass_margin = 5;       // attacker this far ahead of you = you've been passed
+const start_behind = 7;      // an attacker appears this far behind you (m): close, you have to match their watts
+const pass_margin = 3;       // attacker this far ahead of you = you've been passed
 const attack_s = 22;         // an attack lasts this long; still in front at the end = held off
 
 // ghosts: your own earlier attempts. a ghost replays the watts you pushed in the same attack of your strongest
 // run (per number of attacks). it starts a bit faster than you, so the same effort as last time ends level:
 // you have to ride harder than your past self to hold it off.
-const ghost_bonus = 2;       // m/s head start speed (rivals get none); same watts as last time ≈ a tie at the end
+const ghost_bonus = 0.7;     // m/s head start speed (rivals get none); over the 7 m gap, same watts as last time ≈ a tie
 const ghost_color = '#b3e5fc';
 const ghost_key = (attacks) => `pq_sprint_ghost_${attacks}`;
 const short_date = (d) => new Date(`${d}T12:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -207,7 +207,7 @@ function create(env) {
       st.peak = Math.max(st.peak, input.watts);
       if (st.phase === 'calm') {
         // a warning just before the attack
-        if (st.t_phase >= st.next_in - 3 && !st.warned) { st.warned = true; env.big_text('Attack coming…', 1200); env.sfx('tick'); }
+        if (st.t_phase >= st.next_in - 3 && !st.warned) { st.warned = true; env.big_text('Attack coming!', 1200, 'hot'); env.sfx('tick'); }
         if (st.t_phase >= st.next_in) { st.warned = false; start_attack(); }
         return;
       }
@@ -242,19 +242,17 @@ function create(env) {
       const fade = kit.fade_for(z, pz, cam_back) * (r.ghost ? 0.55 : 1);
       kit.place_rider(r.model, { z, x: r.lane, watts: r.watts, v: r.v, crank: r.crank, dist: p.x * vis + (r.x - p.x), ref: r.ghost ? ftp : r.peak / 1.6, fade }, dt);
     }
-    // during an attack the camera pulls back and up far enough to keep the attacker in the picture
-    const behind = st.cur ? Math.max(0, p.x - st.cur.x) : 0;
-    const want = st.phase === 'attack' ? clamp(behind + 3, 5, 9) : (kit.portrait ? 4.2 : 5.2);
-    cam_back += (want - cam_back) * Math.min(1, dt * 1.5);
+    // same chase camera as the race (the mirror shows the attacker behind you)
+    cam_back = kit.portrait ? 4.2 : 5.2;
     const speed = p.v * vis;
-    kit.chase({ z: pz, back: cam_back, height: 2 + (cam_back - 4) * 0.33, look_y: 0.2, speed, smooth: 6 }, dt);
+    kit.chase({ z: pz, speed }, dt);
     // rear-view mirror during attacks: watch them come
     const mirror = st.phase === 'attack' && st.cur ? { z: pz, top: mirror_rect().y, look_z: pz - (st.cur.x - p.x) + 6 } : null;
     if (!mirror) kit.hide_mirror();
     kit.frame(dt, { focus_z: pz, speed, mirror });
 
     view.clear();
-    if (st.phase === 'attack' && st.cur) draw_power_duel(view.ctx, input);
+    // (no power bars: the gap and the countdown say it all)
   }
 
   // where the rear-view mirror sits (same rule as kit3d): portrait centred under the hud, landscape top-right

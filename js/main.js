@@ -1,29 +1,29 @@
 // pedal quest shell: game picker, shared sensors + profile, setup -> countdown -> play -> results, local leaderboards.
 // every game is a module with the same interface (see docs/GAMES.md), mounted into one shared play screen
-import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=45';
-import { control } from './ble.js?v=45';
-import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=45';
-import { init_cloud, flush as cloud_flush } from './cloud.js?v=45';
-import { stats_html } from './stats.js?v=45';
-import { set_rider_mass, steady_speed } from './physics.js?v=45';
-import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=45';
-import * as ride_log from './ride_log.js?v=45';
-import { check_badges, fresh_html, collection_html } from './achievements.js?v=45';
-import * as daily from './daily.js?v=45';
-import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=45';
-import { rider_preview, ambience } from './kit3d.js?v=45';
-import { start_menu3d } from './menu3d.js?v=45';
-import { english_voices, speak } from './commentary.js?v=45';
-import { roller, stamp, juicify } from './juice.js?v=45';
-import { option_html } from './menu_ui.js?v=45';
-import race from './games/race.js?v=45';
-import crossroads from './games/crossroads.js?v=45';
-import summit from './games/summit.js?v=45';
-import pulse from './games/pulse.js?v=45';
-import spinbeat from './games/spinbeat.js?v=45';
-import escape from './games/escape.js?v=45';
-import sprint from './games/sprint.js?v=45';
-import workout from './games/workout.js?v=45';
+import { sensors, profile, save_profile, reload_profile, connect, ble_supported, on_change } from './sensors.js?v=46';
+import { control } from './ble.js?v=46';
+import { load, store, clamp, players, active_player, set_active_player, save_players } from './util.js?v=46';
+import { init_cloud, flush as cloud_flush } from './cloud.js?v=46';
+import { stats_html } from './stats.js?v=46';
+import { set_rider_mass, steady_speed } from './physics.js?v=46';
+import { unlock as unlock_sound, play as sfx, set_sound, set_music, set_track, music_tracks, now_playing, next_song, update_ride, stop_ride } from './sfx.js?v=46';
+import * as ride_log from './ride_log.js?v=46';
+import { check_badges, fresh_html, collection_html } from './achievements.js?v=46';
+import * as daily from './daily.js?v=46';
+import { pp_state, level_info, look, set_look, catalog, award, award_html } from './progress.js?v=46';
+import { rider_preview, ambience } from './kit3d.js?v=46';
+import { start_menu3d } from './menu3d.js?v=46';
+import { english_voices, speak } from './commentary.js?v=46';
+import { roller, stamp, juicify } from './juice.js?v=46';
+import { option_html } from './menu_ui.js?v=46';
+import race from './games/race.js?v=46';
+import crossroads from './games/crossroads.js?v=46';
+import summit from './games/summit.js?v=46';
+import pulse from './games/pulse.js?v=46';
+import spinbeat from './games/spinbeat.js?v=46';
+import escape from './games/escape.js?v=46';
+import sprint from './games/sprint.js?v=46';
+import workout from './games/workout.js?v=46';
 
 // main games are in the picker; archived ones are still playable from the stats tab (or a #link)
 const games = [race, crossroads, sprint, workout, summit, pulse, spinbeat, escape];
@@ -398,7 +398,18 @@ function show_banner(text) {
 let big_timer = null;
 function show_big_text(text, hide_after_ms, cls = '') {
   const el = $('countdown');
-  el.textContent = text;
+  // glossy outlined text (colour by kind); a second line after a newline is smaller. a new span restarts the pop
+  const color = { good: 'green', bad: 'red', hot: 'orange', callout: 'purple', paused: 'blue' }[cls] || 'gold';
+  const [main, sub] = String(text).split('\n');
+  el.innerHTML = '';
+  for (const [t, c] of [[main, `juicy ${color}`], [sub, 'juicy gold cd-sub']]) {
+    if (!t) continue;
+    const s = document.createElement('span');
+    s.className = c;
+    s.textContent = t;
+    s.dataset.t = t;
+    el.appendChild(s);
+  }
   el.className = `countdown ${cls}`;
   clearTimeout(big_timer);
   if (hide_after_ms) big_timer = setTimeout(() => el.classList.add('hidden'), hide_after_ms);
@@ -438,8 +449,15 @@ function start_game() {
   $('demo').classList.toggle('hidden', !demo && !hr_slider);
   $('in-watts').value = 0;
 
-  // loading card with the game, a progress bar (the preload below) and a tip from its how-to
-  transition(true, { icon: current.icon, title: current.name, sub: 'Getting the world ready…', tip: current.how[Math.floor(Math.random() * current.how.length)] });
+  // loading card first (instantly, no black frame), fullscreen + wake lock inside the tap; the heavy
+  // world build waits two frames so the card is on screen before it starts
+  transition(true, { icon: current.icon, title: current.name, sub: 'Getting the world ready…', tip: current.how[Math.floor(Math.random() * current.how.length)], instant: true });
+  document.documentElement.requestFullscreen?.().catch(() => {});
+  request_wake_lock();
+  requestAnimationFrame(() => requestAnimationFrame(build_game));
+}
+
+function build_game() {
   // a fresh canvas per game: a canvas can't switch between webgl (3d) and 2d
   $('canvas-slot').innerHTML = '<canvas class="game-canvas"></canvas>';
   const canvas = $('canvas-slot').firstChild;
@@ -449,8 +467,6 @@ function start_game() {
   show_banner('');
 
   show('screen-play');
-  document.documentElement.requestFullscreen?.().catch(() => {});
-  request_wake_lock();
 
   instance = current.create({
     canvas,
@@ -484,6 +500,7 @@ function transition(on, o = {}) {
   $('tr-title').textContent = o.title || '';
   $('tr-sub').textContent = o.sub || '';
   $('tr-tip').innerHTML = o.tip ? `💡 ${o.tip}` : '';
+  if (o.instant) { el.style.transition = 'none'; el.classList.remove('off'); void el.offsetWidth; el.style.transition = ''; }
   const fill = $('tr-fill');
   fill.style.transition = 'none';
   fill.style.width = '0%';
@@ -722,7 +739,7 @@ function set_paused(on) {
   paused = on;
   $('btn-pause').textContent = on ? '▶' : '⏸';
   $('btn-pause').setAttribute('aria-label', on ? 'resume' : 'pause');
-  if (on) show_big_text('PAUSED');
+  if (on) show_big_text('PAUSED\ntap ▶ to ride on', 0, 'paused');
   else if (phase !== 'idle') $('countdown').classList.add('hidden');
 }
 $('btn-pause').onclick = () => {

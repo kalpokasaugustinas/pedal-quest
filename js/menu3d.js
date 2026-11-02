@@ -3,8 +3,8 @@
 // black. every few shots the scenery re-rolls (season, weather, villages...) behind the black.
 // light on phones: fixed low resolution, ~30 fps, stopped while a game runs or the tab is hidden.
 // falls back to the 2d scene (menu_bg.js) when webgl is not available.
-import { create_kit, surprise_id } from './kit3d.js?v=45';
-import { start_menu_bg } from './menu_bg.js?v=45';
+import { create_kit, surprise_id } from './kit3d.js?v=46';
+import { start_menu_bg } from './menu_bg.js?v=46';
 
 const shot_s = 4.5;          // seconds per shot
 const fade_s = 0.4;          // fade out / in through black

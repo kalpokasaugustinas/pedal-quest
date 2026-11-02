@@ -1,9 +1,9 @@
 // crossroads: each stage pick one of three paths. every path shows the watts to hold and the points it pays.
 // the exchange rate (points per watt) differs per path, so the best pick is your own math - and your legs
-import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=45';
-import { step_speed } from '../physics.js?v=45';
-import { rand, clamp, fmt_clock } from '../util.js?v=45';
-import { roller, pop, jset } from '../juice.js?v=45';
+import { create_kit, vis_scale, scenery_option, curve_x } from '../kit3d.js?v=46';
+import { step_speed } from '../physics.js?v=46';
+import { rand, clamp, fmt_clock } from '../util.js?v=46';
+import { roller, pop, jset } from '../juice.js?v=46';
 
 // path looks: sign colour + trail surface in 3d
 const themes = [
@@ -80,13 +80,14 @@ function create(env) {
   // ---- 3d world: the road bends into the chosen path at every fork ----
   const vis = vis_scale;                 // visual speed multiplier
   const fork_ahead = 92 * vis;     // a new fork appears 92 m ahead (same warning time at any visual speed)
-  const branch_w = 26, branch_len = 90;   // branches spread 26 m sideways over 90 m
+  const track_w = 7.6;                    // road + trail width (same as the race)
+  const branch_w = 30, branch_len = 100;  // branches spread 30 m sideways over 100 m
   const bends = [];                // { z, dx } road bends (one per chosen path)
   const surfaces = [{ z: Infinity, surf: 'asphalt' }];
   const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
   const road_x = (z) => curve_x(z) + bends.reduce((x, b) => x + b.dx * ease((b.z - z) / branch_len), 0);
   const kit = create_kit(env.canvas, {
-    theme: env.opts.scenery, road_x, road_w: 2.6, lanes: 2,   // a single bike track with a centre dash
+    theme: env.opts.scenery, road_x, road_w: track_w, lanes: 6,   // as wide as the race road (a narrow track felt cramped)
     surface: (z) => surfaces.filter((s) => z <= s.z).pop().surf,
   });
   const me = kit.add_rider(env.look);
@@ -136,9 +137,9 @@ function create(env) {
     fork.pts = [-1, 0, 1].map((d) => branch_pts(fork, d));   // kept: the road changes after the pick
     st.paths.forEach((p, i) => {
       const d = i - 1;
-      fork.trails.push(kit.add_trail(fork.pts[i], 2.6, p.theme.surface));
+      fork.trails.push(kit.add_trail(fork.pts[i], track_w, p.theme.surface));
       // signs stand just before the fork, spread across the junction, facing the rider
-      fork.signs.push(kit.add_sign(fork.x + d * 6, z + 8, sign_draw(p, d), 0, 4.4, 2.5));
+      fork.signs.push(kit.add_sign(fork.x + d * 8, z + 10, sign_draw(p, d), 0, 4.4, 2.5));
     });
   }
 
@@ -151,7 +152,7 @@ function create(env) {
     kit.invalidate(fork.z + 130, -Infinity);
     // the ground changed shape around the new road: re-drape the trails not taken
     for (const t of fork.trails) kit.remove(t);
-    fork.trails = st.paths.map((p, k) => (k === i ? null : kit.add_trail(fork.pts[k], 2.6, p.theme.surface))).filter(Boolean);
+    fork.trails = st.paths.map((p, k) => (k === i ? null : kit.add_trail(fork.pts[k], track_w, p.theme.surface))).filter(Boolean);
   }
 
   // just two big numbers: points (gold) and the clock (yellow while choosing, white riding, red at the end)
